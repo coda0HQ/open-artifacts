@@ -140,11 +140,11 @@ export function ogCardSvg(options: {
     const lines: string[] = [];
     let line = "";
     for (const w of words) {
-      if ((line + " " + w).trim().length > 26 && line) {
+      if (`${line} ${w}`.trim().length > 26 && line) {
         lines.push(line);
         line = w;
       } else {
-        line = (line + " " + w).trim();
+        line = `${line} ${w}`.trim();
       }
     }
     if (line) lines.push(line);

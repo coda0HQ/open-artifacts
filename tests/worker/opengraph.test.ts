@@ -110,7 +110,7 @@ describe("OpenGraph metadata", () => {
     ).text();
     const match = html.match(/<meta property="og:image" content="([^"]+)">/);
     expect(match).not.toBeNull();
-    expect(match![1]).toMatch(new RegExp(`^${BASE}/og/${created.id}$`));
+    expect(match?.[1] ?? "").toMatch(new RegExp(`^${BASE}/og/${created.id}$`));
   });
 
   it("encrypted artifacts also carry OG metadata on the unlock shell", async () => {
