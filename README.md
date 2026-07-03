@@ -28,6 +28,15 @@ instance:
 export OPEN_ARTIFACTS_URL=https://open-artifacts.<you>.workers.dev
 ```
 
+The bundled `SKILL.md` and `references/design.md` teach the agent the design
+philosophy: an expert-designer workflow (understand → explore → plan → build
+→ verify), an explicit anti-AI-slop list, modern CSS power moves, and a
+5-direction library (Editorial / Modern minimal / Human / Tech utility /
+Brutalist) with ready-to-paste OKLch palettes and font stacks for when no
+brand is specified — adapted from [open-design](https://github.com/nexu-io/open-design)
+and Claude's `artifact-design` skill, retargeted to this project's strict
+no-external-requests CSP.
+
 Ask your agent to "publish this as an artifact" — it runs the bundled CLI:
 
 ```sh
