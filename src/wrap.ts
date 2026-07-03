@@ -113,13 +113,59 @@ const THEME_SCRIPT = `
 
 export interface WrapOptions {
   title: string;
+  description: string;
   favicon: string;
   format: ArtifactFormat;
   content: string;
+  url: string;
+  ogImage: string;
+}
+
+const OG_CARD_W = 1200;
+const OG_CARD_H = 630;
+
+// A self-contained SVG OG card built from the artifact's emoji favicon and
+// title. Returned by GET /og/:id and referenced via og:image. Social crawlers
+// fetch this URL independently of the artifact page, so it is not constrained
+// by the page CSP — but it is itself a single SVG with no external requests.
+export function ogCardSvg(options: {
+  title: string;
+  favicon: string;
+  description: string;
+}): string {
+  const { title, favicon, description } = options;
+  // Wrap the title to ~26 chars/line, up to 4 lines, escaping for XML.
+  const wrapTitle = (text: string): string[] => {
+    const words = escapeHtml(text).split(/\s+/);
+    const lines: string[] = [];
+    let line = "";
+    for (const w of words) {
+      if ((line + " " + w).trim().length > 26 && line) {
+        lines.push(line);
+        line = w;
+      } else {
+        line = (line + " " + w).trim();
+      }
+    }
+    if (line) lines.push(line);
+    return lines.slice(0, 4);
+  };
+  const titleLines = wrapTitle(title);
+  const desc = description ? escapeHtml(description).slice(0, 120) : "";
+  const linesY = 320 - ((titleLines.length - 1) * 52) / 2;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${OG_CARD_W}" height="${OG_CARD_H}" viewBox="0 0 ${OG_CARD_W} ${OG_CARD_H}">
+<rect width="${OG_CARD_W}" height="${OG_CARD_H}" fill="#131316"/>
+<rect x="0" y="0" width="${OG_CARD_W}" height="8" fill="#6457f0"/>
+<text x="80" y="180" font-size="120" font-family="system-ui,-apple-system,'Segoe UI',sans-serif" dominant-baseline="middle">${escapeHtml(favicon)}</text>
+${titleLines.map((l, i) => `<text x="80" y="${linesY + i * 72}" font-size="56" font-weight="700" font-family="system-ui,-apple-system,'Segoe UI',sans-serif" fill="#e7e7ea">${l}</text>`).join("\n")}
+${desc ? `<text x="80" y="${linesY + titleLines.length * 72 + 20}" font-size="28" font-family="system-ui,-apple-system,'Segoe UI',sans-serif" fill="#9a9aa2">${desc}</text>` : ""}
+<text x="80" y="580" font-size="24" font-family="ui-monospace,Menlo,monospace" fill="#71717a" letter-spacing="1">OPEN ARTIFACTS</text>
+</svg>`;
 }
 
 export function wrapDocument(options: WrapOptions): string {
-  const { title, favicon, format, content } = options;
+  const { title, description, favicon, format, content, url, ogImage } =
+    options;
   const body =
     format === "markdown"
       ? `<main class="oa-md" id="oa-content"></main>
@@ -129,13 +175,28 @@ document.getElementById("oa-content").innerHTML=marked.parse(${jsonForInlineScri
 </script>`
       : content;
 
+  const ogDescription = description || title;
+
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(title)}</title>
+<meta name="description" content="${escapeHtml(ogDescription)}">
 <link rel="icon" href="${faviconDataUri(favicon)}">
+<meta property="og:type" content="article">
+<meta property="og:title" content="${escapeHtml(title)}">
+<meta property="og:description" content="${escapeHtml(ogDescription)}">
+<meta property="og:url" content="${escapeHtml(url)}">
+<meta property="og:image" content="${escapeHtml(ogImage)}">
+<meta property="og:image:type" content="image/svg+xml">
+<meta property="og:image:width" content="${OG_CARD_W}">
+<meta property="og:image:height" content="${OG_CARD_H}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="${escapeHtml(title)}">
+<meta name="twitter:description" content="${escapeHtml(ogDescription)}">
+<meta name="twitter:image" content="${escapeHtml(ogImage)}">
 <style>${RESET_CSS}${format === "markdown" ? MARKDOWN_CSS : ""}</style>
 </head>
 <body>
@@ -163,18 +224,25 @@ const UNLOCK_CSS = `
 
 export interface UnlockShellOptions {
   title: string;
+  description: string;
   favicon: string;
   format: ArtifactFormat;
+  url: string;
+  ogImage: string;
   envelope: EncryptionParams & { ciphertext: string };
 }
 
 export function unlockShell(options: UnlockShellOptions): string {
-  const { title, favicon, format, envelope } = options;
+  const { title, description, favicon, format, url, ogImage, envelope } =
+    options;
   const template = wrapDocument({
     title,
+    description,
     favicon,
     format,
     content: CONTENT_SLOT,
+    url,
+    ogImage,
   });
 
   const unlockScript = `
@@ -222,13 +290,28 @@ form.addEventListener("submit",async function(event){
 input.focus();
 `;
 
+  const ogDescription = description || title;
+
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(title)}</title>
+<meta name="description" content="${escapeHtml(ogDescription)}">
 <link rel="icon" href="${faviconDataUri(favicon)}">
+<meta property="og:type" content="article">
+<meta property="og:title" content="${escapeHtml(title)}">
+<meta property="og:description" content="${escapeHtml(ogDescription)}">
+<meta property="og:url" content="${escapeHtml(url)}">
+<meta property="og:image" content="${escapeHtml(ogImage)}">
+<meta property="og:image:type" content="image/svg+xml">
+<meta property="og:image:width" content="${OG_CARD_W}">
+<meta property="og:image:height" content="${OG_CARD_H}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="${escapeHtml(title)}">
+<meta name="twitter:description" content="${escapeHtml(ogDescription)}">
+<meta name="twitter:image" content="${escapeHtml(ogImage)}">
 <style>${RESET_CSS}${UNLOCK_CSS}</style>
 </head>
 <body>

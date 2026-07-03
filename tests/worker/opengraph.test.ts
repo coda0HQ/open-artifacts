@@ -1,0 +1,145 @@
+import { exports } from "cloudflare:workers";
+import { describe, expect, it } from "vitest";
+
+const BASE = "http://artifacts.test";
+
+interface CreateResult {
+  id: string;
+  url: string;
+  writeToken: string;
+  version: number;
+}
+
+async function create(body: Record<string, unknown>): Promise<CreateResult> {
+  const res = await exports.default.fetch(
+    new Request(`${BASE}/api/artifacts`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        title: "OG Test",
+        favicon: "📊",
+        ...body,
+      }),
+    }),
+  );
+  expect(res.status).toBe(201);
+  return (await res.json()) as CreateResult;
+}
+
+describe("OpenGraph metadata", () => {
+  it("emits complete OG + Twitter tags derived from the artifact", async () => {
+    const created = await create({
+      content: "<h1>x</h1>",
+      description: "A shareable report on Q3 metrics.",
+    });
+    const html = await (
+      await exports.default.fetch(`${BASE}/a/${created.id}`)
+    ).text();
+    expect(html).toContain('<meta property="og:type" content="article">');
+    expect(html).toContain('<meta property="og:title" content="OG Test">');
+    expect(html).toContain(
+      '<meta property="og:description" content="A shareable report on Q3 metrics.">',
+    );
+    expect(html).toContain(
+      `<meta property="og:url" content="${BASE}/a/${created.id}">`,
+    );
+    expect(html).toContain(
+      `<meta property="og:image" content="${BASE}/og/${created.id}">`,
+    );
+    expect(html).toContain(
+      '<meta property="og:image:type" content="image/svg+xml">',
+    );
+    expect(html).toContain('<meta property="og:image:width" content="1200">');
+    expect(html).toContain('<meta property="og:image:height" content="630">');
+    expect(html).toContain(
+      '<meta name="twitter:card" content="summary_large_image">',
+    );
+    expect(html).toContain(
+      `<meta name="twitter:image" content="${BASE}/og/${created.id}">`,
+    );
+    expect(html).toContain(
+      '<meta name="description" content="A shareable report on Q3 metrics.">',
+    );
+  });
+
+  it("falls back to the title when no description is set", async () => {
+    const created = await create({ content: "<h1>x</h1>" });
+    const html = await (
+      await exports.default.fetch(`${BASE}/a/${created.id}`)
+    ).text();
+    expect(html).toContain(
+      '<meta property="og:description" content="OG Test">',
+    );
+  });
+
+  it("escapes HTML in OG values", async () => {
+    const created = await create({
+      content: "<h1>x</h1>",
+      title: "OG <script>alert(1)</script>",
+    });
+    const html = await (
+      await exports.default.fetch(`${BASE}/a/${created.id}`)
+    ).text();
+    expect(html).not.toContain('content="OG <script>alert(1)</script>"');
+    expect(html).toContain("&lt;script&gt;");
+  });
+
+  it("serves an SVG OG card at /og/:id built from the artifact", async () => {
+    const created = await create({
+      content: "<h1>x</h1>",
+      description: "card description",
+    });
+    const res = await exports.default.fetch(`${BASE}/og/${created.id}`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("image/svg+xml");
+    const svg = await res.text();
+    expect(svg).toMatch(/^<svg/);
+    expect(svg).toContain("📊");
+    expect(svg).toContain("OG Test");
+    expect(svg).toContain("card description");
+    expect(svg).toContain("OPEN ARTIFACTS");
+    // self-contained, no external href/src
+    expect(svg).not.toMatch(/href=/);
+    expect(svg).not.toMatch(/<image/);
+  });
+
+  it("the OG image URL is absolute and points at /og/:id", async () => {
+    const created = await create({ content: "<h1>x</h1>" });
+    const html = await (
+      await exports.default.fetch(`${BASE}/a/${created.id}`)
+    ).text();
+    const match = html.match(/<meta property="og:image" content="([^"]+)">/);
+    expect(match).not.toBeNull();
+    expect(match![1]).toMatch(new RegExp(`^${BASE}/og/${created.id}$`));
+  });
+
+  it("encrypted artifacts also carry OG metadata on the unlock shell", async () => {
+    // encrypted create: content = base64 ciphertext, title required explicitly
+    const pad = (s: string) => s + "=".repeat((4 - (s.length % 4)) % 4);
+    const b64 = (bytes: number[]) => pad(btoa(String.fromCharCode(...bytes)));
+    const created = await create({
+      content: b64([0xe0, 0x00]),
+      encrypted: {
+        salt: b64(new Array(16).fill(1)),
+        iv: b64(new Array(12).fill(1)),
+        iterations: 1000,
+      },
+      description: "encrypted desc",
+    });
+    const html = await (
+      await exports.default.fetch(`${BASE}/a/${created.id}`)
+    ).text();
+    expect(html).toContain('<meta property="og:title" content="OG Test">');
+    expect(html).toContain(
+      '<meta property="og:description" content="encrypted desc">',
+    );
+    expect(html).toContain(
+      `<meta property="og:image" content="${BASE}/og/${created.id}">`,
+    );
+  });
+
+  it("/og/:id 404s for unknown artifacts", async () => {
+    const res = await exports.default.fetch(`${BASE}/og/nonexistent00`);
+    expect(res.status).toBe(404);
+  });
+});
