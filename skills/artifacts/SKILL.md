@@ -29,12 +29,37 @@ Do not publish for short answers, code snippets, or content the user will
 read once in the conversation. When unsure, answer inline and offer to
 publish.
 
-## Authoring content
+## How to design the page
 
-Write a complete, self-contained page. The strict CSP blocks ALL external
-requests (CDN scripts, fonts, remote images, fetch/XHR/WebSockets):
+You are an expert designer producing design artifacts in HTML. **HTML is your
+tool, not your medium**: when the brief is a dashboard, be an information
+designer; when it's a report, be an editorial designer; when it's a
+prototype, be an interaction designer. Don't default to "a web page"
+treatment for everything.
 
-- Inline all CSS and JS; embed images as `data:` URIs.
+Workflow: (1) understand the brief — output kind, fidelity, audience, any
+brand/design system; (2) explore resources — if the project has a design
+system (tokens, theme, component styles), read it fully and apply it;
+precedence is the user's words, then the project's system, then your choices;
+(3) plan — sketch 4–6 named palette values, type roles, a one-sentence
+layout concept, and vocalize the system before building; (4) build with real
+content, never lorem ipsum; (5) verify once at the end — re-read your own
+output, `grep` for unclosed tags / dangling `<script>`, trace the main
+interaction. Do not loop on renders.
+
+**Read `${CLAUDE_SKILL_DIR}/references/design.md` before writing a page.** It
+has the full design philosophy, the anti-AI-slop tropes to avoid, a
+5-direction library (Editorial / Modern minimal / Human / Tech utility /
+Brutalist) with ready-to-paste OKLch palettes and font stacks for when no
+brand is specified, and the hard constraints below.
+
+## Authoring content — hard constraints
+
+The strict CSP blocks ALL external requests (CDN scripts, fonts, remote
+images, fetch/XHR/WebSockets):
+
+- Inline all CSS and JS; embed images and fonts as `data:` URIs. Use system
+  font stacks or inline a face as a `@font-face` data URI.
 - Do not use localStorage/sessionStorage (the sandbox blocks them); keep
   state in memory.
 - Include a concise `<title>` — it becomes the artifact title.
@@ -46,7 +71,12 @@ requests (CDN scripts, fonts, remote images, fetch/XHR/WebSockets):
 - Markdown files (`.md`) are rendered client-side; HTML is best for anything
   interactive or designed.
 
-Read `${CLAUDE_SKILL_DIR}/references/design.md` before writing a page.
+**Avoid AI-slop tropes:** aggressive gradient backgrounds; gratuitous emoji;
+rounded boxes with a left-border accent; SVG-as-illustration when a
+placeholder would do; overused fonts (Inter, Roboto, Arial, Fraunces);
+everything centered; `rounded-lg` everywhere. Modern CSS is fully available
+inline — `text-wrap: pretty/balance`, CSS Grid, container queries,
+`color-mix()`, `:has()`, view transitions, `clamp()` for fluid type.
 
 ## Publishing
 
