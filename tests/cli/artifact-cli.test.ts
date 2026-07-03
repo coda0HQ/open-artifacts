@@ -148,6 +148,7 @@ function manifest(): {
     snapshot: Record<string, string>;
     scope: string | null;
     channel: string | null;
+    level: number | null;
     encrypted: boolean;
   }>;
 } {
@@ -428,6 +429,37 @@ describe("channel binding", () => {
     await run(["create", "report.html", "--favicon", "📊", "--channel", "b"]);
     expect(requests[0].body.channel).not.toBe(requests[1].body.channel);
     expect(manifest().artifacts).toHaveLength(2);
+  });
+});
+
+describe("production level", () => {
+  it("--level records the level in the manifest and is not sent to the server", async () => {
+    await run(["create", "report.html", "--favicon", "📊", "--level", "3"]);
+    expect(manifest().artifacts[0].level).toBe(3);
+    expect(requests[0].body.level).toBeUndefined();
+  });
+
+  it("aliases --simple / --interactive / --rich map to 1 / 2 / 3", async () => {
+    await run(["create", "report.html", "--favicon", "📊", "--simple"]);
+    expect(manifest().artifacts[0].level).toBe(1);
+    await run(["create", "report.html", "--favicon", "📊", "--interactive"]);
+    expect(manifest().artifacts[1].level).toBe(2);
+    await run(["create", "report.html", "--favicon", "📊", "--rich"]);
+    expect(manifest().artifacts[2].level).toBe(3);
+  });
+
+  it("omitting level records null (agent decides from the brief)", async () => {
+    await run(["create", "report.html", "--favicon", "📊"]);
+    expect(manifest().artifacts[0].level).toBeNull();
+  });
+
+  it("rejects an invalid --level", async () => {
+    const result = await run(
+      ["create", "report.html", "--favicon", "📊", "--level", "4"],
+      { expectFailure: true },
+    );
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toMatch(/level/i);
   });
 });
 

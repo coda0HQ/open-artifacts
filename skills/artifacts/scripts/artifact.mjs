@@ -225,6 +225,24 @@ function generateChannelToken() {
     .replace(/=+$/, "")}`;
 }
 
+// Resolve the production level: --level 1|2|3 wins, then the boolean aliases
+// --simple / --interactive / --rich, then null (agent decides from the brief).
+function resolveLevel(flags) {
+  if (flags.level) {
+    const n = Number.parseInt(flags.level, 10);
+    if (n !== 1 && n !== 2 && n !== 3) {
+      fail(
+        "--level must be 1, 2, or 3 (aliases: --simple / --interactive / --rich)",
+      );
+    }
+    return n;
+  }
+  if (flags.simple) return 1;
+  if (flags.interactive) return 2;
+  if (flags.rich) return 3;
+  return null;
+}
+
 async function commandCreate(file, flags) {
   if (!flags.favicon)
     fail("--favicon is required (one or two emoji, e.g. --favicon 📊)");
@@ -275,6 +293,7 @@ async function commandCreate(file, flags) {
     encrypted: Boolean(flags.password),
     scope: flags.scope ?? null,
     channel: flags.channel ?? null,
+    level: resolveLevel(flags),
     watch,
     snapshot: snapshotWatch(watch),
     sourceFile: relative(process.cwd(), resolve(file)),
@@ -501,6 +520,9 @@ options:
   --watch <globs>      comma-separated globs of source files to watch
   --channel <slug>     bind this artifact to a stable URL; reusing the slug on
                        a later create updates the same link (no new URL)
+  --level <1|2|3>      production level: 1=simple doc, 2=interactive UI,
+                       3=rich motion. Aliases: --simple / --interactive / --rich.
+                       Omit to let the agent pick from the brief.
   --api <url>          instance URL (default: OPEN_ARTIFACTS_URL or config)
   --force              overwrite on version conflict
   --hook               (status) emit Claude Code hook JSON instead of text
@@ -520,6 +542,10 @@ async function main() {
       scope: { type: "string" },
       watch: { type: "string" },
       channel: { type: "string" },
+      level: { type: "string" },
+      simple: { type: "boolean" },
+      interactive: { type: "boolean" },
+      rich: { type: "boolean" },
       api: { type: "string" },
       force: { type: "boolean" },
       hook: { type: "boolean" },

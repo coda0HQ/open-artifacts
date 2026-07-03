@@ -65,6 +65,28 @@ Brutalist) with ready-to-paste OKLch palettes and font stacks for when no
 brand is specified, a component contract (buttons/cards/inputs/tables/pills
 written against tokens), and the hard constraints below.
 
+### Production level (1 / 2 / 3)
+
+Every artifact is built at one of three levels — pick implicitly from the
+brief, or override with `--level 1|2|3` (aliases `--simple` /
+`--interactive` / `--rich`):
+
+- **Level 1 — simple:** typography-led documents (reports, articles, API
+  references, notes). No flashy hero, minimal JS. Default for "read once"
+  content.
+- **Level 2 — interactive:** dashboards, docs sites, demos, prototypes.
+  Stateful in-memory JS, navigation, copy buttons, expandable sections,
+  subtle transitions. Default when unsure.
+- **Level 3 — rich:** landing/marketing pages, product showcases. Orchestrated
+  motion — load sequences, scroll reveals, view transitions — **all native
+  browser APIs, no external libraries** (the strict CSP blocks CDNs). Read
+  `${CLAUDE_SKILL_DIR}/references/motion.md` for the native motion pattern
+  library before building L3.
+
+Don't gold-plate a doc as L3; don't ship a landing page as L1. The level
+sets the component contract and motion budget, not just "how much
+animation."
+
 ## Authoring content — hard constraints
 
 The strict CSP blocks ALL external requests (CDN scripts, fonts, remote

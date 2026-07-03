@@ -6,6 +6,73 @@ medium**: when the brief is a dashboard, be an information designer; when it's
 a report, be an editorial designer; when it's a prototype, be an interaction
 designer. Don't default to "a web page" treatment for everything.
 
+## Choose a production level
+
+Every artifact is built at one of three levels. Pick implicitly from the
+brief, or override with `--level 1|2|3` (aliases `--simple` / `--interactive`
+/ `--rich`). The level sets the component contract, the interaction budget,
+and the motion budget — not just "how much animation."
+
+| Brief | Implicit level | `--level` |
+| --- | --- | --- |
+| Report, article, API reference, notes, anything read once | **1 simple** | `--level 1` / `--simple` |
+| Dashboard, docs site, interactive demo, app prototype, anything explored | **2 interactive** | `--level 2` / `--interactive` |
+| Landing page, marketing page, product showcase, anything that must wow | **3 rich** | `--level 3` / `--rich` |
+
+When unsure, default to **2**. Don't gold-plate a doc as L3; don't ship a
+landing page as L1.
+
+### Level 1 — simple
+
+- **Posture:** typography-led, document. Real typographic hierarchy,
+  considered spacing, a proper palette — but no flashy hero, no JS-driven
+  interaction.
+- **JS:** none, or the absolute minimum (e.g. a copy button). No state.
+- **Components:** headings, prose, tables, code blocks, lists, blockquotes,
+  simple cards. The component contract from the token set, nothing more.
+- **Motion:** none beyond `:hover`/`:focus` color transitions. Respect
+  `prefers-reduced-motion` (it's the default anyway).
+- **File weight:** small. Fast to load, cheap to regenerate.
+- **Anti-slop focus:** don't add a giant hero, numbered markers, or
+  decorative gradients to a doc. Most pages do not need a flashy hero.
+
+### Level 2 — interactive
+
+- **Posture:** information design. Scannable and operable, not read
+  top-to-bottom. Surface the summary before the detail; encode state in form.
+- **JS:** stateful, in-memory. Navigation/highlight, copy buttons, expandable
+  sections, tabs, filters, a simulator — all without external requests.
+- **Components:** nav + scroll spy, sticky headers, disclosure/details,
+  pills/chips, data tables with tabular-nums, code blocks with copy,
+  small inline charts (SVG).
+- **Motion:** subtle — `transition` on hover/focus/active, a 150–250ms
+  reveal where it aids comprehension. No scroll-triggered theatre.
+- **File weight:** medium. Still single-file, no libraries.
+- **Anti-slop focus:** don't add motion that doesn't aid the task. An
+  interactive tool is operated, not watched.
+
+### Level 3 — rich
+
+- **Posture:** editorial / marketing. A distinctive point of view, one real
+  aesthetic risk, a single decisive flourish. The page itself is the
+  experience.
+- **JS:** orchestrates motion. Page-load sequences, scroll-triggered reveals,
+  hover micro-interactions, ambient atmosphere — **all with native browser
+  APIs, no external libraries** (the strict CSP blocks CDNs; we don't inline
+  Framer Motion). Read `${CLAUDE_SKILL_DIR}/references/motion.md` for the
+  native motion pattern library.
+- **Components:** hero as thesis, staggered reveals, scroll-driven parallax
+  (CSS `animation-timeline: scroll()`), view transitions between states,
+  pinned sections, animated numerics, spring-like easing.
+- **Motion:** deliberate and orchestrated — a load sequence, scroll reveals,
+  hover micro-interactions, ambient atmosphere. Sometimes less is more;
+  extra animation contributes to the AI-generated feeling. Spend boldness in
+  one place; keep everything around it quiet.
+- **File weight:** larger, but still single-file and library-free.
+- **Anti-slop focus:** the AI-slop tropes (gradient heroes, acid pops,
+  emoji markers) are most seductive at L3. Resist them; pick one
+  distinctive, subject-grounded move instead.
+
 ## Workflow
 
 1. **Understand the brief.** Be clear on the output kind, fidelity, audience,
