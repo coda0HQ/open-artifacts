@@ -12,7 +12,7 @@ import {
 } from "./tokens";
 import { userContentHeaders } from "./wrap";
 
-export type Bindings = Env & { CREATE_TOKEN?: string };
+export type Bindings = Env & { CREATE_TOKEN?: string; BRAND_URL?: string };
 export type AppContext = { Bindings: Bindings };
 
 // JSON escaping and encryption metadata inflate the body beyond the content

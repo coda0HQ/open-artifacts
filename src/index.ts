@@ -52,6 +52,7 @@ app.get("/a/:id", async (c) => {
 
   const url = artifactUrl(c, record.id);
   const ogImage = ogImageUrl(c, record.id);
+  const brandUrl = c.env.BRAND_URL ?? null;
 
   if (content.encrypted !== null) {
     const page = unlockShell({
@@ -61,6 +62,7 @@ app.get("/a/:id", async (c) => {
       format: record.format,
       url,
       ogImage,
+      brandUrl,
       envelope: { ...content.encrypted, ciphertext: content.body },
     });
     return new Response(page, { headers: htmlHeaders(false) });
@@ -74,6 +76,7 @@ app.get("/a/:id", async (c) => {
     content: content.body,
     url,
     ogImage,
+    brandUrl,
   });
   return new Response(page, { headers: htmlHeaders(true) });
 });

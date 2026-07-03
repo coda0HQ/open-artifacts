@@ -69,8 +69,15 @@ img,video,canvas{max-width:100%}
 @media (prefers-color-scheme: dark){:root{--oa-bg:#131316;--oa-fg:#e7e7ea;--oa-muted:#9a9aa2;--oa-border:#2e2e33;--oa-surface:#1c1c21}}
 :root[data-theme="light"]{color-scheme:light;--oa-bg:#ffffff;--oa-fg:#18181b;--oa-muted:#71717a;--oa-border:#e4e4e7;--oa-surface:#f8f8f8}
 :root[data-theme="dark"]{color-scheme:dark;--oa-bg:#131316;--oa-fg:#e7e7ea;--oa-muted:#9a9aa2;--oa-border:#2e2e33;--oa-surface:#1c1c21}
-#oa-theme-toggle{position:fixed;right:14px;bottom:14px;z-index:2147483647;width:36px;height:36px;border-radius:50%;border:1px solid var(--oa-border);background:var(--oa-surface);color:var(--oa-fg);font-size:16px;line-height:1;cursor:pointer;opacity:.55;transition:opacity .15s}
-#oa-theme-toggle:hover{opacity:1}
+.oa-header{position:sticky;top:0;z-index:2147483646;display:flex;align-items:center;gap:.75rem;padding:.5rem 1rem;background:color-mix(in oklab,var(--oa-bg),transparent 8%);backdrop-filter:blur(10px);border-bottom:1px solid var(--oa-border);font-size:.8rem}
+.oa-header .oa-title{flex:1;min-width:0;font-weight:600;color:var(--oa-fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.oa-header .oa-title .oa-fav{margin-right:.4rem}
+.oa-header #oa-theme-toggle{width:30px;height:30px;border-radius:50%;border:1px solid var(--oa-border);background:var(--oa-surface);color:var(--oa-fg);font-size:14px;line-height:1;cursor:pointer;opacity:.7;transition:opacity .15s;flex-shrink:0}
+.oa-header #oa-theme-toggle:hover{opacity:1}
+.oa-brand{display:inline-flex;align-items:center;gap:.35rem;text-decoration:none;color:var(--oa-muted);font-size:.75rem;flex-shrink:0;padding:.25rem .5rem;border-radius:6px;transition:color .15s,background .15s}
+.oa-brand:hover{color:var(--oa-fg);background:var(--oa-surface)}
+.oa-brand svg{width:14px;height:14px}
+@media (max-width:30rem){.oa-brand .oa-brand-text{display:none}}
 `;
 
 const MARKDOWN_CSS = `
@@ -98,9 +105,8 @@ const THEME_SCRIPT = `
     var dark=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches;
     root.setAttribute("data-theme",dark?"dark":"light");
   }
-  var btn=document.createElement("button");
-  btn.id="oa-theme-toggle";
-  btn.setAttribute("aria-label","Toggle theme");
+  var btn=document.getElementById("oa-theme-toggle");
+  if(!btn)return;
   function paint(){
     var t=root.getAttribute("data-theme");
     btn.textContent=t==="light"?"\\u2600":t==="dark"?"\\u263D":"\\u25D0";
@@ -108,16 +114,12 @@ const THEME_SCRIPT = `
   }
   btn.addEventListener("click",function(){
     var t=root.getAttribute("data-theme");
-    // Cycle dark → light → dark. We don't return to "auto" once a user has
-    // touched the toggle, because the page's own :root[data-theme] rules
-    // only fire when data-theme is set — auto would fall back to light.
     var next=t==="dark"?"light":"dark";
     root.setAttribute("data-theme",next);
     try{localStorage.setItem(KEY,next)}catch(e){}
     paint();
   });
   paint();
-  document.body.appendChild(btn);
 })();
 `;
 
@@ -129,6 +131,8 @@ export interface WrapOptions {
   content: string;
   url: string;
   ogImage: string;
+  /** "Powered by Open Artifacts" link URL; omit to hide the brand entry. */
+  brandUrl?: string | null;
 }
 
 const OG_CARD_W = 1200;
@@ -174,8 +178,16 @@ ${desc ? `<text x="80" y="${linesY + titleLines.length * 72 + 20}" font-size="28
 }
 
 export function wrapDocument(options: WrapOptions): string {
-  const { title, description, favicon, format, content, url, ogImage } =
-    options;
+  const {
+    title,
+    description,
+    favicon,
+    format,
+    content,
+    url,
+    ogImage,
+    brandUrl,
+  } = options;
   const body =
     format === "markdown"
       ? `<main class="oa-md" id="oa-content"></main>
@@ -186,6 +198,9 @@ document.getElementById("oa-content").innerHTML=marked.parse(${jsonForInlineScri
       : content;
 
   const ogDescription = description || title;
+  const brandHtml = brandUrl
+    ? `<a class="oa-brand" href="${escapeHtml(brandUrl)}" target="_blank" rel="noopener noreferrer" title="Made with Open Artifacts"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="2" y="2" width="12" height="12" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="5" y="5" width="3" height="3" rx=".5"/><rect x="9" y="9" width="2" height="2" rx=".3"/></svg><span class="oa-brand-text">Open Artifacts</span></a>`
+    : "";
 
   return `<!doctype html>
 <html lang="en">
@@ -210,6 +225,11 @@ document.getElementById("oa-content").innerHTML=marked.parse(${jsonForInlineScri
 <style>${RESET_CSS}${format === "markdown" ? MARKDOWN_CSS : ""}</style>
 </head>
 <body>
+<header class="oa-header">
+  <span class="oa-title"><span class="oa-fav">${escapeHtml(favicon)}</span>${escapeHtml(title)}</span>
+  ${brandHtml}
+  <button id="oa-theme-toggle" type="button" aria-label="Toggle theme"></button>
+</header>
 ${body}
 <script>${THEME_SCRIPT}</script>
 </body>
@@ -239,12 +259,21 @@ export interface UnlockShellOptions {
   format: ArtifactFormat;
   url: string;
   ogImage: string;
+  brandUrl?: string | null;
   envelope: EncryptionParams & { ciphertext: string };
 }
 
 export function unlockShell(options: UnlockShellOptions): string {
-  const { title, description, favicon, format, url, ogImage, envelope } =
-    options;
+  const {
+    title,
+    description,
+    favicon,
+    format,
+    url,
+    ogImage,
+    brandUrl,
+    envelope,
+  } = options;
   const template = wrapDocument({
     title,
     description,
@@ -253,6 +282,7 @@ export function unlockShell(options: UnlockShellOptions): string {
     content: CONTENT_SLOT,
     url,
     ogImage,
+    brandUrl,
   });
 
   const unlockScript = `
@@ -301,6 +331,9 @@ input.focus();
 `;
 
   const ogDescription = description || title;
+  const brandHtml = brandUrl
+    ? `<a class="oa-brand" href="${escapeHtml(brandUrl)}" target="_blank" rel="noopener noreferrer" title="Made with Open Artifacts"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="2" y="2" width="12" height="12" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="5" y="5" width="3" height="3" rx=".5"/><rect x="9" y="9" width="2" height="2" rx=".3"/></svg><span class="oa-brand-text">Open Artifacts</span></a>`
+    : "";
 
   return `<!doctype html>
 <html lang="en">
@@ -325,6 +358,11 @@ input.focus();
 <style>${RESET_CSS}${UNLOCK_CSS}</style>
 </head>
 <body>
+<header class="oa-header">
+  <span class="oa-title"><span class="oa-fav">${escapeHtml(favicon)}</span>${escapeHtml(title)}</span>
+  ${brandHtml}
+  <button id="oa-theme-toggle" type="button" aria-label="Toggle theme"></button>
+</header>
 <div class="oa-unlock">
   <form class="oa-card" id="oa-form">
     <div class="oa-emoji">${escapeHtml(favicon)}</div>
