@@ -217,11 +217,35 @@ function extractTitle(content, format) {
   return heading?.[1].trim() || null;
 }
 
+function generateChannelToken() {
+  return `ch_${Buffer.from(webcrypto.getRandomValues(new Uint8Array(32)))
+    .toString("base64")
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replace(/=+$/, "")}`;
+}
+
 async function commandCreate(file, flags) {
   if (!flags.favicon)
     fail("--favicon is required (one or two emoji, e.g. --favicon 📊)");
   const config = loadConfig(flags);
   const payload = await preparePayload(file, flags);
+
+  // Channel binding: --channel <slug> makes every create with the same slug
+  // land on the same URL (the server creates a new version, not a new
+  // artifact). The slug maps to a ch_ token stored in credentials; the
+  // server only ever sees the token's hash, so it can't forge it.
+  let channelToken = null;
+  if (flags.channel) {
+    const credentials = loadCredentials();
+    credentials.channels ??= {};
+    if (!credentials.channels[flags.channel]) {
+      credentials.channels[flags.channel] = generateChannelToken();
+      saveCredentials(credentials);
+    }
+    channelToken = credentials.channels[flags.channel];
+    payload.channel = channelToken;
+  }
 
   const { status, json } = await request(
     "POST",
@@ -229,13 +253,20 @@ async function commandCreate(file, flags) {
     payload,
     config.createToken,
   );
-  if (status !== 201)
+  // 201 = newly created (first use of the channel); 200 = channel already
+  // existed, server created a new version at the same URL.
+  if (status !== 201 && status !== 200)
     fail(`create failed (${status}): ${json.error ?? "unknown error"}`);
 
   const watch = parseWatch(flags.watch);
   const manifest = loadManifest();
   const source = readFileSync(file, "utf8");
-  manifest.artifacts.push({
+  // If this channel was already in the manifest, replace the entry instead
+  // of appending a duplicate.
+  const existingIdx = flags.channel
+    ? manifest.artifacts.findIndex((a) => a.channel === flags.channel)
+    : -1;
+  const entry = {
     id: json.id,
     url: json.url,
     title: payload.title ?? extractTitle(source, payload.format) ?? null,
@@ -243,20 +274,34 @@ async function commandCreate(file, flags) {
     format: payload.format,
     encrypted: Boolean(flags.password),
     scope: flags.scope ?? null,
+    channel: flags.channel ?? null,
     watch,
     snapshot: snapshotWatch(watch),
     sourceFile: relative(process.cwd(), resolve(file)),
     version: json.version,
     updatedAt: new Date().toISOString(),
-  });
+  };
+  if (existingIdx >= 0) {
+    manifest.artifacts[existingIdx] = entry;
+  } else {
+    manifest.artifacts.push(entry);
+  }
   saveManifest(manifest);
 
-  const credentials = loadCredentials();
-  credentials.tokens[json.id] = json.writeToken;
-  saveCredentials(credentials);
+  // First creation returns a one-time write token; a channel-driven update
+  // (status 200) does not. Only persist the wt_ when present.
+  if (json.writeToken) {
+    const credentials = loadCredentials();
+    credentials.tokens[json.id] = json.writeToken;
+    saveCredentials(credentials);
+  }
 
   console.log(json.url);
-  console.error(`published artifact ${json.id} (version ${json.version})`);
+  const verb = status === 200 ? "updated" : "published";
+  console.error(`${verb} artifact ${json.id} (version ${json.version})`);
+  if (flags.channel) {
+    console.error(`channel "${flags.channel}" → stable URL across updates`);
+  }
   if (flags.password) {
     console.error("password protected: share the URL and password separately");
   }
@@ -454,6 +499,8 @@ options:
   --password <p>       encrypt client-side; server only stores ciphertext
   --scope <text>       what this artifact covers (drives auto-update decisions)
   --watch <globs>      comma-separated globs of source files to watch
+  --channel <slug>     bind this artifact to a stable URL; reusing the slug on
+                       a later create updates the same link (no new URL)
   --api <url>          instance URL (default: OPEN_ARTIFACTS_URL or config)
   --force              overwrite on version conflict
   --hook               (status) emit Claude Code hook JSON instead of text
@@ -472,6 +519,7 @@ async function main() {
       password: { type: "string" },
       scope: { type: "string" },
       watch: { type: "string" },
+      channel: { type: "string" },
       api: { type: "string" },
       force: { type: "boolean" },
       hook: { type: "boolean" },

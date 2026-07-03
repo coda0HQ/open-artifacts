@@ -27,6 +27,14 @@ export function generateWriteToken(): string {
   return `wt_${base64Url(crypto.getRandomValues(new Uint8Array(32)))}`;
 }
 
+export function generateChannelToken(): string {
+  return `ch_${base64Url(crypto.getRandomValues(new Uint8Array(32)))}`;
+}
+
+export function looksLikeChannelToken(value: string): boolean {
+  return value.startsWith("ch_");
+}
+
 export async function sha256Hex(value: string): Promise<string> {
   const digest = await crypto.subtle.digest(
     "SHA-256",

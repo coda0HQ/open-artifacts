@@ -6,6 +6,7 @@ import { D1R2Store } from "./store";
 import {
   generateId,
   generateWriteToken,
+  looksLikeChannelToken,
   sha256Hex,
   timingSafeEqual,
 } from "./tokens";
@@ -53,7 +54,15 @@ async function authorizeWrite(
       response: c.json({ error: "artifact not found" }, 404),
     };
   }
-  if (!timingSafeEqual(await sha256Hex(token), record.tokenHash)) {
+  const tokenHash = await sha256Hex(token);
+  // A write token (wt_) authorizes by matching the artifact's token_hash.
+  // A channel token (ch_) authorizes by matching the artifact's channel_hash,
+  // so the channel holder can update the bound artifact without the wt_.
+  const authorized = looksLikeChannelToken(token)
+    ? record.channelHash !== null &&
+      timingSafeEqual(tokenHash, record.channelHash)
+    : timingSafeEqual(tokenHash, record.tokenHash);
+  if (!authorized) {
     return {
       ok: false,
       response: c.json({ error: "invalid write token" }, 403),
@@ -108,11 +117,68 @@ api.post("/artifacts", async (c) => {
   const parsed = validateCreate(body);
   if (!parsed.ok) return c.json({ error: parsed.error }, parsed.status);
 
+  const store = storeFrom(c);
+
+  // Channel binding: a POST carrying a channel token (ch_) targets the
+  // artifact already bound to that channel — creating a new version at the
+  // same URL instead of minting a new artifact. First use of a channel
+  // creates the artifact and binds the channel to it, so every future POST
+  // with the same channel lands on the same link.
+  const channelRaw = typeof body.channel === "string" ? body.channel : null;
+  if (channelRaw !== null && !looksLikeChannelToken(channelRaw)) {
+    return c.json({ error: "channel must be a channel token (ch_...)" }, 400);
+  }
+
+  if (channelRaw !== null) {
+    const channelHash = await sha256Hex(channelRaw);
+    const existing = await store.findByChannel(channelHash);
+    if (existing !== null) {
+      const result = await store.update(existing, {
+        content: parsed.value.content,
+        format: parsed.value.format,
+        title: parsed.value.title,
+        description: parsed.value.description,
+        favicon: parsed.value.favicon,
+        label: parsed.value.label,
+        encrypted: parsed.value.encrypted,
+        baseVersion: null,
+        force: false,
+      });
+      if (typeof result !== "number") {
+        return c.json(
+          { error: "version conflict", currentVersion: result.currentVersion },
+          409,
+        );
+      }
+      return c.json({
+        id: existing.id,
+        url: artifactUrl(c, existing.id),
+        version: result,
+        channel: channelRaw,
+      });
+    }
+  }
+
   const id = generateId();
   const writeToken = generateWriteToken();
-  await storeFrom(c).create(id, await sha256Hex(writeToken), parsed.value);
+  const channelHash = channelRaw ? await sha256Hex(channelRaw) : null;
+  await store.create(
+    id,
+    await sha256Hex(writeToken),
+    parsed.value,
+    channelHash,
+  );
 
-  return c.json({ id, url: artifactUrl(c, id), writeToken, version: 1 }, 201);
+  return c.json(
+    {
+      id,
+      url: artifactUrl(c, id),
+      writeToken,
+      version: 1,
+      ...(channelRaw ? { channel: channelRaw } : {}),
+    },
+    201,
+  );
 });
 
 api.put("/artifacts/:id", async (c) => {

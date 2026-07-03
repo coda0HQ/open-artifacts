@@ -9,6 +9,7 @@ import type {
 
 export interface ArtifactRecord extends ArtifactMeta {
   tokenHash: string;
+  channelHash: string | null;
 }
 
 export interface StoredContent {
@@ -21,8 +22,10 @@ export interface ArtifactStore {
     id: string,
     tokenHash: string,
     input: CreateInput,
+    channelHash: string | null,
   ): Promise<ArtifactRecord>;
   get(id: string): Promise<ArtifactRecord | null>;
+  findByChannel(channelHash: string): Promise<ArtifactRecord | null>;
   listVersions(id: string): Promise<VersionMeta[]>;
   getContent(id: string, version: number): Promise<StoredContent | null>;
   update(
@@ -36,6 +39,7 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS artifacts (
     id TEXT PRIMARY KEY,
     token_hash TEXT NOT NULL,
+    channel_hash TEXT,
     title TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
     favicon TEXT NOT NULL,
@@ -55,23 +59,32 @@ const SCHEMA = [
   )`,
 ];
 
+// Column added after launch; migrate existing DBs in place.
+const MIGRATIONS = [`ALTER TABLE artifacts ADD COLUMN channel_hash TEXT`];
+
 let schemaReady: Promise<unknown> | undefined;
 
-function ensureSchema(db: D1Database): Promise<unknown> {
+async function ensureSchema(db: D1Database): Promise<unknown> {
   // Reset the memoized promise if the previous attempt failed, so a transient
   // D1 error does not poison every subsequent request in this isolate.
-  schemaReady ??= db
-    .batch(SCHEMA.map((sql) => db.prepare(sql)))
-    .catch((error) => {
-      schemaReady = undefined;
-      throw error;
-    });
+  if (schemaReady) return schemaReady;
+  const run = async () => {
+    await db.batch(SCHEMA.map((sql) => db.prepare(sql)));
+    // Column added after launch; ALTER errors if the column already exists,
+    // which is fine — the column is there either way.
+    await Promise.all(MIGRATIONS.map((sql) => db.exec(sql).catch(() => {})));
+  };
+  schemaReady = run().catch((error) => {
+    schemaReady = undefined;
+    throw error;
+  });
   return schemaReady;
 }
 
 interface ArtifactRow {
   id: string;
   token_hash: string;
+  channel_hash: string | null;
   title: string;
   description: string;
   favicon: string;
@@ -86,6 +99,7 @@ function toRecord(row: ArtifactRow): ArtifactRecord {
   return {
     id: row.id,
     tokenHash: row.token_hash,
+    channelHash: row.channel_hash,
     title: row.title,
     description: row.description,
     favicon: row.favicon,
@@ -133,6 +147,7 @@ export class D1R2Store implements ArtifactStore {
     id: string,
     tokenHash: string,
     input: CreateInput,
+    channelHash: string | null,
   ): Promise<ArtifactRecord> {
     await ensureSchema(this.db);
     const now = new Date().toISOString();
@@ -147,12 +162,13 @@ export class D1R2Store implements ArtifactStore {
     await this.db.batch([
       this.db
         .prepare(
-          `INSERT INTO artifacts (id, token_hash, title, description, favicon, format, encrypted, current_version, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+          `INSERT INTO artifacts (id, token_hash, channel_hash, title, description, favicon, format, encrypted, current_version, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
         )
         .bind(
           id,
           tokenHash,
+          channelHash,
           input.title,
           input.description,
           input.favicon,
@@ -170,6 +186,7 @@ export class D1R2Store implements ArtifactStore {
     return {
       id,
       tokenHash,
+      channelHash,
       title: input.title,
       description: input.description,
       favicon: input.favicon,
@@ -186,6 +203,15 @@ export class D1R2Store implements ArtifactStore {
     const row = await this.db
       .prepare("SELECT * FROM artifacts WHERE id = ?")
       .bind(id)
+      .first<ArtifactRow>();
+    return row ? toRecord(row) : null;
+  }
+
+  async findByChannel(channelHash: string): Promise<ArtifactRecord | null> {
+    await ensureSchema(this.db);
+    const row = await this.db
+      .prepare("SELECT * FROM artifacts WHERE channel_hash = ? LIMIT 1")
+      .bind(channelHash)
       .first<ArtifactRow>();
     return row ? toRecord(row) : null;
   }

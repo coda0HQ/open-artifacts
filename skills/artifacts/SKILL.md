@@ -95,6 +95,7 @@ inline — `text-wrap: pretty/balance`, CSS Grid, container queries,
 ```
 node artifact.mjs create page.html --favicon 📊 \
   --scope "user-facing interaction flows of the app" \
+  --channel app-interactions \
   --watch "src/views/**,src/components/**" \
   --description "One-sentence subtitle"
 ```
@@ -102,13 +103,20 @@ node artifact.mjs create page.html --favicon 📊 \
 - `--favicon`: required, one or two emoji. Keep it STABLE across updates.
 - `--scope`: what the artifact is about, in one sentence. Required for any
   artifact derived from project files — it drives auto-updates later.
+- `--channel <slug>`: bind this artifact to a **stable URL**. Reusing the
+  same slug on a later `create` updates the same link (new version, no new
+  URL) — so "the app-interactions page" always lives at one link, even
+  across sessions or machines. Use a kebab-case slug that names the topic.
+  Without `--channel`, each `create` mints a new URL (use `update <id>` to
+  update those).
 - `--watch`: comma-separated globs of the source files the artifact was
   derived from.
 - Prints the shareable URL on stdout. Give it to the user.
 
 The command records the artifact in `.artifacts/manifest.json` (commit this)
-and its write token in `.artifacts/credentials.json` (auto-gitignored, never
-commit or print tokens).
+and its tokens in `.artifacts/credentials.json` (auto-gitignored, never
+commit or print tokens). The channel token (`ch_`) also lives in
+credentials; the slug in the manifest is safe to commit.
 
 ## Updating
 

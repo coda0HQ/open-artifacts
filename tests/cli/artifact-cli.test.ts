@@ -147,6 +147,7 @@ function manifest(): {
     watch: string[];
     snapshot: Record<string, string>;
     scope: string | null;
+    channel: string | null;
     encrypted: boolean;
   }>;
 } {
@@ -369,6 +370,64 @@ describe("status", () => {
     const result = await run(["status"], { expectFailure: true });
     expect(result.code).toBe(1);
     expect(result.stdout).toContain("src/new-module.ts");
+  });
+});
+
+describe("channel binding", () => {
+  it("first create with --channel sends the channel and stores a ch_ token", async () => {
+    const result = await run([
+      "create",
+      "report.html",
+      "--favicon",
+      "📊",
+      "--channel",
+      "app-interactions",
+    ]);
+    expect(result.code).toBe(0);
+    expect(requests[0].body.channel).toMatch(/^ch_/);
+
+    const credentials = JSON.parse(
+      readFileSync(join(projectDir, ".artifacts/credentials.json"), "utf8"),
+    );
+    expect(credentials.channels["app-interactions"]).toMatch(/^ch_/);
+    // The channel token never appears in the committed manifest.
+    expect(JSON.stringify(manifest())).not.toContain("ch_");
+  });
+
+  it("reusing the same channel slug posts the same channel token", async () => {
+    await run([
+      "create",
+      "report.html",
+      "--favicon",
+      "📊",
+      "--channel",
+      "topic",
+    ]);
+    const firstToken = requests[0].body.channel;
+    writeFileSync(join(projectDir, "report.html"), "<h1>v2</h1>");
+    await run([
+      "create",
+      "report.html",
+      "--favicon",
+      "📊",
+      "--channel",
+      "topic",
+    ]);
+    expect(requests[1].body.channel).toBe(firstToken);
+  });
+
+  it("manifest holds one entry per channel slug (replaced, not duplicated)", async () => {
+    await run(["create", "report.html", "--favicon", "📊", "--channel", "one"]);
+    await run(["create", "report.html", "--favicon", "📊", "--channel", "one"]);
+    const entries = manifest().artifacts.filter((a) => a.channel === "one");
+    expect(entries).toHaveLength(1);
+  });
+
+  it("different channel slugs get different tokens and entries", async () => {
+    await run(["create", "report.html", "--favicon", "📊", "--channel", "a"]);
+    await run(["create", "report.html", "--favicon", "📊", "--channel", "b"]);
+    expect(requests[0].body.channel).not.toBe(requests[1].body.channel);
+    expect(manifest().artifacts).toHaveLength(2);
   });
 });
 
