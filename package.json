@@ -1,0 +1,31 @@
+{
+  "name": "open-artifcact",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "vitest run",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test:cli": "vitest run --config vitest.cli.config.ts",
+    "check": "biome check .",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.cli.json",
+    "cf-typegen": "wrangler types"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.33.0",
+  "dependencies": {
+    "hono": "^4.12.27"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.2",
+    "@cloudflare/vitest-pool-workers": "^0.18.0",
+    "@types/node": "^26.1.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9",
+    "wrangler": "^4.107.0"
+  },
+  "type": "module"
+}

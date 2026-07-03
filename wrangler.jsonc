@@ -1,0 +1,27 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "open-artifacts",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-03",
+  "workers_dev": true,
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*", "/a/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "open-artifacts",
+      "database_id": "a01d21cd-86cb-4832-872d-d196e6918a3b"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "CONTENT",
+      "bucket_name": "open-artifacts-content"
+    }
+  ],
+  "rules": [{ "type": "Text", "globs": ["**/*.txt"], "fallthrough": true }],
+  "observability": { "enabled": true }
+}

@@ -1,0 +1,5 @@
+scopes:
+    - name: skills
+      description: core logic for skill execution and management in skills/; does not cover framework setup or tests
+    - name: src
+      description: primary application business logic and services in src/; does not cover skill-specific implementation or scripts

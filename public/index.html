@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Open Artifacts</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect x='12' y='12' width='76' height='76' rx='14' fill='%236457f0'/%3E%3Crect x='28' y='30' width='44' height='7' rx='3.5' fill='white'/%3E%3Crect x='28' y='46' width='32' height='7' rx='3.5' fill='white' opacity='.75'/%3E%3Crect x='28' y='62' width='38' height='7' rx='3.5' fill='white' opacity='.5'/%3E%3C/svg%3E">
+<style>
+*,*::before,*::after{box-sizing:border-box}
+:root{color-scheme:light dark;--bg:#ffffff;--fg:#18181b;--muted:#71717a;--border:#e4e4e7;--surface:#f8f8f8;--accent:#6457f0}
+@media (prefers-color-scheme: dark){:root{--bg:#131316;--fg:#e7e7ea;--muted:#9a9aa2;--border:#2e2e33;--surface:#1c1c21;--accent:#8d82f5}}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;line-height:1.6;background:var(--bg);color:var(--fg)}
+main{max-width:44rem;margin:0 auto;padding:4rem 1.5rem 6rem}
+h1{font-size:2rem;line-height:1.2;letter-spacing:-.02em;margin:0 0 .5rem}
+.tagline{color:var(--muted);font-size:1.05rem;margin:0 0 2.5rem}
+h2{font-size:1.05rem;margin:2.5rem 0 .75rem}
+p{margin:.5rem 0}
+code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.9em}
+pre{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:.9rem 1.1rem;overflow-x:auto}
+:not(pre)>code{background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:.1em .35em}
+ul{padding-left:1.2rem}
+li{margin:.35rem 0}
+a{color:var(--accent)}
+.badge{display:inline-block;font-size:.75rem;border:1px solid var(--border);border-radius:99px;padding:.1rem .6rem;color:var(--muted);margin-bottom:1.25rem}
+</style>
+</head>
+<body>
+<main>
+<span class="badge">self-hosted instance</span>
+<h1>Open Artifacts</h1>
+<p class="tagline">Publish self-contained HTML and Markdown pages from any coding agent. Share by URL, protect with a password, keep them updated as your project evolves.</p>
+
+<h2>Give your agent the skill</h2>
+<pre>npx skills add FradSer/open-artifacts</pre>
+<p>Then tell your agent the instance to publish to:</p>
+<pre>export OPEN_ARTIFACTS_URL=&lt;this origin&gt;</pre>
+
+<h2>What it does</h2>
+<ul>
+<li>Agents publish pages via a small JSON API; every artifact gets a stable, unguessable URL and full version history.</li>
+<li>Password-protected artifacts are encrypted on your machine (PBKDF2 + AES-256-GCM) and decrypted in the viewer's browser. The server only ever stores ciphertext.</li>
+<li>Artifacts remember the files they were generated from; the skill detects when those files change and the agent republishes.</li>
+<li>All pages are served with a sandboxing content security policy that blocks every external request.</li>
+</ul>
+
+<h2>API</h2>
+<pre>POST   /api/artifacts          create  -&gt; { id, url, writeToken }
+PUT    /api/artifacts/:id      update  (bearer writeToken)
+GET    /api/artifacts/:id      metadata + versions
+GET    /api/artifacts/:id/raw  stored content
+DELETE /api/artifacts/:id      delete  (bearer writeToken)
+GET    /a/:id                  view    (?v=N for history)</pre>
+
+<p><a href="https://github.com/FradSer/open-artifacts">Source on GitHub</a> — MIT licensed. Deploy your own with <code>wrangler deploy</code>.</p>
+</main>
+</body>
+</html>
