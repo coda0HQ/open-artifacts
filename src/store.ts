@@ -75,6 +75,19 @@ const MIGRATIONS = [
   `ALTER TABLE versions ADD COLUMN encrypted INTEGER NOT NULL DEFAULT 0`,
 ];
 
+// After the ALTERs above add columns to existing rows with empty defaults,
+// backfill those rows from the parent artifact so historical versions keep
+// their metadata. Runs once per fresh column; a no-op once data is present.
+const BACKFILL = `
+UPDATE versions
+SET title = (SELECT title FROM artifacts WHERE artifacts.id = versions.artifact_id),
+    description = (SELECT description FROM artifacts WHERE artifacts.id = versions.artifact_id),
+    favicon = (SELECT favicon FROM artifacts WHERE artifacts.id = versions.artifact_id),
+    format = (SELECT format FROM artifacts WHERE artifacts.id = versions.artifact_id),
+    encrypted = (SELECT encrypted FROM artifacts WHERE artifacts.id = versions.artifact_id)
+WHERE title = '' AND favicon = ''
+`;
+
 let schemaReady: Promise<unknown> | undefined;
 
 async function ensureSchema(db: D1Database): Promise<unknown> {
@@ -86,6 +99,9 @@ async function ensureSchema(db: D1Database): Promise<unknown> {
     // Column added after launch; ALTER errors if the column already exists,
     // which is fine — the column is there either way.
     await Promise.all(MIGRATIONS.map((sql) => db.exec(sql).catch(() => {})));
+    // Backfill historical version rows that got empty defaults from the
+    // ALTER above. No-op once rows are populated.
+    await db.exec(BACKFILL).catch(() => {});
   };
   schemaReady = run().catch((error) => {
     schemaReady = undefined;
