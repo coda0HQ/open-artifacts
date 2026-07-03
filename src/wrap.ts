@@ -90,7 +90,14 @@ const THEME_SCRIPT = `
 (function(){
   var root=document.documentElement,KEY="oa-theme",saved=null;
   try{saved=localStorage.getItem(KEY)}catch(e){}
-  if(saved==="light"||saved==="dark")root.setAttribute("data-theme",saved);
+  if(saved==="light"||saved==="dark"){
+    root.setAttribute("data-theme",saved);
+  }else{
+    // No stored choice: follow the OS preference so author CSS that only
+    // defines :root[data-theme="dark"] (without a @media rule) still works.
+    var dark=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches;
+    root.setAttribute("data-theme",dark?"dark":"light");
+  }
   var btn=document.createElement("button");
   btn.id="oa-theme-toggle";
   btn.setAttribute("aria-label","Toggle theme");
@@ -101,9 +108,12 @@ const THEME_SCRIPT = `
   }
   btn.addEventListener("click",function(){
     var t=root.getAttribute("data-theme");
-    var next=t===null?"light":t==="light"?"dark":null;
-    if(next===null){root.removeAttribute("data-theme")}else{root.setAttribute("data-theme",next)}
-    try{if(next===null){localStorage.removeItem(KEY)}else{localStorage.setItem(KEY,next)}}catch(e){}
+    // Cycle dark → light → dark. We don't return to "auto" once a user has
+    // touched the toggle, because the page's own :root[data-theme] rules
+    // only fire when data-theme is set — auto would fall back to light.
+    var next=t==="dark"?"light":"dark";
+    root.setAttribute("data-theme",next);
+    try{localStorage.setItem(KEY,next)}catch(e){}
     paint();
   });
   paint();
