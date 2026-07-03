@@ -131,9 +131,35 @@ const THEME_SCRIPT = `
 
 const LAYOUT_SCRIPT = `
 (function(){
-  function measure(){var h=document.querySelector('.oa-header');if(!h)return;document.documentElement.style.setProperty('--oa-header-h',h.getBoundingClientRect().height+'px')}
+  var h=document.querySelector('.oa-header');
+  function measure(){if(!h)return;document.documentElement.style.setProperty('--oa-header-h',h.getBoundingClientRect().height+'px')}
+  // Push author-authored sticky elements (e.g. an in-page nav) below the
+  // service header so they stick under it instead of being obscured. Run
+  // once on load; cheap enough since only sticky elements get touched.
+  function offsetSticky(){
+    if(!h)return;
+    var els=document.body.children;
+    for(var i=0;i<els.length;i++){
+      var el=els[i];
+      if(el===h||el.classList&&el.classList.contains('oa-header'))continue;
+      var stack=[el];
+      while(stack.length){
+        var node=stack.pop();
+        if(node.nodeType!==1)continue;
+        var cs=getComputedStyle(node);
+        if(cs.position==='sticky'&&(cs.top==='0px'||cs.top==='auto')){
+          node.style.top='var(--oa-header-h)';
+        }
+        var ch=node.children;
+        for(var j=0;j<ch.length;j++)stack.push(ch[j]);
+      }
+    }
+  }
   measure();
-  if(window.ResizeObserver&&document.querySelector('.oa-header')){new ResizeObserver(measure).observe(document.querySelector('.oa-header'))}
+  var runOffset=function(){offsetSticky()};
+  if(window.requestIdleCallback){requestIdleCallback(runOffset,{timeout:500})}
+  else{setTimeout(runOffset,1)}
+  if(window.ResizeObserver&&h){new ResizeObserver(measure).observe(h)}
   window.addEventListener('resize',measure,{passive:true});
 })();
 `;
