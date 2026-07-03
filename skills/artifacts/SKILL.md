@@ -21,6 +21,15 @@ The CLI needs an instance URL, resolved in this order: `--api` flag,
 instance URL and write `.artifacts/config.json`. If the instance requires a
 create token, put it in `OPEN_ARTIFACTS_TOKEN` or `config.json` `createToken`.
 
+If the user has no instance yet, point them at
+`${CLAUDE_SKILL_DIR}/references/deployment.md` — it has the three ways to get
+one (use the public shared instance with zero setup, self-host on their own
+Cloudflare account, or share a team instance) and a trust-model table to help
+them choose based on content sensitivity. Don't deploy on their behalf unless
+they ask.
+
+
+
 ## When to publish an artifact
 
 Publish when the user asks for something shareable or standalone: reports,
