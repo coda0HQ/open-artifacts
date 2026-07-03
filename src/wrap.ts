@@ -69,6 +69,12 @@ img,video,canvas{max-width:100%}
 @media (prefers-color-scheme: dark){:root{--oa-bg:#131316;--oa-fg:#e7e7ea;--oa-muted:#9a9aa2;--oa-border:#2e2e33;--oa-surface:#1c1c21}}
 :root[data-theme="light"]{color-scheme:light;--oa-bg:#ffffff;--oa-fg:#18181b;--oa-muted:#71717a;--oa-border:#e4e4e7;--oa-surface:#f8f8f8}
 :root[data-theme="dark"]{color-scheme:dark;--oa-bg:#131316;--oa-fg:#e7e7ea;--oa-muted:#9a9aa2;--oa-border:#2e2e33;--oa-surface:#1c1c21}
+/* Header height is measured at runtime and exposed as --oa-header-h so
+   anchor scroll-offset stays correct without author effort. The header is
+   sticky (in-flow), so body content is never obscured — only anchor jumps
+   need the offset. */
+:root{--oa-header-h:2.5rem}
+[id]{scroll-margin-top:calc(var(--oa-header-h) + .5rem)}
 .oa-header{position:sticky;top:0;z-index:2147483646;display:flex;align-items:center;gap:.75rem;padding:.5rem 1rem;background:color-mix(in oklab,var(--oa-bg),transparent 8%);backdrop-filter:blur(10px);border-bottom:1px solid var(--oa-border);font-size:.8rem}
 .oa-header .oa-title{flex:1;min-width:0;font-weight:600;color:var(--oa-fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .oa-header .oa-title .oa-fav{margin-right:.4rem}
@@ -120,6 +126,15 @@ const THEME_SCRIPT = `
     paint();
   });
   paint();
+})();
+`;
+
+const LAYOUT_SCRIPT = `
+(function(){
+  function measure(){var h=document.querySelector('.oa-header');if(!h)return;document.documentElement.style.setProperty('--oa-header-h',h.getBoundingClientRect().height+'px')}
+  measure();
+  if(window.ResizeObserver&&document.querySelector('.oa-header')){new ResizeObserver(measure).observe(document.querySelector('.oa-header'))}
+  window.addEventListener('resize',measure,{passive:true});
 })();
 `;
 
@@ -232,6 +247,7 @@ document.getElementById("oa-content").innerHTML=marked.parse(${jsonForInlineScri
 </header>
 ${body}
 <script>${THEME_SCRIPT}</script>
+<script>${LAYOUT_SCRIPT}</script>
 </body>
 </html>
 `;
@@ -376,6 +392,7 @@ input.focus();
 <iframe id="oa-frame" sandbox="allow-scripts allow-modals" title="${escapeHtml(title)}"></iframe>
 <script>${unlockScript}</script>
 <script>${THEME_SCRIPT}</script>
+<script>${LAYOUT_SCRIPT}</script>
 </body>
 </html>
 `;
