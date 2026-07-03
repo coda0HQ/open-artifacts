@@ -321,6 +321,33 @@ describe("PUT /api/artifacts/:id", () => {
     );
   });
 
+  it("stores per-version metadata so old versions keep their old title", async () => {
+    const created = await createArtifact({ title: "Original Title" });
+    await exports.default.fetch(
+      jsonRequest(
+        "PUT",
+        `/api/artifacts/${created.id}`,
+        { content: "<p>v2</p>", title: "Renamed" },
+        { authorization: `Bearer ${created.writeToken}` },
+      ),
+    );
+    const meta = (await (
+      await exports.default.fetch(`${BASE}/api/artifacts/${created.id}`)
+    ).json()) as {
+      versions: Array<{
+        version: number;
+        title: string;
+        favicon: string;
+        format: string;
+      }>;
+    };
+    expect(meta.versions.find((v) => v.version === 1)?.title).toBe(
+      "Original Title",
+    );
+    expect(meta.versions.find((v) => v.version === 2)?.title).toBe("Renamed");
+    expect(meta.versions.every((v) => v.favicon && v.format)).toBe(true);
+  });
+
   it("409s on a baseVersion mismatch and creates no new version", async () => {
     const created = await createArtifact();
     await exports.default.fetch(

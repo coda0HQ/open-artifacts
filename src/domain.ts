@@ -50,6 +50,11 @@ export interface ArtifactMeta {
 export interface VersionMeta {
   version: number;
   label: string | null;
+  title: string;
+  description: string;
+  favicon: string;
+  format: ArtifactFormat;
+  encrypted: boolean;
   size: number;
   createdAt: string;
 }

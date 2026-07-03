@@ -53,14 +53,27 @@ const SCHEMA = [
     artifact_id TEXT NOT NULL,
     version INTEGER NOT NULL,
     label TEXT,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    favicon TEXT NOT NULL,
+    format TEXT NOT NULL,
+    encrypted INTEGER NOT NULL DEFAULT 0,
     size INTEGER NOT NULL,
     created_at TEXT NOT NULL,
     PRIMARY KEY (artifact_id, version)
   )`,
 ];
 
-// Column added after launch; migrate existing DBs in place.
-const MIGRATIONS = [`ALTER TABLE artifacts ADD COLUMN channel_hash TEXT`];
+// Columns added after launch; migrate existing DBs in place. Each ALTER
+// errors if the column already exists, which is fine — the column is there.
+const MIGRATIONS = [
+  `ALTER TABLE artifacts ADD COLUMN channel_hash TEXT`,
+  `ALTER TABLE versions ADD COLUMN title TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE versions ADD COLUMN description TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE versions ADD COLUMN favicon TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE versions ADD COLUMN format TEXT NOT NULL DEFAULT 'html'`,
+  `ALTER TABLE versions ADD COLUMN encrypted INTEGER NOT NULL DEFAULT 0`,
+];
 
 let schemaReady: Promise<unknown> | undefined;
 
@@ -179,9 +192,20 @@ export class D1R2Store implements ArtifactStore {
         ),
       this.db
         .prepare(
-          "INSERT INTO versions (artifact_id, version, label, size, created_at) VALUES (?, 1, ?, ?, ?)",
+          `INSERT INTO versions (artifact_id, version, label, title, description, favicon, format, encrypted, size, created_at)
+           VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
-        .bind(id, input.label, input.content.length, now),
+        .bind(
+          id,
+          input.label,
+          input.title,
+          input.description,
+          input.favicon,
+          input.format,
+          input.encrypted ? 1 : 0,
+          input.content.length,
+          now,
+        ),
     ]);
     return {
       id,
@@ -220,18 +244,29 @@ export class D1R2Store implements ArtifactStore {
     await ensureSchema(this.db);
     const { results } = await this.db
       .prepare(
-        "SELECT version, label, size, created_at FROM versions WHERE artifact_id = ? ORDER BY version ASC",
+        `SELECT version, label, title, description, favicon, format, encrypted, size, created_at
+         FROM versions WHERE artifact_id = ? ORDER BY version ASC`,
       )
       .bind(id)
       .all<{
         version: number;
         label: string | null;
+        title: string;
+        description: string;
+        favicon: string;
+        format: string;
+        encrypted: number;
         size: number;
         created_at: string;
       }>();
     return results.map((row) => ({
       version: row.version,
       label: row.label,
+      title: row.title,
+      description: row.description,
+      favicon: row.favicon,
+      format: row.format as ArtifactFormat,
+      encrypted: row.encrypted === 1,
       size: row.size,
       createdAt: row.created_at,
     }));
@@ -298,6 +333,11 @@ export class D1R2Store implements ArtifactStore {
       };
     }
 
+    const vTitle = input.title ?? record.title;
+    const vDescription = input.description ?? record.description;
+    const vFavicon = input.favicon ?? record.favicon;
+    const vFormat = input.format ?? record.format;
+
     await this.bucket.put(
       contentKey(record.id, version),
       contentObjectBody(input.content, input.encrypted),
@@ -305,9 +345,21 @@ export class D1R2Store implements ArtifactStore {
     );
     await this.db
       .prepare(
-        "INSERT INTO versions (artifact_id, version, label, size, created_at) VALUES (?, ?, ?, ?, ?)",
+        `INSERT INTO versions (artifact_id, version, label, title, description, favicon, format, encrypted, size, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .bind(record.id, version, input.label, input.content.length, now)
+      .bind(
+        record.id,
+        version,
+        input.label,
+        vTitle,
+        vDescription,
+        vFavicon,
+        vFormat,
+        input.encrypted ? 1 : 0,
+        input.content.length,
+        now,
+      )
       .run();
 
     return version;
