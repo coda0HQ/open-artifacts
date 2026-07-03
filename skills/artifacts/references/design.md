@@ -290,6 +290,11 @@ page feel designed rather than assembled:
   danger `var(--danger)`; tinted background via `color-mix(in oklab,
   var(--success), transparent 88%)`; border-radius `var(--radius-pill)`;
   padding `var(--space-1) var(--space-3)`.
+- **Icons**: prefer [Remix Icon](https://remixicon.com/) — read
+  `${CLAUDE_SKILL_DIR}/references/icons.md` for a vendored ~90-icon inline-SVG
+  subset. Copy the whole `<svg>` inline (it uses `fill="currentColor"`, so it
+  inherits color from the parent); size with `width`/`height` or
+  `svg{width:1em;height:1em;vertical-align:-.125em}`. Never link the CDN.
 
 ## Layout & composition
 

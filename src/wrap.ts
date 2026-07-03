@@ -214,7 +214,7 @@ document.getElementById("oa-content").innerHTML=marked.parse(${jsonForInlineScri
 
   const ogDescription = description || title;
   const brandHtml = brandUrl
-    ? `<a class="oa-brand" href="${escapeHtml(brandUrl)}" target="_blank" rel="noopener noreferrer" title="Made with Open Artifacts"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="2" y="2" width="12" height="12" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="5" y="5" width="3" height="3" rx=".5"/><rect x="9" y="9" width="2" height="2" rx=".3"/></svg><span class="oa-brand-text">Open Artifacts</span></a>`
+    ? `<a class="oa-brand" href="${escapeHtml(brandUrl)}" target="_blank" rel="noopener noreferrer" title="Made with Open Artifacts"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M14 10H10V14H14V10ZM16 10V14H19V10H16ZM14 19V16H10V19H14ZM16 19H19V16H16V19ZM14 5H10V8H14V5ZM16 5V8H19V5H16ZM8 10H5V14H8V10ZM8 19V16H5V19H8ZM8 5H5V8H8V5ZM4 3H20C20.5523 3 21 3.44772 21 4V20C21 20.5523 20.5523 21 20 21H4C3.44772 21 3 20.5523 3 20V4C3 3.44772 3.44772 3 4 3Z"/></svg><span class="oa-brand-text">Open Artifacts</span></a>`
     : "";
 
   return `<!doctype html>
@@ -348,7 +348,7 @@ input.focus();
 
   const ogDescription = description || title;
   const brandHtml = brandUrl
-    ? `<a class="oa-brand" href="${escapeHtml(brandUrl)}" target="_blank" rel="noopener noreferrer" title="Made with Open Artifacts"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="2" y="2" width="12" height="12" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="5" y="5" width="3" height="3" rx=".5"/><rect x="9" y="9" width="2" height="2" rx=".3"/></svg><span class="oa-brand-text">Open Artifacts</span></a>`
+    ? `<a class="oa-brand" href="${escapeHtml(brandUrl)}" target="_blank" rel="noopener noreferrer" title="Made with Open Artifacts"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M14 10H10V14H14V10ZM16 10V14H19V10H16ZM14 19V16H10V19H14ZM16 19H19V16H16V19ZM14 5H10V8H14V5ZM16 5V8H19V5H16ZM8 10H5V14H8V10ZM8 19V16H5V19H8ZM8 5H5V8H8V5ZM4 3H20C20.5523 3 21 3.44772 21 4V20C21 20.5523 20.5523 21 20 21H4C3.44772 21 3 20.5523 3 20V4C3 3.44772 3.44772 3 4 3Z"/></svg><span class="oa-brand-text">Open Artifacts</span></a>`
     : "";
 
   return `<!doctype html>

@@ -94,6 +94,11 @@ images, fetch/XHR/WebSockets):
 
 - Inline all CSS and JS; embed images and fonts as `data:` URIs. Use system
   font stacks or inline a face as a `@font-face` data URI.
+- **Icons: prefer [Remix Icon](https://remixicon.com/).** Read
+  `${CLAUDE_SKILL_DIR}/references/icons.md` for a vendored ~90-icon inline-SVG
+  subset (navigation, actions, status, social, common UI). Copy the whole
+  `<svg>` block inline — it uses `fill="currentColor"` so it inherits color.
+  Never link the Remix Icon CDN (the CSP blocks it); only inline SVGs.
 - Do not use localStorage/sessionStorage (the sandbox blocks them); keep
   state in memory.
 - Include a concise `<title>` — it becomes the artifact title.
