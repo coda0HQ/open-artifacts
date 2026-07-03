@@ -48,10 +48,13 @@ output, `grep` for unclosed tags / dangling `<script>`, trace the main
 interaction. Do not loop on renders.
 
 **Read `${CLAUDE_SKILL_DIR}/references/design.md` before writing a page.** It
-has the full design philosophy, the anti-AI-slop tropes to avoid, a
+has the full design philosophy, the anti-AI-slop tropes to avoid, a shared
+token contract (`${CLAUDE_SKILL_DIR}/references/tokens.css` — paste it into
+your `<style>` first, then override identity tokens per direction), a
 5-direction library (Editorial / Modern minimal / Human / Tech utility /
 Brutalist) with ready-to-paste OKLch palettes and font stacks for when no
-brand is specified, and the hard constraints below.
+brand is specified, a component contract (buttons/cards/inputs/tables/pills
+written against tokens), and the hard constraints below.
 
 ## Authoring content — hard constraints
 
