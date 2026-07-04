@@ -65,10 +65,10 @@ const RESET_CSS = `
 html{-webkit-text-size-adjust:100%}
 body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;line-height:1.5;background:var(--oa-bg);color:var(--oa-fg)}
 img,video,canvas{max-width:100%}
-:root{color-scheme:light dark;--oa-bg:#ffffff;--oa-fg:#18181b;--oa-muted:#71717a;--oa-border:#e4e4e7;--oa-surface:#f8f8f8}
-@media (prefers-color-scheme: dark){:root{--oa-bg:#131316;--oa-fg:#e7e7ea;--oa-muted:#9a9aa2;--oa-border:#2e2e33;--oa-surface:#1c1c21}}
-:root[data-theme="light"]{color-scheme:light;--oa-bg:#ffffff;--oa-fg:#18181b;--oa-muted:#71717a;--oa-border:#e4e4e7;--oa-surface:#f8f8f8}
-:root[data-theme="dark"]{color-scheme:dark;--oa-bg:#131316;--oa-fg:#e7e7ea;--oa-muted:#9a9aa2;--oa-border:#2e2e33;--oa-surface:#1c1c21}
+:root{color-scheme:light dark;--oa-bg:#ffffff;--oa-fg:#18181b;--oa-muted:#71717a;--oa-border:#e4e4e7;--oa-surface:#f8f8f8;--oa-accent:#6457f0}
+@media (prefers-color-scheme: dark){:root{--oa-bg:#131316;--oa-fg:#e7e7ea;--oa-muted:#9a9aa2;--oa-border:#2e2e33;--oa-surface:#1c1c21;--oa-accent:#8d82f5}}
+:root[data-theme="light"]{color-scheme:light;--oa-bg:#ffffff;--oa-fg:#18181b;--oa-muted:#71717a;--oa-border:#e4e4e7;--oa-surface:#f8f8f8;--oa-accent:#6457f0}
+:root[data-theme="dark"]{color-scheme:dark;--oa-bg:#131316;--oa-fg:#e7e7ea;--oa-muted:#9a9aa2;--oa-border:#2e2e33;--oa-surface:#1c1c21;--oa-accent:#8d82f5}
 /* Header height is measured at runtime and exposed as --oa-header-h so
    anchor scroll-offset stays correct without author effort. The header is
    sticky (in-flow), so body content is never obscured — only anchor jumps
@@ -293,14 +293,17 @@ const CONTENT_SLOT = "__OA_CONTENT_SLOT__";
 
 const UNLOCK_CSS = `
 .oa-unlock{min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:1.25rem}
-.oa-card{width:100%;max-width:22rem;border:1px solid var(--oa-border);border-radius:10px;padding:2rem;background:var(--oa-surface)}
-.oa-card .oa-emoji{font-size:2rem;margin-bottom:.5rem}
-.oa-card h1{font-size:1.1rem;margin:0 0 .25rem}
-.oa-card p{margin:0 0 1.25rem;color:var(--oa-muted);font-size:.9rem}
-.oa-card input{width:100%;padding:.55rem .7rem;border:1px solid var(--oa-border);border-radius:6px;background:var(--oa-bg);color:var(--oa-fg);font-size:1rem}
-.oa-card button{width:100%;margin-top:.75rem;padding:.55rem .7rem;border:none;border-radius:6px;background:var(--oa-fg);color:var(--oa-bg);font-size:1rem;cursor:pointer}
+.oa-card{width:100%;max-width:22rem;border:1px solid var(--oa-border);border-radius:12px;padding:2rem;background:var(--oa-surface)}
+.oa-card .oa-emoji{font-size:2rem;line-height:1;margin-bottom:.6rem}
+.oa-card h1{font-size:1.1rem;line-height:1.3;margin:0 0 .3rem}
+.oa-card p{margin:0 0 1.35rem;color:var(--oa-muted);font-size:.9rem;line-height:1.55}
+.oa-card input{width:100%;padding:.6rem .75rem;border:1px solid var(--oa-border);border-radius:8px;background:var(--oa-bg);color:var(--oa-fg);font-size:1rem;transition:border-color .15s,box-shadow .15s}
+.oa-card input:focus-visible{outline:none;border-color:var(--oa-accent);box-shadow:0 0 0 3px color-mix(in oklab,var(--oa-accent),transparent 74%)}
+.oa-card button{width:100%;margin-top:.8rem;padding:.6rem .75rem;border:none;border-radius:8px;background:var(--oa-fg);color:var(--oa-bg);font-size:1rem;font-weight:600;cursor:pointer;transition:background .15s,box-shadow .15s,opacity .15s}
+.oa-card button:hover:not(:disabled){background:color-mix(in oklab,var(--oa-fg),var(--oa-bg) 14%)}
+.oa-card button:focus-visible{outline:none;box-shadow:0 0 0 3px color-mix(in oklab,var(--oa-accent),transparent 62%)}
 .oa-card button:disabled{opacity:.6;cursor:wait}
-.oa-error{color:#c93c3c;font-size:.85rem;min-height:1.2em;margin-top:.6rem}
+.oa-error{color:#dc4b4b;font-size:.85rem;min-height:1.2em;margin-top:.7rem}
 #oa-frame{position:fixed;inset:0;width:100%;height:100%;border:0;display:none}
 `;
 
@@ -426,30 +429,56 @@ ${headerHtml(favicon, title, brandUrl)}
 `;
 }
 
-export function notFoundPage(): string {
+const STATUS_CSS = `
+.oa-status{min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.4rem;padding:2rem;text-align:center}
+.oa-status .oa-mark{width:38px;height:38px;color:var(--oa-accent);margin-bottom:.75rem}
+.oa-status h1{font-size:1.15rem;line-height:1.3;margin:0;color:var(--oa-fg)}
+.oa-status p{margin:0;max-width:28rem;color:var(--oa-muted);font-size:.925rem;line-height:1.6}
+.oa-status code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.85em;background:var(--oa-surface);border:1px solid var(--oa-border);border-radius:4px;padding:.05em .3em}
+.oa-status a{margin-top:1rem;color:var(--oa-accent);font-size:.875rem;text-decoration:none}
+.oa-status a:hover{text-decoration:underline;text-underline-offset:2px}
+`;
+
+// Minimal, on-brand page for the states that don't render an artifact
+// (missing artifact, invalid ?v=). No header/toggle: the reset's
+// prefers-color-scheme default handles the theme without any JS.
+function statusPage(options: {
+  title: string;
+  heading: string;
+  body: string;
+}): string {
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Artifact not found</title>
-<style>${RESET_CSS}.oa-nf{min-height:100dvh;display:flex;align-items:center;justify-content:center;color:var(--oa-muted)}</style>
+<title>${escapeHtml(options.title)}</title>
+<style>${RESET_CSS}${STATUS_CSS}</style>
 </head>
-<body><div class="oa-nf"><p>This artifact does not exist or was deleted.</p></div></body>
+<body>
+<div class="oa-status">
+<span class="oa-mark">${BRAND_SVG}</span>
+<h1>${options.heading}</h1>
+<p>${options.body}</p>
+<a href="/">Go to Open Artifacts</a>
+</div>
+</body>
 </html>
 `;
 }
 
+export function notFoundPage(): string {
+  return statusPage({
+    title: "Artifact not found",
+    heading: "Artifact not found",
+    body: "This link does not exist, or the artifact it pointed to was deleted.",
+  });
+}
+
 export function badVersionPage(): string {
-  return `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Invalid version</title>
-<style>${RESET_CSS}.oa-nf{min-height:100dvh;display:flex;align-items:center;justify-content:center;color:var(--oa-muted)}</style>
-</head>
-<body><div class="oa-nf"><p>The <code>?v=</code> parameter must be a positive integer version number.</p></div></body>
-</html>
-`;
+  return statusPage({
+    title: "Invalid version",
+    heading: "Invalid version",
+    body: "The <code>?v=</code> parameter must be a positive integer version number.",
+  });
 }
