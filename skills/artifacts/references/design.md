@@ -126,16 +126,88 @@ and the dark-theme block. Never redefine structure/state tokens per direction.
 - **Use appropriate scales.** Mobile hit targets ≥ 44px. Body ≥ 14px on
   mobile. `font-variant-numeric: tabular-nums` wherever digits align.
 
-## Avoid AI-slop tropes
+## Color and type discipline
 
-- Aggressive gradient backgrounds (especially purple-to-blue hero washes).
-- Gratuitous emoji as section markers or decoration.
-- Rounded boxes with a left-border accent rail.
-- SVG-as-illustration when a placeholder or real content would do.
-- Overused fonts: Inter, Roboto, Arial, Fraunces as the "safe" face.
-- Warm cream + serif + terracotta; near-black + lone acid pop; broadsheet
-  hairlines; everything centered; `rounded-lg` everywhere; accent rails on
-  rounded cards.
+Non-negotiable craft; this is what separates a designed page from an assembled
+one.
+
+**Color**
+
+- Verify contrast: body text ≥ 4.5:1 against its background, large text
+  (≥ 18px, or bold ≥ 14px) ≥ 3:1. Placeholder text needs 4.5:1 too. The most
+  common failure is muted-gray body text on a tinted near-white — when it is
+  close, push the text toward the ink end of the ramp. Light gray "for
+  elegance" is the single biggest reason a page reads as hard to read.
+- Gray text on a colored background looks washed out. Use a darker shade of the
+  background's own hue, or a transparency of the text color — never a flat gray.
+- Pick a color strategy before picking colors: **restrained** (tinted neutrals
+  + one accent ≤ 10%, the product default and the floor), **committed** (one
+  saturated color carries the surface), or **drenched** (the surface IS the
+  color). L1 docs are almost always restrained; a L3 hero can commit. Unnamed
+  ambition drifts to beige.
+
+**Type**
+
+- Display / hero `clamp()` max ≤ 6rem (~96px); above that the page is shouting,
+  not designing.
+- Display letter-spacing floor ≥ -0.04em; tighter and the letters touch.
+- Don't pair two fonts that are similar-but-not-identical (two geometric sans).
+  Pair on a contrast axis (serif + sans, geometric + humanist), or use one
+  family across weights.
+- `text-wrap: balance` on h1–h3; `text-wrap: pretty` on long prose.
+- Body line length 65–75ch — that is what `--container-max` is for; data and
+  compact UI may run denser.
+
+## Absolute bans — match and refuse
+
+If you are about to write one of these, stop and rewrite the element with
+different structure. They are the load-bearing tells; none is ever the best
+answer.
+
+- **Side-stripe borders.** A `border-left`/`border-right` over 1px used as a
+  colored accent on cards, callouts, or list items. Rewrite with a full
+  hairline border, a background tint, a leading number/icon, or nothing.
+- **Gradient text.** `background-clip: text` over a gradient. Decorative, never
+  meaningful. Use one solid color; emphasis via weight or size.
+- **Glassmorphism by default.** Decorative blur / `backdrop-filter` glass
+  cards. Rare and purposeful (a bar floating over scrolling content) or nothing.
+- **The hero-metric template.** Big number + tiny label + supporting stats +
+  gradient accent — the SaaS cliché. Find the composition the data actually
+  wants instead.
+- **Identical card grids.** Same-sized icon-heading-text cards repeated down
+  the page. Vary the layout or drop the cards; nested cards are always wrong.
+- **An eyebrow on every section.** A tiny uppercase tracked kicker ("ABOUT",
+  "FEATURES") above each heading. One named kicker as a deliberate system is
+  voice; on every section it is AI grammar. Choose a different cadence.
+- **Numbered section markers as scaffolding** (`01 / 02 / 03` over every
+  section). Numbers earn their place only when the section IS an ordered
+  sequence and the order carries information the reader needs.
+- **Aggressive gradient backgrounds** — especially the purple-to-blue hero
+  wash. A flat surface, or one restrained accent, reads more expensive.
+- **Text that overflows its container.** Long heading words + a large `clamp()`
+  + a narrow grid overflow on tablet/mobile. Test the real copy at every width;
+  the viewport is part of the design.
+
+Softer smells to avoid: gratuitous emoji as markers or decoration;
+SVG-as-illustration when real content would do; `rounded-lg` on everything;
+everything centered; the safe overused faces (Inter, Roboto, Arial, Fraunces).
+
+## The AI-slop test
+
+If someone could look at the page and say "AI made that" without doubt, it has
+failed. Run the check at two altitudes:
+
+- **First-order:** could someone guess the palette and type from the artifact's
+  category alone? Dashboard → dark-and-grid, report → serif-on-cream, landing →
+  purple-gradient hero. If yes, it is the first training reflex — rework the
+  palette and type until the answer is not obvious from the brief.
+- **Second-order:** could someone guess it from category-plus-anti-reference
+  ("an AI tool that's NOT SaaS-cream, so obviously editorial-serif")? That is
+  the trap one tier deeper. Rework until neither answer is obvious.
+
+Familiarity is fine for a tool that must be operated — a dashboard should look
+like a dashboard. Distinctiveness is the bar for anything that must persuade:
+a landing page, or a report someone chooses to read.
 
 ## CSS power moves welcome
 
@@ -305,6 +377,16 @@ page feel designed rather than assembled:
   concerns before borders or shadows do.
 - Wide content (tables, code, diagrams) gets `overflow-x: auto` on its own
   container — the body never scrolls sideways.
+- Cards are the lazy answer — reach for them only when a card is genuinely the
+  best affordance, never as the default container. Nested cards are always
+  wrong.
+- Flexbox for 1D, Grid for 2D. Don't default to Grid where `flex-wrap` is
+  simpler. Breakpoint-free responsive grids: `repeat(auto-fit, minmax(280px,
+  1fr))`.
+- Build a semantic z-index scale (dropdown → sticky → modal → toast →
+  tooltip), never arbitrary `999` / `9999`. A dropdown rendered
+  `position: absolute` inside an `overflow: hidden`/`auto` container gets
+  clipped — use the native `<dialog>` / popover API or `position: fixed`.
 
 ## When it's a UI, not a document
 
@@ -314,6 +396,20 @@ stripe) as well as number. Semantic color (success/warn/danger) is separate
 from the accent. Give sparklines and charts the same care as type: an area
 fill, a faint grid, an emphasized endpoint. What's interactive looks
 interactive.
+
+The test for a tool: would someone fluent in the best tools of the category
+(Linear, Figma, Notion, Raycast, Stripe) trust it, or pause at every
+subtly-off control? Earned familiarity beats novelty here — standard
+affordances, one consistent component vocabulary, motion only where it conveys
+state. For a L3 landing the test inverts: a visitor should ask "how was this
+made?", not "which AI made this?" — that is where one deliberate aesthetic
+risk earns its place.
+
+When you reach past the system stack for a custom face, look further than the
+training-data defaults (Inter, Roboto, DM Sans, Space Grotesk, Fraunces,
+Playfair, Cormorant, Syne) — they are what create the monoculture. This applies
+to greenfield choices; when the project's own system already ships a face,
+identity preservation wins.
 
 ## Inspectable markup
 

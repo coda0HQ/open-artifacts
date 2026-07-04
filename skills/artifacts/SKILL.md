@@ -110,12 +110,14 @@ images, fetch/XHR/WebSockets):
 - Markdown files (`.md`) are rendered client-side; HTML is best for anything
   interactive or designed.
 
-**Avoid AI-slop tropes:** aggressive gradient backgrounds; gratuitous emoji;
-rounded boxes with a left-border accent; SVG-as-illustration when a
-placeholder would do; overused fonts (Inter, Roboto, Arial, Fraunces);
-everything centered; `rounded-lg` everywhere. Modern CSS is fully available
-inline — `text-wrap: pretty/balance`, CSS Grid, container queries,
-`color-mix()`, `:has()`, view transitions, `clamp()` for fluid type.
+**Avoid AI-slop tropes** (`design.md` has the full match-and-refuse list):
+side-stripe accent borders, gradient text (`background-clip: text`), decorative
+glassmorphism, identical card grids, the hero-metric template, an uppercase
+eyebrow or `01 / 02 / 03` marker above every section, and headings that
+overflow at mobile width. Verify contrast (body ≥ 4.5:1) and never ship muted
+gray on a tinted near-white. Modern CSS is fully available inline —
+`text-wrap: pretty/balance`, CSS Grid, container queries, `color-mix()`,
+`:has()`, view transitions, `clamp()` for fluid type.
 
 ## Publishing
 

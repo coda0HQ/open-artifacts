@@ -71,12 +71,24 @@ document.querySelectorAll('[data-reveal]').forEach((el) => io.observe(el));
 ```
 
 ```css
-[data-reveal] { opacity: 0; transform: translateY(24px); transition: opacity .7s var(--ease-out-expo), transform .7s var(--ease-out-expo); }
-[data-reveal].in { opacity: 1; transform: none; }
+/* Gate the hidden state on a capability class, never on the transition alone. */
+.js [data-reveal] { opacity: 0; transform: translateY(24px); transition: opacity .7s var(--ease-out-expo), transform .7s var(--ease-out-expo); }
+.js [data-reveal].in { opacity: 1; transform: none; }
 ```
 
-Stagger children inside a revealed section with `transition-delay:
-calc(var(--i) * 60ms)`.
+**Reveals must enhance an already-visible default.** Transitions pause on
+hidden tabs and in headless renderers — and artifacts get rendered in exactly
+those contexts — so an `opacity: 0` that only clears on `.in` can ship the
+section blank. Set the initial hidden state behind a JS-added class (add `.js`
+to `<html>` as the first thing your script does) or inside
+`@media (prefers-reduced-motion: no-preference)`, so the static default is full
+visibility.
+
+**Stagger a list; don't stamp the page.** Staggering the items within one list
+is legitimate. The tell is the uniform reflex — one identical entrance applied
+to every section. Each reveal should fit what it reveals; suppressing the
+reflex is not a reason to ship a page with no motion at all. Stagger children
+inside a revealed section with `transition-delay: calc(var(--i) * 60ms)`.
 
 ## Scroll-driven animation (CSS only)
 
