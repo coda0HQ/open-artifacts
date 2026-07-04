@@ -10,5 +10,5 @@
     "skipLibCheck": true,
     "isolatedModules": true
   },
-  "include": ["tests/cli/**/*.ts", "skills/artifacts/scripts/**/*.mjs"]
+  "include": ["tests/cli/**/*.ts", "skills/using-open-artifacts/scripts/**/*.mjs"]
 }

@@ -17,7 +17,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 const execFileAsync = promisify(execFile);
 const SCRIPT = resolve(
   __dirname,
-  "../../skills/artifacts/scripts/artifact.mjs",
+  "../../skills/using-open-artifacts/scripts/artifact.mjs",
 );
 
 interface RecordedRequest {
