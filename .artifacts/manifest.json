@@ -7,24 +7,44 @@
       "favicon": "📦",
       "format": "html",
       "encrypted": false,
-      "scope": "project overview of open-artifacts: what it is, architecture, deploy, API",
+      "scope": "project overview of open-artifacts. DESIGN DIRECTION LOCKED: Brutalist — refresh content only, never change direction.",
       "channel": "project-intro",
-      "level": null,
+      "level": 3,
       "watch": [
         "README.md",
         "README.zh-CN.md",
         "docs/architecture.md",
-        "docs/saas-design.md"
+        "docs/saas-design.md",
+        "src/api.ts",
+        "src/domain.ts",
+        "src/store.ts",
+        "src/tokens.ts",
+        "src/wrap.ts",
+        "src/og.ts",
+        "src/index.ts",
+        "wrangler.jsonc",
+        "skills/using-open-artifacts/SKILL.md",
+        "skills/using-open-artifacts/scripts/artifact.mjs"
       ],
       "snapshot": {
-        "README.md": "06ddd30c59fb0df43c986828e4f1d180c461e5e3e8cf2284c7d898c14677a7eb",
-        "README.zh-CN.md": "9667361ae43cd7e8574b211912119985f07ad3a21544f4b401809b6ad944dc78",
-        "docs/architecture.md": "a5d763b7fa0a8a90cebd90b6db9d9161ec586069636dc4a4eaf24c0fc69ba7bd",
-        "docs/saas-design.md": "30763d132614f0c2b81b9a4ca7d2c9234f50e8bc80d4c4af92a247e77dc1bad5"
+        "README.md": "e7f79d950677b1ca2774fc3942b1b9016a0432f1ff51b9d41e0c76ae24a778da",
+        "README.zh-CN.md": "465fb8c889b133b44ce437c1cc6f142ca1944c6c2ad025185e389853167597a7",
+        "docs/architecture.md": "17f0db8c9ce5f3d06a5616ac9111b9e2ce0bcc4f7862dc17266a24ce6b5a30cd",
+        "docs/saas-design.md": "30763d132614f0c2b81b9a4ca7d2c9234f50e8bc80d4c4af92a247e77dc1bad5",
+        "src/api.ts": "cdb918c4f35e70c50d97458eee1b5fc1eca5a89c8b91f5e62f2cc6fb18fca632",
+        "src/domain.ts": "e5a261d1c99ecdcf9c88f453d9e78d00b5f29057692cdc8d5c0946fd4cb70ce6",
+        "src/store.ts": "6e01f3770538203886d7285ab5fa4e6e85eaff77e75c7e30b5d54536a65fda14",
+        "src/tokens.ts": "fdc97792fef23e30968a7878680bd32538226e9a8168644fc80da77cc549ccca",
+        "src/wrap.ts": "d0c298aca1f56cdbd3073bf4f56009e2ab2e756cd6ef45ca1f7cb53965e67949",
+        "src/og.ts": "6a98c992e5374ae2114260cf64e0dd440b7b8e24839a54e1687fd4127bf5f8ad",
+        "src/index.ts": "94dcf4182ff233ad219f97ea7c7fdf58a57b434f8d98baecd71fd3e9d732bf7b",
+        "wrangler.jsonc": "d27b4be512338229fd72be906bb58677b191cfb406bcc8f0b1a8230efd72f04a",
+        "skills/using-open-artifacts/SKILL.md": "3d87af7613432d4b285be95a84866e23ebbdc598450fe4e105c8e69e4d3c56c7",
+        "skills/using-open-artifacts/scripts/artifact.mjs": "740b7ef019d3c950802d99006885168e7936515d94caec10ee09f55fa10563bb"
       },
       "sourceFile": "artifacts/project-intro.html",
-      "version": 6,
-      "updatedAt": "2026-07-04T12:44:09.555Z"
+      "version": 10,
+      "updatedAt": "2026-07-04T17:05:09.145Z"
     }
   ]
 }

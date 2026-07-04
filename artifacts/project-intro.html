@@ -1,3 +1,9 @@
+<!--
+  Design direction: BRUTALIST (Are.na / Yale) — PERMANENTLY LOCKED.
+  Do not change direction on regenerate. Refresh content only; keep
+  serif display + mono body + full-strength --fg borders + grid bg.
+  See skills/using-open-artifacts/references/design.md §Direction library.
+-->
 <title>Open Artifacts — self-hosted Claude Code Artifacts on Cloudflare</title>
 <style>
 /*
@@ -265,7 +271,7 @@ footer a:hover{text-decoration:underline}
       <div class="feature"><svg class="ic" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M19 10H20C20.5523 10 21 10.4477 21 11V21C21 21.5523 20.5523 22 20 22H4C3.44772 22 3 21.5523 3 21V11C3 10.4477 3.44772 10 4 10H5V9C5 5.13401 8.13401 2 12 2C15.866 2 19 5.13401 19 9V10ZM5 12V20H19V12H5ZM11 14H13V18H11V14ZM17 10V9C17 6.23858 14.7614 4 12 4C9.23858 4 7 6.23858 7 9V10H17Z"/></svg><div class="n">03</div><h3>Zero-knowledge</h3><p>Password-protected artifacts are encrypted on your machine (PBKDF2 + AES-256-GCM). Server holds only ciphertext.</p></div>
       <div class="feature"><svg class="ic" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M13.0001 7.82843V20H11.0001V7.82843L5.63614 13.1924L4.22192 11.7782L12.0001 4L19.7783 11.7782L18.3641 13.1924L13.0001 7.82843Z"/></svg><div class="n">04</div><h3>Auto-updates</h3><p>The skill tracks which source files an artifact was built from and flags it stale when they change.</p></div>
       <div class="feature"><svg class="ic" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12C22 17.5228 17.5228 22 12 22ZM12 20C16.4183 20 20 16.4183 20 12C20 7.58172 16.4183 4 12 4C7.58172 4 4 7.58172 4 12C4 16.4183 7.58172 20 12 20ZM11 7H13V9H11V7ZM11 11H13V17H11V11Z"/></svg><div class="n">05</div><h3>Sandboxed</h3><p>Strict <code>sandbox</code> CSP — opaque origin, no external requests, no storage access. Untrusted HTML, contained.</p></div>
-      <div class="feature"><svg class="ic" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C17.5222 2 22 5.97778 22 10.8889C22 13.9556 19.5111 16.4444 16.4444 16.4444H14.4778C13.5556 16.4444 12.8111 17.1889 12.8111 18.1111C12.8111 18.5333 12.9778 18.9222 13.2333 19.2111C13.5 19.5111 13.6667 19.9 13.6667 20.3333C13.6667 21.2556 12.9 22 12 22C6.47778 22 2 17.5222 2 12C2 6.47778 6.47778 2 12 2ZM10.8111 18.1111C10.8111 16.0843 12.451 14.4444 14.4778 14.4444H16.4444C18.4065 14.4444 20 12.851 20 10.8889C20 7.1392 16.4677 4 12 4C7.58235 4 4 7.58235 4 12C4 16.19 7.2226 19.6285 11.324 19.9718C10.9948 19.4168 10.8111 18.7761 10.8111 18.1111ZM7.5 12C6.67157 12 6 11.3284 6 10.5C6 9.67157 6.67157 9 7.5 9C8.32843 9 9 9.67157 9 10.5C9 11.3284 8.32843 12 7.5 12ZM16.5 12C15.6716 12 15 11.3284 15 10.5C15 9.67157 15.6716 9 16.5 9C17.3284 9 18 9.67157 18 10.5C18 11.3284 17.3284 12 16.5 12ZM12 9C11.1716 9 10.5 8.32843 10.5 7.5C10.5 6.67157 11.1716 6 12 6C12.8284 6 13.5 6.67157 13.5 7.5C13.5 8.32843 12.8284 9 12 9Z"/></svg><div class="n">06</div><h3>OpenGraph</h3><p>Full OG + Twitter Card meta with a dynamically generated SVG preview card. Links unfurl everywhere.</p></div>
+      <div class="feature"><svg class="ic" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C17.5222 2 22 5.97778 22 10.8889C22 13.9556 19.5111 16.4444 16.4444 16.4444H14.4778C13.5556 16.4444 12.8111 17.1889 12.8111 18.1111C12.8111 18.5333 12.9778 18.9222 13.2333 19.2111C13.5 19.5111 13.6667 19.9 13.6667 20.3333C13.6667 21.2556 12.9 22 12 22C6.47778 22 2 17.5222 2 12C2 6.47778 6.47778 2 12 2ZM10.8111 18.1111C10.8111 16.0843 12.451 14.4444 14.4778 14.4444H16.4444C18.4065 14.4444 20 12.851 20 10.8889C20 7.1392 16.4677 4 12 4C7.58235 4 4 7.58235 4 12C4 16.19 7.2226 19.6285 11.324 19.9718C10.9948 19.4168 10.8111 18.7761 10.8111 18.1111ZM7.5 12C6.67157 12 6 11.3284 6 10.5C6 9.67157 6.67157 9 7.5 9C8.32843 9 9 9.67157 9 10.5C9 11.3284 8.32843 12 7.5 12ZM16.5 12C15.6716 12 15 11.3284 15 10.5C15 9.67157 15.6716 9 16.5 9C17.3284 9 18 9.67157 18 10.5C18 11.3284 17.3284 12 16.5 12ZM12 9C11.1716 9 10.5 8.32843 10.5 7.5C10.5 6.67157 11.1716 6 12 6C12.8284 6 13.5 6.67157 13.5 7.5C13.5 8.32843 12.8284 9 12 9Z"/></svg><div class="n">06</div><h3>OpenGraph</h3><p>Full OG + Twitter Card meta with a 1200×630 PNG preview card rasterized on the edge. Links unfurl everywhere.</p></div>
     </div>
   </section>
 
@@ -353,7 +359,7 @@ node artifact.mjs create page.html --favicon 📊 --channel app-interactions
 pnpm install
 npx wrangler d1 create open-artifacts        <span class="c"># put database_id in wrangler.jsonc</span>
 npx wrangler r2 bucket create open-artifacts-content
-npx wrangler deploy                           <span class="c"># live</span>
+pnpm run deploy                              <span class="c"># live</span>
 npx wrangler secret put CREATE_TOKEN          <span class="c"># optional gate</span></pre>
     </div>
     <p style="color:var(--muted);font-size:var(--text-sm);margin:var(--space-4) 0 0">Schema self-initializes on first request. Free tier covers personal/small-team use.</p>
