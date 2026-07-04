@@ -8,11 +8,15 @@ URLs, protect them with passwords (zero-knowledge, client-side encryption),
 and keep them updated as the project they describe evolves. Runs entirely on
 Cloudflare (Workers + D1 + R2), fits in the free tier, no accounts anywhere.
 
-```
-you ──"share the app's interaction flows as a page"──▶ your agent
-agent ──POST /api/artifacts──▶ your Worker ──▶ https://<instance>/a/3fKx9mQp2Wvb
-   ... later, the flows change ...
-agent ──artifact.mjs status──▶ "stale" ──▶ regenerates ──PUT──▶ same URL, v2
+```mermaid
+flowchart LR
+  you["you"] -- "share the app's interaction flows as a page" --> agent["your agent"]
+  agent -- "POST /api/artifacts" --> worker["your Worker"]
+  worker -- "https://<instance>/a/3fKx9mQp2Wvb" --> url["shareable URL"]
+  later["later: the flows change"] --> status["agent runs<br/>artifact.mjs status"]
+  status -- "stale" --> regen["regenerates page"]
+  regen -- "PUT (same id)" --> worker2["your Worker"]
+  worker2 -- "same URL, v2" --> url
 ```
 
 ## Give your agent the skill

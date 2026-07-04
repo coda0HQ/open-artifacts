@@ -7,11 +7,15 @@
 并在它所描述的项目演进时保持更新。完全跑在 Cloudflare 上（Workers + D1 + R2），
 免费额度就够用，任何地方都不需要账号。
 
-```
-你 ──"把 app 的交互流程分享成一个页面"──▶ 你的 agent
-agent ──POST /api/artifacts──▶ 你的 Worker ──▶ https://<instance>/a/3fKx9mQp2Wvb
-   ... 之后流程变了 ...
-agent ──artifact.mjs status──▶ "stale" ──▶ 重新生成 ──PUT──▶ 同一个 URL，v2
+```mermaid
+flowchart LR
+  you["你"] -- "把 app 的交互流程分享成一个页面" --> agent["你的 agent"]
+  agent -- "POST /api/artifacts" --> worker["你的 Worker"]
+  worker -- "https://<instance>/a/3fKx9mQp2Wvb" --> url["可分享的 URL"]
+  later["之后：流程变了"] --> status["agent 运行<br/>artifact.mjs status"]
+  status -- "stale" --> regen["重新生成页面"]
+  regen -- "PUT（同一个 id）" --> worker2["你的 Worker"]
+  worker2 -- "同一个 URL，v2" --> url
 ```
 
 ## 给你的 agent 装上技能
