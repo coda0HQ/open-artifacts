@@ -9,7 +9,7 @@ Three ways to get an instance; pick based on your trust/storage needs.
 Point the skill at the shared instance and start publishing:
 
 ```sh
-export OPEN_ARTIFACTS_URL=https://open-artifacts.frad.workers.dev
+export OPEN_ARTIFACTS_URL=https://coda0.com
 ```
 
 - Nothing to deploy; works immediately.
@@ -55,6 +55,24 @@ URL (and create token, if set) with the team. Everyone else just sets
 `OPEN_ARTIFACTS_URL` (and `OPEN_ARTIFACTS_TOKEN` if gated). Updates are
 still per-artifact: each artifact's write token lives in each user's
 gitignored `.artifacts/credentials.json`.
+
+## Custom domain (canonical links)
+
+By default every generated link (the API `url`, `og:url`, `og:image`) follows
+the host the request arrived on, so a self-hosted instance's links stay on its
+own domain with no configuration.
+
+If you front the Worker with a custom domain (e.g. the hosted instance on
+`coda0.com`) and want links pinned to it — even when the Worker is also
+reachable at `*.workers.dev` — set the `PUBLIC_URL` secret to that base URL:
+
+```sh
+npx wrangler secret put PUBLIC_URL      # e.g. https://coda0.com
+```
+
+Then route the domain to the Worker (Cloudflare dashboard → the Worker →
+Settings → Domains & Routes → add a custom domain). Leave `PUBLIC_URL` unset
+to keep the request-origin behavior.
 
 ## Trust model summary
 

@@ -36,6 +36,16 @@ Feature: Publish an artifact
     When I POST it to /api/artifacts
     Then GET /api/artifacts/:id reports title "From The Tag"
 
+  Scenario: The public URL uses the instance's canonical domain when configured
+    Given the instance is deployed with PUBLIC_URL set to its SaaS domain
+    When I POST a valid artifact, whatever host the request arrived on
+    Then the returned url and the page's og:url and og:image use the SaaS domain
+
+  Scenario: Without PUBLIC_URL the public URL follows the request origin
+    Given the instance is deployed without PUBLIC_URL
+    When I POST a valid artifact
+    Then the returned url uses the host the request arrived on
+
   Scenario: Gated instance requires the create token
     Given the instance is deployed with a CREATE_TOKEN secret
     When I POST a valid artifact without the create token

@@ -4,6 +4,7 @@ import {
 } from "cloudflare:test";
 import { env, exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
+import type { Bindings } from "../../src/api";
 import app from "../../src/index";
 import type { ArtifactRecord } from "../../src/store";
 
@@ -230,6 +231,77 @@ describe("create gate (CREATE_TOKEN secret)", () => {
     );
     await waitOnExecutionContext(ctx);
     expect(res.status).toBe(403);
+  });
+});
+
+describe("canonical public URL (PUBLIC_URL)", () => {
+  const pubEnv = { ...env, PUBLIC_URL: "https://coda0.com" };
+
+  async function fetchWith(
+    request: Request,
+    environment: Bindings,
+  ): Promise<Response> {
+    const ctx = createExecutionContext();
+    const res = await app.fetch(request, environment, ctx);
+    await waitOnExecutionContext(ctx);
+    return res;
+  }
+
+  const createBody = { content: "<h1>x</h1>", title: "t", favicon: "📊" };
+
+  it("pins the returned url to PUBLIC_URL regardless of request host", async () => {
+    const res = await fetchWith(
+      jsonRequest("POST", "/api/artifacts", createBody),
+      pubEnv,
+    );
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { url: string };
+    expect(body.url).toMatch(/^https:\/\/coda0\.com\/a\/[A-Za-z0-9]+$/);
+  });
+
+  it("uses PUBLIC_URL for og:url and og:image on the viewer page", async () => {
+    const createRes = await fetchWith(
+      jsonRequest("POST", "/api/artifacts", createBody),
+      pubEnv,
+    );
+    const { id } = (await createRes.json()) as { id: string };
+    const html = await (
+      await fetchWith(new Request(`${BASE}/a/${id}`), pubEnv)
+    ).text();
+    expect(html).toContain(
+      `<meta property="og:url" content="https://coda0.com/a/${id}">`,
+    );
+    expect(html).toContain(
+      `<meta property="og:image" content="https://coda0.com/og/${id}">`,
+    );
+  });
+
+  it("strips a trailing slash on PUBLIC_URL", async () => {
+    const res = await fetchWith(
+      jsonRequest("POST", "/api/artifacts", createBody),
+      { ...env, PUBLIC_URL: "https://coda0.com/" },
+    );
+    const body = (await res.json()) as { url: string };
+    expect(body.url).not.toContain("coda0.com//");
+    expect(body.url).toMatch(/^https:\/\/coda0\.com\/a\//);
+  });
+
+  it("falls back to the request origin when PUBLIC_URL is unset", async () => {
+    const res = await fetchWith(
+      jsonRequest("POST", "/api/artifacts", createBody),
+      env,
+    );
+    const body = (await res.json()) as { url: string };
+    expect(body.url.startsWith(`${BASE}/a/`)).toBe(true);
+  });
+
+  it("treats an empty PUBLIC_URL as unset (request origin)", async () => {
+    const res = await fetchWith(
+      jsonRequest("POST", "/api/artifacts", createBody),
+      { ...env, PUBLIC_URL: "" },
+    );
+    const body = (await res.json()) as { url: string };
+    expect(body.url.startsWith(`${BASE}/a/`)).toBe(true);
   });
 });
 

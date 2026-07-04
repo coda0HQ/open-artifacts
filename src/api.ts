@@ -12,7 +12,11 @@ import {
 } from "./tokens";
 import { userContentHeaders } from "./wrap";
 
-export type Bindings = Env & { CREATE_TOKEN?: string; BRAND_URL?: string };
+export type Bindings = Env & {
+  CREATE_TOKEN?: string;
+  BRAND_URL?: string;
+  PUBLIC_URL?: string;
+};
 export type AppContext = { Bindings: Bindings };
 
 // JSON escaping and encryption metadata inflate the body beyond the content
@@ -22,8 +26,20 @@ const MAX_BODY_BYTES = MAX_CONTENT_BYTES * 1.5 + 16 * 1024;
 export const storeFrom = (c: Context<AppContext>): ArtifactStore =>
   new D1R2Store(c.env.DB, c.env.CONTENT);
 
+// Canonical origin for every generated link. A non-empty PUBLIC_URL pins
+// links to the SaaS domain no matter which host the request arrived on (so
+// workers.dev fallbacks and crawlers still get the canonical URL); unset (or
+// empty, matching the CREATE_TOKEN convention) links follow the request
+// origin so self-hosted instances stay on their own domain. The trailing
+// slash is trimmed so PUBLIC_URL="https://x/" never yields "//a/".
+export const baseUrl = (c: Context<AppContext>): string =>
+  (c.env.PUBLIC_URL || new URL(c.req.url).origin).replace(/\/+$/, "");
+
 export const artifactUrl = (c: Context<AppContext>, id: string): string =>
-  `${new URL(c.req.url).origin}/a/${id}`;
+  `${baseUrl(c)}/a/${id}`;
+
+export const ogImageUrl = (c: Context<AppContext>, id: string): string =>
+  `${baseUrl(c)}/og/${id}`;
 
 function bearerToken(c: Context<AppContext>): string | null {
   const header = c.req.header("authorization");

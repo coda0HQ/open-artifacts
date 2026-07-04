@@ -1,6 +1,12 @@
 import { Hono } from "hono";
 import type { AppContext } from "./api";
-import { api, parseVersionParam, storeFrom } from "./api";
+import {
+  api,
+  artifactUrl,
+  ogImageUrl,
+  parseVersionParam,
+  storeFrom,
+} from "./api";
 import { renderOgCardPng } from "./og";
 import {
   badVersionPage,
@@ -13,12 +19,6 @@ import {
 const app = new Hono<AppContext>();
 
 app.route("/api", api);
-
-const artifactUrl = (c: { req: { url: string } }, id: string): string =>
-  `${new URL(c.req.url).origin}/a/${id}`;
-
-const ogImageUrl = (c: { req: { url: string } }, id: string): string =>
-  `${new URL(c.req.url).origin}/og/${id}`;
 
 app.get("/a/:id", async (c) => {
   const store = storeFrom(c);

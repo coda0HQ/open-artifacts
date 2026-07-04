@@ -61,6 +61,12 @@ vitest miniflare tests.
 - Optional instance gate: if the `CREATE_TOKEN` secret is set on the deploy,
   POST /api/artifacts requires it as a bearer token. Unset = open instance
   (rate-limited only).
+- Optional canonical domain: if `PUBLIC_URL` (e.g. `https://coda0.com`) is set
+  on the deploy, it is the base of every generated link (the API `url`,
+  `og:url`, `og:image`) regardless of the host the request arrived on — so the
+  hosted SaaS instance keeps links on its domain even when reached via
+  `*.workers.dev`. Unset, links derive from the request origin, so a
+  self-hosted instance's links stay on its own domain unchanged.
 
 ## Mirroring the real Artifact tool contract
 
