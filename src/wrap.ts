@@ -196,43 +196,109 @@ export interface WrapOptions {
 
 const OG_CARD_W = 1200;
 const OG_CARD_H = 630;
+const OG_CARD_TYPE = "image/png";
 
-// A self-contained SVG OG card built from the artifact's emoji favicon and
-// title. Returned by GET /og/:id and referenced via og:image. Social crawlers
-// fetch this URL independently of the artifact page, so it is not constrained
-// by the page CSP — but it is itself a single SVG with no external requests.
+// The brand mark's path, reused from BRAND_SVG so the two never drift.
+const OG_BRAND_D = BRAND_SVG.match(/ d="([^"]+)"/)?.[1] ?? "";
+
+const OG_HEAD = `<svg xmlns="http://www.w3.org/2000/svg" width="${OG_CARD_W}" height="${OG_CARD_H}" viewBox="0 0 ${OG_CARD_W} ${OG_CARD_H}">
+<rect width="${OG_CARD_W}" height="${OG_CARD_H}" fill="#131316"/>
+<rect x="0" y="0" width="${OG_CARD_W}" height="8" fill="#6457f0"/>`;
+
+// Codepoint ranges covered by the embedded Inter subsets (Latin + punctuation).
+// Text outside them (CJK, Cyrillic, emoji, ...) has no glyph and no fallback
+// face, so resvg would draw it blank; such artifacts get a text-light branded
+// card instead, and their real title/description still reach viewers through
+// the og:title/og:description meta tags.
+function isRenderable(text: string): boolean {
+  for (const ch of text) {
+    const cp = ch.codePointAt(0) ?? 0;
+    const ok =
+      cp <= 0x024f ||
+      (cp >= 0x2000 && cp <= 0x20bf) ||
+      cp === 0x2122 ||
+      (cp >= 0x2190 && cp <= 0x2193) ||
+      cp === 0x2212 ||
+      cp === 0x2215 ||
+      cp === 0xfeff ||
+      cp === 0xfffd;
+    if (!ok) return false;
+  }
+  return true;
+}
+
+// Centered brand lockup shown when the title can't be drawn with the Latin
+// fonts — a clean branded card instead of a blank one.
+function fallbackCardSvg(): string {
+  return `${OG_HEAD}
+<g transform="translate(564 231) scale(3)"><path d="${OG_BRAND_D}" fill="#6457f0"/></g>
+<text x="600" y="392" text-anchor="middle" font-size="34" font-family="'Inter SemiBold'" fill="#9a9aa2" letter-spacing="2">OPEN ARTIFACTS</text>
+</svg>`;
+}
+
+// Greedily wrap text to at most `maxChars` per line and `maxLines` lines,
+// escaping each line for XML. resvg draws no automatic line breaks, so the
+// card lays every line out explicitly.
+function wrapLines(text: string, maxChars: number, maxLines: number): string[] {
+  const words = text.split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let line = "";
+  for (const w of words) {
+    if (`${line} ${w}`.trim().length > maxChars && line) {
+      lines.push(line);
+      line = w;
+    } else {
+      line = `${line} ${w}`.trim();
+    }
+  }
+  if (line) lines.push(line);
+  return lines.slice(0, maxLines).map(escapeHtml);
+}
+
+// A self-contained SVG OG card built from the artifact's title and
+// description. Rasterized to PNG by src/og.ts and served at GET /og/:id;
+// social crawlers ignore SVG og:image, so the endpoint returns the PNG. The
+// card draws with the embedded Inter fonts (resvg has no system fonts) and
+// makes no external requests. The emoji favicon is intentionally omitted:
+// resvg cannot render color emoji, and it still appears as the page favicon.
 export function ogCardSvg(options: {
   title: string;
-  favicon: string;
   description: string;
 }): string {
-  const { title, favicon, description } = options;
-  // Wrap the title to ~26 chars/line, up to 4 lines, escaping for XML.
-  const wrapTitle = (text: string): string[] => {
-    const words = escapeHtml(text).split(/\s+/);
-    const lines: string[] = [];
-    let line = "";
-    for (const w of words) {
-      if (`${line} ${w}`.trim().length > 26 && line) {
-        lines.push(line);
-        line = w;
-      } else {
-        line = `${line} ${w}`.trim();
-      }
-    }
-    if (line) lines.push(line);
-    return lines.slice(0, 4);
-  };
-  const titleLines = wrapTitle(title);
-  const desc = description ? escapeHtml(description).slice(0, 120) : "";
-  const linesY = 320 - ((titleLines.length - 1) * 52) / 2;
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${OG_CARD_W}" height="${OG_CARD_H}" viewBox="0 0 ${OG_CARD_W} ${OG_CARD_H}">
-<rect width="${OG_CARD_W}" height="${OG_CARD_H}" fill="#131316"/>
-<rect x="0" y="0" width="${OG_CARD_W}" height="8" fill="#6457f0"/>
-<text x="80" y="180" font-size="120" font-family="system-ui,-apple-system,'Segoe UI',sans-serif" dominant-baseline="middle">${escapeHtml(favicon)}</text>
-${titleLines.map((l, i) => `<text x="80" y="${linesY + i * 72}" font-size="56" font-weight="700" font-family="system-ui,-apple-system,'Segoe UI',sans-serif" fill="#e7e7ea">${l}</text>`).join("\n")}
-${desc ? `<text x="80" y="${linesY + titleLines.length * 72 + 20}" font-size="28" font-family="system-ui,-apple-system,'Segoe UI',sans-serif" fill="#9a9aa2">${desc}</text>` : ""}
-<text x="80" y="580" font-size="24" font-family="ui-monospace,Menlo,monospace" fill="#71717a" letter-spacing="1">OPEN ARTIFACTS</text>
+  const { title, description } = options;
+  if (!isRenderable(title)) return fallbackCardSvg();
+  const titleLines = wrapLines(title, 30, 4);
+  const descLines =
+    description && isRenderable(description)
+      ? wrapLines(description, 62, 3)
+      : [];
+
+  let y = 190;
+  const titleEls = titleLines
+    .map((l) => {
+      const el = `<text x="80" y="${y}" font-size="60" font-family="'Inter SemiBold'" fill="#e7e7ea">${l}</text>`;
+      y += 74;
+      return el;
+    })
+    .join("\n");
+
+  // Description follows the actual title height, clipped so its last line
+  // stays clear of the footer.
+  let dy = y + 8;
+  const descEls: string[] = [];
+  for (const l of descLines) {
+    if (dy > 540) break;
+    descEls.push(
+      `<text x="80" y="${dy}" font-size="30" font-family="'Inter'" fill="#9a9aa2">${l}</text>`,
+    );
+    dy += 42;
+  }
+
+  return `${OG_HEAD}
+${titleEls}
+${descEls.join("\n")}
+<g transform="translate(80 556) scale(1.08)"><path d="${OG_BRAND_D}" fill="#6457f0"/></g>
+<text x="116" y="578" font-size="24" font-family="'Inter SemiBold'" fill="#9a9aa2" letter-spacing="1.5">OPEN ARTIFACTS</text>
 </svg>`;
 }
 
@@ -270,7 +336,7 @@ document.getElementById("oa-content").innerHTML=marked.parse(${jsonForInlineScri
 <meta property="og:description" content="${escapeHtml(ogDescription)}">
 <meta property="og:url" content="${escapeHtml(url)}">
 <meta property="og:image" content="${escapeHtml(ogImage)}">
-<meta property="og:image:type" content="image/svg+xml">
+<meta property="og:image:type" content="${OG_CARD_TYPE}">
 <meta property="og:image:width" content="${OG_CARD_W}">
 <meta property="og:image:height" content="${OG_CARD_H}">
 <meta name="twitter:card" content="summary_large_image">
@@ -399,7 +465,7 @@ input.focus();
 <meta property="og:description" content="${escapeHtml(ogDescription)}">
 <meta property="og:url" content="${escapeHtml(url)}">
 <meta property="og:image" content="${escapeHtml(ogImage)}">
-<meta property="og:image:type" content="image/svg+xml">
+<meta property="og:image:type" content="${OG_CARD_TYPE}">
 <meta property="og:image:width" content="${OG_CARD_W}">
 <meta property="og:image:height" content="${OG_CARD_H}">
 <meta name="twitter:card" content="summary_large_image">

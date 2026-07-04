@@ -1,10 +1,10 @@
 import { Hono } from "hono";
 import type { AppContext } from "./api";
 import { api, parseVersionParam, storeFrom } from "./api";
+import { renderOgCardPng } from "./og";
 import {
   badVersionPage,
   notFoundPage,
-  ogCardSvg,
   unlockShell,
   userContentHeaders,
   wrapDocument,
@@ -81,24 +81,31 @@ app.get("/a/:id", async (c) => {
   return new Response(page, { headers: htmlHeaders(true) });
 });
 
-// OpenGraph card image: a self-contained SVG built from the artifact's
-// favicon + title + description. Social crawlers fetch this URL independently
-// of the artifact page, so it is not bound by the page CSP — but it makes no
-// external requests itself.
+// OpenGraph card image: a 1200x630 PNG rasterized from a self-contained card
+// built from the artifact's title + description. Social crawlers ignore SVG
+// og:image, so this returns PNG. It is fetched independently of the artifact
+// page (not bound by the page CSP) and makes no external requests itself.
 app.get("/og/:id", async (c) => {
   const store = storeFrom(c);
   const record = await store.get(c.req.param("id"));
   if (record === null) {
     return new Response("not found", { status: 404 });
   }
-  const svg = ogCardSvg({
-    title: record.title,
-    favicon: record.favicon,
-    description: record.description,
-  });
-  return new Response(svg, {
+  let png: Uint8Array;
+  try {
+    png = await renderOgCardPng({
+      title: record.title,
+      description: record.description,
+    });
+  } catch (error) {
+    // A failed rasterization must not surface Hono's HTML error page to a
+    // crawler expecting an image; return a plain error the resets can retry.
+    console.error("og render failed", error);
+    return new Response("og render failed", { status: 500 });
+  }
+  return new Response(png, {
     headers: {
-      "content-type": "image/svg+xml; charset=utf-8",
+      "content-type": "image/png",
       "cache-control": "public, max-age=300",
       "content-security-policy": "default-src 'none'",
       "x-content-type-options": "nosniff",
