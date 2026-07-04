@@ -21,8 +21,8 @@ flowchart LR
 ## 给你的 agent 装上技能
 
 ```sh
-npx skills add FradSer/open-artifacts        # 项目作用域（.claude/skills/）
-npx skills add FradSer/open-artifacts -g     # 或用户作用域
+npx skills add FradSer/open-artifacts -s using-open-artifacts   # 项目作用域（.claude/skills/）
+npx skills add FradSer/open-artifacts -s using-open-artifacts -g  # 或用户作用域
 ```
 
 兼容 Claude Code 以及任何支持

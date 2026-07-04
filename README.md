@@ -22,8 +22,8 @@ flowchart LR
 ## Give your agent the skill
 
 ```sh
-npx skills add FradSer/open-artifacts        # project scope (.claude/skills/)
-npx skills add FradSer/open-artifacts -g     # or user scope
+npx skills add FradSer/open-artifacts -s using-open-artifacts   # project scope (.claude/skills/)
+npx skills add FradSer/open-artifacts -s using-open-artifacts -g  # or user scope
 ```
 
 Works with Claude Code and any agent supporting the
