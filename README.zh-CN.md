@@ -82,6 +82,7 @@ npx wrangler secret put CREATE_TOKEN         # 然后客户端设置 OPEN_ARTIFA
 | 存储 | D1 存元数据/token/版本索引，R2 存内容体（`content/<id>/<version>`）。两者都是强一致的，更新立即可见。 |
 | 版本 | 每次发布都是一个不可变版本，带可选 label 和各自的 title、description、favicon、format、加密状态，因此历史反映每个版本真实的样子。`?v=N` 查看历史；`PUT` 接受 `baseVersion`，冲突时返回 409（用 `force` 覆盖）。 |
 | 服务 | Worker 把存储内容包进一个骨架（CSS reset、emoji favicon、viewport、带 `data-theme` 切换的浅色/深色主题），并以 `Content-Security-Policy: sandbox allow-scripts ...; default-src 'none'` 提供——artifact 脚本跑在不透明源里，无法发起任何外部请求。 |
+| 链接预览 | 每个页面都输出 OpenGraph + Twitter 标签（标题、描述、图片）。`GET /og/:id` 用 `@resvg/resvg-wasm` 在边缘从内嵌的 Inter 子集栅格化出一张 1200x630 的 PNG 卡片——爬虫真正能渲染的位图（它们不认 SVG），自包含、无任何外部请求。 |
 | 密码 | CLI 在本地加密：PBKDF2-HMAC-SHA256（60 万次迭代）+ AES-256-GCM。服务端只存 `{salt, iv, ciphertext}`。查看器提供一个解锁外壳，在浏览器里解密并渲染进一个沙箱 iframe。密码永不离开客户端。 |
 | 自动更新 | 技能把每个 artifact 的 `scope`（覆盖什么）和 `watch` glob 及内容哈希记在 `.artifacts/manifest.json`。`artifact.mjs status` 报告被监听文件已变更的 artifact；agent 在任务后运行它（或通过可选的 Claude Code Stop 钩子：`artifact.mjs install-hook`），在变更影响到 scope 时重新发布。 |
 | Markdown | 客户端渲染（vendored 的 `marked`，内联——无 CDN），这样加密的 Markdown 也能在服务端永远看不到明文的情况下工作。 |

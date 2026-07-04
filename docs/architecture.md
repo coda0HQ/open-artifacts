@@ -97,6 +97,29 @@ exfiltration. workers.dev is on the Public Suffix List, isolating instances
 from each other. The wrapper's theme toggle wraps localStorage in try/catch
 (opaque origin throws) — theme choice is per-load, which is acceptable.
 
+## Link previews (OpenGraph)
+
+Every viewer response (plain and unlock shell) carries OpenGraph + Twitter
+tags. `og:image` points at `GET /og/:id`, which returns a 1200x630 **PNG** —
+not SVG, because Facebook, X, LinkedIn, Slack, iMessage and Discord all refuse
+to render an SVG `og:image`, so an SVG card shows no preview image at all.
+
+The card is a self-contained SVG (dark card, accent bar, wrapped title +
+description, brand wordmark) rasterized with `@resvg/resvg-wasm`. resvg has no
+system fonts, so two Inter subsets (one weight each, Latin + punctuation,
+~90 KB each) are instanced/subset by `scripts/vendor-fonts.mjs` and embedded as
+base64 in `src/generated/fonts.ts`; the `.wasm` is a static import (the runtime
+forbids compiling Wasm from bytes). Total bundle stays near 1 MB gzipped, well
+under the 3 MB free-plan limit. The emoji favicon is deliberately omitted from
+the card: resvg cannot render color emoji, and rendering it would need an
+external Twemoji fetch, which the "no external requests" model rejects — it
+still appears as the page favicon. Because the fonts are Latin-only, a title
+outside that range (e.g. CJK) would draw blank, so a title (or description)
+with uncovered codepoints falls back to a text-light branded card; the real
+title/description still reach viewers via the `og:*` meta tags. User-controlled
+title/description are HTML-escaped into the SVG text nodes, and the response is
+cached (`max-age=300`) so crawlers do not re-rasterize on every hit.
+
 ## Password protection (zero-knowledge)
 
 The server never sees the password or plaintext:
