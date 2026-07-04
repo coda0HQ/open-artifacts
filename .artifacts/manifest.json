@@ -1,0 +1,30 @@
+{
+  "artifacts": [
+    {
+      "id": "tSXeJLyobwpY",
+      "url": "https://open-artifacts.frad.workers.dev/a/tSXeJLyobwpY",
+      "title": "Open Artifacts — self-hosted Claude Code Artifacts on Cloudflare",
+      "favicon": "📦",
+      "format": "html",
+      "encrypted": false,
+      "scope": "project overview of open-artifacts: what it is, architecture, deploy, API",
+      "channel": "project-intro",
+      "level": null,
+      "watch": [
+        "README.md",
+        "README.zh-CN.md",
+        "docs/architecture.md",
+        "docs/saas-design.md"
+      ],
+      "snapshot": {
+        "README.md": "06ddd30c59fb0df43c986828e4f1d180c461e5e3e8cf2284c7d898c14677a7eb",
+        "README.zh-CN.md": "9667361ae43cd7e8574b211912119985f07ad3a21544f4b401809b6ad944dc78",
+        "docs/architecture.md": "a5d763b7fa0a8a90cebd90b6db9d9161ec586069636dc4a4eaf24c0fc69ba7bd",
+        "docs/saas-design.md": "30763d132614f0c2b81b9a4ca7d2c9234f50e8bc80d4c4af92a247e77dc1bad5"
+      },
+      "sourceFile": "artifacts/project-intro.html",
+      "version": 6,
+      "updatedAt": "2026-07-04T12:44:09.555Z"
+    }
+  ]
+}

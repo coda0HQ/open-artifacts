@@ -4,4 +4,4 @@ dist/
 .dev.vars
 *.log
 .DS_Store
-.artifacts/
+.artifacts/credentials.json
