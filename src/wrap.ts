@@ -202,8 +202,7 @@ const OG_CARD_TYPE = "image/png";
 const OG_BRAND_D = BRAND_SVG.match(/ d="([^"]+)"/)?.[1] ?? "";
 
 const OG_HEAD = `<svg xmlns="http://www.w3.org/2000/svg" width="${OG_CARD_W}" height="${OG_CARD_H}" viewBox="0 0 ${OG_CARD_W} ${OG_CARD_H}">
-<rect width="${OG_CARD_W}" height="${OG_CARD_H}" fill="#131316"/>
-<rect x="0" y="0" width="${OG_CARD_W}" height="8" fill="#6457f0"/>`;
+<rect width="${OG_CARD_W}" height="${OG_CARD_H}" fill="#131316"/>`;
 
 // Codepoint ranges covered by the embedded Inter subsets (Latin + punctuation).
 // Text outside them (CJK, Cyrillic, emoji, ...) has no glyph and no fallback
