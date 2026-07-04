@@ -4,54 +4,310 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Open Artifacts</title>
+<meta name="description" content="Publish self-contained HTML and Markdown pages from any coding agent. Share by URL, protect with a password, keep them in sync as your project evolves.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22%236457f0%22%20d%3D%22M20.0833%2015.1999L21.2854%2015.9212C21.5221%2016.0633%2021.5989%2016.3704%2021.4569%2016.6072C21.4146%2016.6776%2021.3557%2016.7365%2021.2854%2016.7787L12.5144%2022.0412C12.1977%2022.2313%2011.8021%2022.2313%2011.4854%2022.0412L2.71451%2016.7787C2.47772%2016.6366%202.40093%2016.3295%202.54301%2016.0927C2.58523%2016.0223%202.64413%2015.9634%202.71451%2015.9212L3.9166%2015.1999L11.9999%2020.0499L20.0833%2015.1999ZM20.0833%2010.4999L21.2854%2011.2212C21.5221%2011.3633%2021.5989%2011.6704%2021.4569%2011.9072C21.4146%2011.9776%2021.3557%2012.0365%2021.2854%2012.0787L11.9999%2017.6499L2.71451%2012.0787C2.47772%2011.9366%202.40093%2011.6295%202.54301%2011.3927C2.58523%2011.3223%202.64413%2011.2634%202.71451%2011.2212L3.9166%2010.4999L11.9999%2015.3499L20.0833%2010.4999ZM12.5144%201.30864L21.2854%206.5712C21.5221%206.71327%2021.5989%207.0204%2021.4569%207.25719C21.4146%207.32757%2021.3557%207.38647%2021.2854%207.42869L11.9999%2012.9999L2.71451%207.42869C2.47772%207.28662%202.40093%206.97949%202.54301%206.7427C2.58523%206.67232%202.64413%206.61343%202.71451%206.5712L11.4854%201.30864C11.8021%201.11864%2012.1977%201.11864%2012.5144%201.30864ZM11.9999%203.33233L5.88723%206.99995L11.9999%2010.6676L18.1126%206.99995L11.9999%203.33233Z%22/%3E%3C/svg%3E">
 <style>
 *,*::before,*::after{box-sizing:border-box}
-:root{color-scheme:light dark;--bg:#ffffff;--fg:#18181b;--muted:#71717a;--border:#e4e4e7;--surface:#f8f8f8;--accent:#6457f0}
-@media (prefers-color-scheme: dark){:root{--bg:#131316;--fg:#e7e7ea;--muted:#9a9aa2;--border:#2e2e33;--surface:#1c1c21;--accent:#8d82f5}}
-body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;line-height:1.6;background:var(--bg);color:var(--fg)}
-main{max-width:44rem;margin:0 auto;padding:4rem 1.5rem 6rem}
-h1{font-size:2rem;line-height:1.2;letter-spacing:-.02em;margin:0 0 .5rem}
-.tagline{color:var(--muted);font-size:1.05rem;margin:0 0 2.5rem}
-h2{font-size:1.05rem;margin:2.5rem 0 .75rem}
-p{margin:.5rem 0}
-code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.9em}
-pre{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:.9rem 1.1rem;overflow-x:auto}
-:not(pre)>code{background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:.1em .35em}
-ul{padding-left:1.2rem}
-li{margin:.35rem 0}
-a{color:var(--accent)}
-.badge{display:inline-block;font-size:.75rem;border:1px solid var(--border);border-radius:99px;padding:.1rem .6rem;color:var(--muted);margin-bottom:1.25rem}
+
+:root{
+  color-scheme:light dark;
+  --bg:#ffffff; --surface:#f8f8f8; --surface-2:#f1f1f3;
+  --fg:#18181b; --fg-2:#3f3f46; --muted:#52525b;
+  --border:#e4e4e7; --border-strong:#d4d4d8;
+  --accent:#6457f0;
+  --get:#3f3f46; --post:#166534; --put:#92400e; --del:#b91c1c;
+  --get-bg:var(--surface-2);
+  --post-bg:color-mix(in oklab,#16a34a,transparent 88%);
+  --put-bg:color-mix(in oklab,#f59e0b,transparent 84%);
+  --del-bg:color-mix(in oklab,#dc2626,transparent 90%);
+  --ease:cubic-bezier(.16,1,.3,1);
+  --edge:1.5rem;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#131316; --surface:#1c1c21; --surface-2:#232329;
+    --fg:#e7e7ea; --fg-2:#c4c4ca; --muted:#9a9aa2;
+    --border:#2e2e33; --border-strong:#3a3a41;
+    --accent:#8d82f5;
+    --get:#c4c4ca; --post:#4ade80; --put:#fbbf24; --del:#f87171;
+    --get-bg:var(--surface-2);
+    --post-bg:color-mix(in oklab,#22c55e,transparent 86%);
+    --put-bg:color-mix(in oklab,#f59e0b,transparent 84%);
+    --del-bg:color-mix(in oklab,#ef4444,transparent 86%);
+  }
+}
+:root[data-theme="light"]{
+  color-scheme:light;
+  --bg:#ffffff; --surface:#f8f8f8; --surface-2:#f1f1f3;
+  --fg:#18181b; --fg-2:#3f3f46; --muted:#52525b;
+  --border:#e4e4e7; --border-strong:#d4d4d8;
+  --accent:#6457f0;
+  --get:#3f3f46; --post:#166534; --put:#92400e; --del:#b91c1c;
+  --get-bg:var(--surface-2);
+  --post-bg:color-mix(in oklab,#16a34a,transparent 88%);
+  --put-bg:color-mix(in oklab,#f59e0b,transparent 84%);
+  --del-bg:color-mix(in oklab,#dc2626,transparent 90%);
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#131316; --surface:#1c1c21; --surface-2:#232329;
+  --fg:#e7e7ea; --fg-2:#c4c4ca; --muted:#9a9aa2;
+  --border:#2e2e33; --border-strong:#3a3a41;
+  --accent:#8d82f5;
+  --get:#c4c4ca; --post:#4ade80; --put:#fbbf24; --del:#f87171;
+  --get-bg:var(--surface-2);
+  --post-bg:color-mix(in oklab,#22c55e,transparent 86%);
+  --put-bg:color-mix(in oklab,#f59e0b,transparent 84%);
+  --del-bg:color-mix(in oklab,#ef4444,transparent 86%);
+}
+
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;
+  line-height:1.6;background:var(--bg);color:var(--fg);
+  -webkit-font-smoothing:antialiased;
+}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline;text-underline-offset:2px}
+code,pre,.mono{font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace}
+
+/* ── Topbar — echoes the artifact viewer chrome ─────────────── */
+.topbar{
+  position:sticky;top:0;z-index:10;
+  display:flex;align-items:center;gap:.75rem;
+  padding:.6rem var(--edge);
+  background:color-mix(in oklab,var(--bg),transparent 12%);
+  backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--border);
+}
+.brand{display:inline-flex;align-items:center;gap:.5rem;color:var(--fg);font-weight:600;font-size:.9rem;letter-spacing:-.01em}
+.brand svg{width:20px;height:20px;color:var(--accent)}
+.topbar .spacer{flex:1}
+.icon-link{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:32px;height:32px;border-radius:8px;color:var(--muted);
+  transition:color .15s var(--ease),background .15s var(--ease);
+}
+.icon-link:hover{color:var(--fg);background:var(--surface);text-decoration:none}
+.icon-link svg{width:18px;height:18px}
+#theme-toggle{
+  width:32px;height:32px;border-radius:8px;
+  border:1px solid var(--border);background:var(--surface);color:var(--fg);
+  display:inline-flex;align-items:center;justify-content:center;cursor:pointer;
+  opacity:.8;transition:opacity .15s var(--ease),border-color .15s var(--ease);
+}
+#theme-toggle:hover{opacity:1;border-color:var(--border-strong)}
+#theme-toggle svg{width:16px;height:16px}
+
+main{max-width:46rem;margin:0 auto;padding:clamp(2.5rem,7vw,4.5rem) var(--edge) 5rem}
+
+/* ── Hero ────────────────────────────────────────────────────── */
+.chip{
+  display:inline-flex;align-items:center;gap:.45rem;
+  font-size:.75rem;font-weight:500;color:var(--muted);
+  border:1px solid var(--border);border-radius:9999px;
+  padding:.22rem .7rem .22rem .55rem;margin-bottom:1.5rem;
+}
+.chip .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px color-mix(in oklab,var(--accent),transparent 78%)}
+h1{
+  font-size:clamp(2.1rem,6vw,2.9rem);line-height:1.08;letter-spacing:-.03em;
+  margin:0 0 .9rem;font-weight:680;text-wrap:balance;
+}
+.lead{color:var(--fg-2);font-size:1.15rem;line-height:1.55;margin:0 0 2rem;max-width:34rem;text-wrap:pretty}
+
+/* ── Install blocks ──────────────────────────────────────────── */
+.cmd{
+  display:flex;align-items:center;gap:.75rem;
+  background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  padding:.7rem .7rem .7rem 1rem;
+}
+.cmd + .caption{margin-top:1.5rem}
+.cmd code{flex:1;min-width:0;font-size:.92rem;color:var(--fg);overflow-x:auto;white-space:nowrap;padding-bottom:1px}
+.cmd code .tok{color:var(--muted)}
+.copy{
+  flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;
+  width:34px;height:34px;border-radius:8px;
+  border:1px solid var(--border);background:var(--bg);color:var(--muted);cursor:pointer;
+  transition:color .15s var(--ease),border-color .15s var(--ease),background .15s var(--ease);
+}
+.copy:hover{color:var(--fg);border-color:var(--border-strong)}
+.copy:focus-visible{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in oklab,var(--accent),transparent 72%)}
+.copy svg{width:16px;height:16px}
+.copy .i-check{display:none;color:var(--post)}
+.copy.copied .i-copy{display:none}
+.copy.copied .i-check{display:inline-flex}
+.caption{color:var(--muted);font-size:.9rem;margin:0 0 .55rem}
+
+/* ── Sections ────────────────────────────────────────────────── */
+section{margin-top:clamp(3rem,7vw,4.25rem)}
+h2{font-size:.8rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 1.35rem}
+
+.features{list-style:none;padding:0;margin:0;display:grid;gap:.25rem}
+.features li{display:grid;grid-template-columns:auto 1fr;gap:.9rem;align-items:start;padding:.95rem 0;border-top:1px solid var(--border)}
+.features li:first-child{border-top:0}
+.f-icon{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:34px;height:34px;flex-shrink:0;color:var(--accent);
+  background:color-mix(in oklab,var(--accent),transparent 90%);border-radius:9px;
+}
+.f-icon svg{width:18px;height:18px}
+.f-body{font-size:.975rem;line-height:1.55}
+.f-body strong{color:var(--fg);font-weight:600;display:block;margin-bottom:.1rem}
+.f-body span{color:var(--muted)}
+
+/* ── API table ───────────────────────────────────────────────── */
+.table-wrap{border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.table-scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.9rem}
+th,td{text-align:left;padding:.7rem .9rem;border-bottom:1px solid var(--border);white-space:nowrap}
+tbody tr:last-child td{border-bottom:0}
+tbody tr:hover{background:var(--surface)}
+thead th{font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);background:var(--surface)}
+.method{
+  display:inline-block;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+  font-size:.72rem;font-weight:700;letter-spacing:.02em;
+  padding:.16rem .48rem;border-radius:6px;
+}
+.m-get{color:var(--get);background:var(--get-bg)}
+.m-post{color:var(--post);background:var(--post-bg)}
+.m-put{color:var(--put);background:var(--put-bg)}
+.m-del{color:var(--del);background:var(--del-bg)}
+td.path{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.85rem;color:var(--fg-2)}
+td.desc{color:var(--muted);white-space:normal}
+
+/* ── Footer ──────────────────────────────────────────────────── */
+footer{margin-top:clamp(3rem,7vw,4.25rem);padding-top:1.75rem;border-top:1px solid var(--border);color:var(--muted);font-size:.9rem;line-height:1.7}
+footer code{background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:.08em .4em;font-size:.85em;color:var(--fg-2)}
+footer .sep{color:var(--border-strong);margin:0 .5rem}
+
+/* ── Motion — one restrained entrance on the hero only ───────── */
+@media (prefers-reduced-motion:no-preference){
+  .rise{opacity:0;animation:rise .55s var(--ease) both;animation-delay:calc(var(--i,0)*65ms)}
+}
+@keyframes rise{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:none}}
 </style>
 </head>
 <body>
+<header class="topbar">
+  <a class="brand" href="/" aria-label="Open Artifacts home">
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.0833 15.1999L21.2854 15.9212C21.5221 16.0633 21.5989 16.3704 21.4569 16.6072C21.4146 16.6776 21.3557 16.7365 21.2854 16.7787L12.5144 22.0412C12.1977 22.2313 11.8021 22.2313 11.4854 22.0412L2.71451 16.7787C2.47772 16.6366 2.40093 16.3295 2.54301 16.0927C2.58523 16.0223 2.64413 15.9634 2.71451 15.9212L3.9166 15.1999L11.9999 20.0499L20.0833 15.1999ZM20.0833 10.4999L21.2854 11.2212C21.5221 11.3633 21.5989 11.6704 21.4569 11.9072C21.4146 11.9776 21.3557 12.0365 21.2854 12.0787L11.9999 17.6499L2.71451 12.0787C2.47772 11.9366 2.40093 11.6295 2.54301 11.3927C2.58523 11.3223 2.64413 11.2634 2.71451 11.2212L3.9166 10.4999L11.9999 15.3499L20.0833 10.4999ZM12.5144 1.30864L21.2854 6.5712C21.5221 6.71327 21.5989 7.0204 21.4569 7.25719C21.4146 7.32757 21.3557 7.38647 21.2854 7.42869L11.9999 12.9999L2.71451 7.42869C2.47772 7.28662 2.40093 6.97949 2.54301 6.7427C2.58523 6.67232 2.64413 6.61343 2.71451 6.5712L11.4854 1.30864C11.8021 1.11864 12.1977 1.11864 12.5144 1.30864ZM11.9999 3.33233L5.88723 6.99995L11.9999 10.6676L18.1126 6.99995L11.9999 3.33233Z"/></svg>
+    Open Artifacts
+  </a>
+  <div class="spacer"></div>
+  <a class="icon-link" href="https://github.com/FradSer/open-artifacts" target="_blank" rel="noopener noreferrer" aria-label="Source on GitHub">
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M5.88401 18.6533C5.58404 18.4526 5.32587 18.1975 5.0239 17.8369C4.91473 17.7065 4.47283 17.1524 4.55811 17.2583C4.09533 16.6833 3.80296 16.417 3.50156 16.3089C2.9817 16.1225 2.7114 15.5499 2.89784 15.0301C3.08428 14.5102 3.65685 14.2399 4.17672 14.4263C4.92936 14.6963 5.43847 15.1611 6.12425 16.0143C6.03025 15.8974 6.46364 16.441 6.55731 16.5529C6.74784 16.7804 6.88732 16.9182 6.99629 16.9911C7.20118 17.1283 7.58451 17.1874 8.14709 17.1311C8.17065 16.7489 8.24136 16.3783 8.34919 16.0358C5.38097 15.3104 3.70116 13.3952 3.70116 9.63971C3.70116 8.40085 4.0704 7.28393 4.75917 6.3478C4.5415 5.45392 4.57433 4.37284 5.06092 3.15636C5.1725 2.87739 5.40361 2.66338 5.69031 2.57352C5.77242 2.54973 5.81791 2.53915 5.89878 2.52673C6.70167 2.40343 7.83573 2.69705 9.31449 3.62336C10.181 3.41879 11.0885 3.315 12.0012 3.315C12.9129 3.315 13.8196 3.4186 14.6854 3.62277C16.1619 2.69 17.2986 2.39649 18.1072 2.52651C18.1919 2.54013 18.2645 2.55783 18.3249 2.57766C18.6059 2.66991 18.8316 2.88179 18.9414 3.15636C19.4279 4.37256 19.4608 5.45344 19.2433 6.3472C19.9342 7.28337 20.3012 8.39208 20.3012 9.63971C20.3012 13.3968 18.627 15.3048 15.6588 16.032C15.7837 16.447 15.8496 16.9105 15.8496 17.4121C15.8496 18.0765 15.8471 18.711 15.8424 19.4225C15.8412 19.6127 15.8397 19.8159 15.8375 20.1281C16.2129 20.2109 16.5229 20.5077 16.6031 20.9089C16.7114 21.4504 16.3602 21.9773 15.8186 22.0856C14.6794 22.3134 13.8353 21.5538 13.8353 20.5611C13.8353 20.4708 13.836 20.3417 13.8375 20.1145C13.8398 19.8015 13.8412 19.599 13.8425 19.4094C13.8471 18.7019 13.8496 18.0716 13.8496 17.4121C13.8496 16.7148 13.6664 16.2602 13.4237 16.051C12.7627 15.4812 13.0977 14.3973 13.965 14.2999C16.9314 13.9666 18.3012 12.8177 18.3012 9.63971C18.3012 8.68508 17.9893 7.89571 17.3881 7.23559C17.1301 6.95233 17.0567 6.54659 17.199 6.19087C17.3647 5.77663 17.4354 5.23384 17.2941 4.57702L17.2847 4.57968C16.7928 4.71886 16.1744 5.0198 15.4261 5.5285C15.182 5.69438 14.8772 5.74401 14.5932 5.66413C13.7729 5.43343 12.8913 5.315 12.0012 5.315C11.111 5.315 10.2294 5.43343 9.40916 5.66413C9.12662 5.74359 8.82344 5.69492 8.57997 5.53101C7.8274 5.02439 7.2056 4.72379 6.71079 4.58376C6.56735 5.23696 6.63814 5.77782 6.80336 6.19087C6.94565 6.54659 6.87219 6.95233 6.61423 7.23559C6.01715 7.8912 5.70116 8.69376 5.70116 9.63971C5.70116 12.8116 7.07225 13.9683 10.023 14.2999C10.8883 14.3971 11.2246 15.4769 10.5675 16.0482C10.3751 16.2156 10.1384 16.7802 10.1384 17.4121V20.5611C10.1384 21.5474 9.30356 22.2869 8.17878 22.09C7.63476 21.9948 7.27093 21.4766 7.36613 20.9326C7.43827 20.5204 7.75331 20.2116 8.13841 20.1276V19.1381C7.22829 19.1994 6.47656 19.0498 5.88401 18.6533Z"/></svg>
+  </a>
+  <button id="theme-toggle" type="button" aria-label="Toggle color theme"></button>
+</header>
+
 <main>
-<span class="badge">self-hosted instance</span>
-<h1>Open Artifacts</h1>
-<p class="tagline">Publish self-contained HTML and Markdown pages from any coding agent. Share by URL, protect with a password, keep them updated as your project evolves.</p>
+  <section class="hero" style="margin-top:0">
+    <span class="chip rise" style="--i:0"><span class="dot"></span>self-hosted instance</span>
+    <h1 class="rise" style="--i:1">Open Artifacts</h1>
+    <p class="lead rise" style="--i:2">Publish self-contained HTML and Markdown pages from any coding agent. Share by URL, protect with a password, and keep them in sync as your project evolves.</p>
 
-<h2>Give your agent the skill</h2>
-<pre>npx skills add FradSer/open-artifacts</pre>
-<p>Then tell your agent the instance to publish to:</p>
-<pre>export OPEN_ARTIFACTS_URL=&lt;this origin&gt;</pre>
+    <div class="cmd rise" style="--i:3">
+      <code><span class="tok">$</span> npx skills add FradSer/open-artifacts</code>
+      <button class="copy" type="button" data-copy="npx skills add FradSer/open-artifacts" aria-label="Copy install command">
+        <span class="i-copy"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6.9998 6V3C6.9998 2.44772 7.44752 2 7.9998 2H19.9998C20.5521 2 20.9998 2.44772 20.9998 3V17C20.9998 17.5523 20.5521 18 19.9998 18H16.9998V20.9991C16.9998 21.5519 16.5499 22 15.993 22H4.00666C3.45059 22 3 21.5554 3 20.9991L3.0026 7.00087C3.0027 6.44811 3.45264 6 4.00942 6H6.9998ZM5.00242 8L5.00019 20H14.9998V8H5.00242ZM8.9998 6H16.9998V16H18.9998V4H8.9998V6Z"/></svg></span>
+        <span class="i-check"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9.9997 15.1709L19.1921 5.97852L20.6063 7.39273L9.9997 17.9993L3.63574 11.6354L5.04996 10.2212L9.9997 15.1709Z"/></svg></span>
+      </button>
+    </div>
 
-<h2>What it does</h2>
-<ul>
-<li>Agents publish pages via a small JSON API; every artifact gets a stable, unguessable URL and full version history.</li>
-<li>Password-protected artifacts are encrypted on your machine (PBKDF2 + AES-256-GCM) and decrypted in the viewer's browser. The server only ever stores ciphertext.</li>
-<li>Artifacts remember the files they were generated from; the skill detects when those files change and the agent republishes.</li>
-<li>All pages are served with a sandboxing content security policy that blocks every external request.</li>
-</ul>
+    <p class="caption rise" style="--i:4">Then point your agent at this instance:</p>
+    <div class="cmd rise" style="--i:5">
+      <code id="env-cmd"><span class="tok">$</span> export OPEN_ARTIFACTS_URL=<span class="origin">&lt;this origin&gt;</span></code>
+      <button class="copy" id="env-copy" type="button" data-copy="export OPEN_ARTIFACTS_URL=" aria-label="Copy environment variable">
+        <span class="i-copy"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6.9998 6V3C6.9998 2.44772 7.44752 2 7.9998 2H19.9998C20.5521 2 20.9998 2.44772 20.9998 3V17C20.9998 17.5523 20.5521 18 19.9998 18H16.9998V20.9991C16.9998 21.5519 16.5499 22 15.993 22H4.00666C3.45059 22 3 21.5554 3 20.9991L3.0026 7.00087C3.0027 6.44811 3.45264 6 4.00942 6H6.9998ZM5.00242 8L5.00019 20H14.9998V8H5.00242ZM8.9998 6H16.9998V16H18.9998V4H8.9998V6Z"/></svg></span>
+        <span class="i-check"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9.9997 15.1709L19.1921 5.97852L20.6063 7.39273L9.9997 17.9993L3.63574 11.6354L5.04996 10.2212L9.9997 15.1709Z"/></svg></span>
+      </button>
+    </div>
+  </section>
 
-<h2>API</h2>
-<pre>POST   /api/artifacts          create  -&gt; { id, url, writeToken }
-PUT    /api/artifacts/:id      update  (bearer writeToken)
-GET    /api/artifacts/:id      metadata + versions
-GET    /api/artifacts/:id/raw  stored content
-DELETE /api/artifacts/:id      delete  (bearer writeToken)
-GET    /a/:id                  view    (?v=N for history)</pre>
+  <section>
+    <h2>What it does</h2>
+    <ul class="features">
+      <li>
+        <span class="f-icon"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M13 14H11C7.54202 14 4.53953 15.9502 3.03239 18.8107C3.01093 18.5433 3 18.2729 3 18C3 12.4772 7.47715 8 13 8V2.5L23.5 11L13 19.5V14ZM11 12H15V15.3078L20.3214 11L15 6.69224V10H13C10.5795 10 8.41011 11.0749 6.94312 12.7735C8.20873 12.2714 9.58041 12 11 12Z"/></svg></span>
+        <span class="f-body"><strong>Stable URLs, full history</strong><span>Agents publish via a small JSON API; every artifact gets a stable, unguessable link and a versioned history. Same URL forever, even across sessions.</span></span>
+      </li>
+      <li>
+        <span class="f-icon"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 10H20C20.5523 10 21 10.4477 21 11V21C21 21.5523 20.5523 22 20 22H4C3.44772 22 3 21.5523 3 21V11C3 10.4477 3.44772 10 4 10H5V9C5 5.13401 8.13401 2 12 2C15.866 2 19 5.13401 19 9V10ZM5 12V20H19V12H5ZM11 14H13V18H11V14ZM17 10V9C17 6.23858 14.7614 4 12 4C9.23858 4 7 6.23858 7 9V10H17Z"/></svg></span>
+        <span class="f-body"><strong>Zero-knowledge passwords</strong><span>Protected artifacts are encrypted on your machine (PBKDF2 + AES-256-GCM) and decrypted in the viewer's browser. The server only ever stores ciphertext.</span></span>
+      </li>
+      <li>
+        <span class="f-icon"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M5.46257 4.43262C7.21556 2.91688 9.5007 2 12 2C17.5228 2 22 6.47715 22 12C22 14.1361 21.3302 16.1158 20.1892 17.7406L17 12H20C20 7.58172 16.4183 4 12 4C9.84982 4 7.89777 4.84827 6.46023 6.22842L5.46257 4.43262ZM18.5374 19.5674C16.7844 21.0831 14.4993 22 12 22C6.47715 22 2 17.5228 2 12C2 9.86386 2.66979 7.88416 3.8108 6.25944L7 12H4C4 16.4183 7.58172 20 12 20C14.1502 20 16.1022 19.1517 17.5398 17.7716L18.5374 19.5674Z"/></svg></span>
+        <span class="f-body"><strong>Stays in sync with your files</strong><span>Artifacts remember the files they were generated from. When those files change, the skill flags the artifact stale and the agent republishes.</span></span>
+      </li>
+      <li>
+        <span class="f-icon"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.8827 19.2968C16.1814 20.3755 14.1638 21.0002 12.0003 21.0002C6.60812 21.0002 2.12215 17.1204 1.18164 12.0002C1.61832 9.62282 2.81932 7.5129 4.52047 5.93457L1.39366 2.80777L2.80788 1.39355L22.6069 21.1925L21.1927 22.6068L17.8827 19.2968ZM5.9356 7.3497C4.60673 8.56015 3.6378 10.1672 3.22278 12.0002C4.14022 16.0521 7.7646 19.0002 12.0003 19.0002C13.5997 19.0002 15.112 18.5798 16.4243 17.8384L14.396 15.8101C13.7023 16.2472 12.8808 16.5002 12.0003 16.5002C9.51498 16.5002 7.50026 14.4854 7.50026 12.0002C7.50026 11.1196 7.75317 10.2981 8.19031 9.60442L5.9356 7.3497ZM12.9139 14.328L9.67246 11.0866C9.5613 11.3696 9.50026 11.6777 9.50026 12.0002C9.50026 13.3809 10.6196 14.5002 12.0003 14.5002C12.3227 14.5002 12.6309 14.4391 12.9139 14.328ZM20.8068 16.5925L19.376 15.1617C20.0319 14.2268 20.5154 13.1586 20.7777 12.0002C19.8603 7.94818 16.2359 5.00016 12.0003 5.00016C11.1544 5.00016 10.3329 5.11773 9.55249 5.33818L7.97446 3.76015C9.22127 3.26959 10.5793 3.00016 12.0003 3.00016C17.3924 3.00016 21.8784 6.87992 22.8189 12.0002C22.5067 13.6998 21.8038 15.2628 20.8068 16.5925ZM11.7229 7.50857C11.8146 7.50299 11.9071 7.50016 12.0003 7.50016C14.4855 7.50016 16.5003 9.51488 16.5003 12.0002C16.5003 12.0933 16.4974 12.1858 16.4919 12.2775L11.7229 7.50857Z"/></svg></span>
+        <span class="f-body"><strong>Sandboxed by default</strong><span>Every page is served with a strict content security policy that blocks all external requests, so an artifact's scripts can never phone home or read your origin.</span></span>
+      </li>
+    </ul>
+  </section>
 
-<p><a href="https://github.com/FradSer/open-artifacts">Source on GitHub</a> — MIT licensed. Deploy your own with <code>wrangler deploy</code>.</p>
+  <section>
+    <h2>API</h2>
+    <div class="table-wrap">
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Method</th><th>Endpoint</th><th>Purpose</th></tr></thead>
+          <tbody>
+            <tr><td><span class="method m-post">POST</span></td><td class="path">/api/artifacts</td><td class="desc">Create &rarr; <code class="mono">{ id, url, writeToken }</code></td></tr>
+            <tr><td><span class="method m-put">PUT</span></td><td class="path">/api/artifacts/:id</td><td class="desc">Update (bearer write token)</td></tr>
+            <tr><td><span class="method m-get">GET</span></td><td class="path">/api/artifacts/:id</td><td class="desc">Metadata and version list</td></tr>
+            <tr><td><span class="method m-get">GET</span></td><td class="path">/api/artifacts/:id/raw</td><td class="desc">Stored content</td></tr>
+            <tr><td><span class="method m-del">DEL</span></td><td class="path">/api/artifacts/:id</td><td class="desc">Delete (bearer write token)</td></tr>
+            <tr><td><span class="method m-get">GET</span></td><td class="path">/a/:id</td><td class="desc">View the artifact (<code class="mono">?v=N</code> for history)</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <a href="https://github.com/FradSer/open-artifacts" target="_blank" rel="noopener noreferrer">Source on GitHub</a><span class="sep">·</span>MIT licensed<span class="sep">·</span>Deploy your own with <code>wrangler deploy</code>
+  </footer>
 </main>
+
+<script>
+(function(){
+  // Theme — shares the "oa-theme" key with the artifact viewer so a visitor's
+  // choice carries across the whole instance.
+  var SUN='<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 18C8.68629 18 6 15.3137 6 12C6 8.68629 8.68629 6 12 6C15.3137 6 18 8.68629 18 12C18 15.3137 15.3137 18 12 18ZM12 16C14.2091 16 16 14.2091 16 12C16 9.79086 14.2091 8 12 8C9.79086 8 8 9.79086 8 12C8 14.2091 9.79086 16 12 16ZM11 1H13V4H11V1ZM11 20H13V23H11V20ZM3.51472 4.92893L4.92893 3.51472L7.05025 5.63604L5.63604 7.05025L3.51472 4.92893ZM16.9497 18.364L18.364 16.9497L20.4853 19.0711L19.0711 20.4853L16.9497 18.364ZM19.0711 3.51472L20.4853 4.92893L18.364 7.05025L16.9497 5.63604L19.0711 3.51472ZM5.63604 16.9497L7.05025 18.364L4.92893 20.4853L3.51472 19.0711L5.63604 16.9497ZM23 11V13H20V11H23ZM4 11V13H1V11H4Z"/></svg>';
+  var MOON='<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M10 7C10 10.866 13.134 14 17 14C18.9584 14 20.729 13.1957 21.9995 11.8995C22 11.933 22 11.9665 22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C12.0335 2 12.067 2 12.1005 2.00049C10.8043 3.27098 10 5.04157 10 7ZM4 12C4 16.4183 7.58172 20 12 20C15.0583 20 17.7158 18.2839 19.062 15.7621C18.3945 15.9187 17.7035 16 17 16C12.0294 16 8 11.9706 8 7C8 6.29648 8.08133 5.60547 8.2379 4.938C5.71611 6.28423 4 8.9417 4 12Z"/></svg>';
+  var root=document.documentElement,KEY="oa-theme",saved=null;
+  try{saved=localStorage.getItem(KEY)}catch(e){}
+  if(saved==="light"||saved==="dark"){root.setAttribute("data-theme",saved);}
+  else{var dark=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches;root.setAttribute("data-theme",dark?"dark":"light");}
+  var btn=document.getElementById("theme-toggle");
+  function paint(){var t=root.getAttribute("data-theme");btn.innerHTML=t==="dark"?MOON:SUN;btn.title="Theme: "+(t||"auto");}
+  btn.addEventListener("click",function(){
+    var next=root.getAttribute("data-theme")==="dark"?"light":"dark";
+    root.setAttribute("data-theme",next);
+    try{localStorage.setItem(KEY,next)}catch(e){}
+    paint();
+  });
+  paint();
+
+  // Fill the OPEN_ARTIFACTS_URL command with this instance's real origin.
+  var origin=location.origin;
+  var originEl=document.querySelector("#env-cmd .origin");
+  if(originEl)originEl.textContent=origin;
+  var envCopy=document.getElementById("env-copy");
+  if(envCopy)envCopy.setAttribute("data-copy","export OPEN_ARTIFACTS_URL="+origin);
+
+  // Copy buttons.
+  document.querySelectorAll(".copy").forEach(function(b){
+    b.addEventListener("click",function(){
+      var text=b.getAttribute("data-copy");
+      var done=function(){b.classList.add("copied");setTimeout(function(){b.classList.remove("copied")},1400);};
+      if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(done).catch(done);}
+      else{done();}
+    });
+  });
+})();
+</script>
 </body>
 </html>
