@@ -53,7 +53,7 @@ no-external-requests CSP.
 Ask your agent to "publish this as an artifact" — it runs the bundled CLI:
 
 ```sh
-node .claude/skills/artifacts/scripts/artifact.mjs create page.html \
+node .claude/skills/using-open-artifacts/scripts/artifact.mjs create page.html \
   --favicon 📊 --scope "app interaction flows" \
   --channel app-interactions --watch "src/views/**"
 ```

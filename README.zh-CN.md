@@ -46,7 +46,7 @@ export OPEN_ARTIFACTS_URL=https://open-artifacts.<you>.workers.dev
 让你的 agent "把这个发布成 artifact"，它会运行随附的 CLI：
 
 ```sh
-node .claude/skills/artifacts/scripts/artifact.mjs create page.html \
+node .claude/skills/using-open-artifacts/scripts/artifact.mjs create page.html \
   --favicon 📊 --scope "app interaction flows" \
   --channel app-interactions --watch "src/views/**"
 ```

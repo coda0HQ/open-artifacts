@@ -12,7 +12,7 @@ describe evolves.
                  npx skills add FradSer/open-artifacts
                                 │
 ┌─ user's project ──────────────▼─────────────┐
-│  .claude/skills/artifacts/                  │
+│  .claude/skills/using-open-artifacts/       │
 │    SKILL.md            (agent instructions) │
 │    scripts/artifact.mjs (publish CLI)       │
 │  .artifacts/manifest.json  (committed)      │
@@ -117,7 +117,7 @@ stays under the CPU cap.
 
 ## The skill and auto-updating artifacts
 
-Repo layout `skills/artifacts/{SKILL.md,scripts/artifact.mjs,references/design.md}`
+Repo layout `skills/using-open-artifacts/{SKILL.md,scripts/artifact.mjs,references/design.md}`
 works with `npx skills add FradSer/open-artifacts` (vercel-labs/skills installs
 to `.claude/skills/` by default, `-g` for `~/.claude/skills/`; follows the
 Agent Skills standard so ~70 agents are supported).
