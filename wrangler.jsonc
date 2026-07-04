@@ -22,6 +22,9 @@
       "bucket_name": "open-artifacts-content"
     }
   ],
-  "rules": [{ "type": "Text", "globs": ["**/*.txt"], "fallthrough": true }],
+  "rules": [
+    { "type": "Text", "globs": ["**/*.txt"], "fallthrough": true },
+    { "type": "CompiledWasm", "globs": ["**/*.wasm"], "fallthrough": true }
+  ],
   "observability": { "enabled": true }
 }

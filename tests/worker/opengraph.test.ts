@@ -47,7 +47,7 @@ describe("OpenGraph metadata", () => {
       `<meta property="og:image" content="${BASE}/og/${created.id}">`,
     );
     expect(html).toContain(
-      '<meta property="og:image:type" content="image/svg+xml">',
+      '<meta property="og:image:type" content="image/png">',
     );
     expect(html).toContain('<meta property="og:image:width" content="1200">');
     expect(html).toContain('<meta property="og:image:height" content="630">');
@@ -84,23 +84,54 @@ describe("OpenGraph metadata", () => {
     expect(html).toContain("&lt;script&gt;");
   });
 
-  it("serves an SVG OG card at /og/:id built from the artifact", async () => {
+  it("serves a PNG OG card at /og/:id rendered from the artifact", async () => {
     const created = await create({
       content: "<h1>x</h1>",
       description: "card description",
     });
     const res = await exports.default.fetch(`${BASE}/og/${created.id}`);
     expect(res.status).toBe(200);
-    expect(res.headers.get("content-type")).toContain("image/svg+xml");
-    const svg = await res.text();
-    expect(svg).toMatch(/^<svg/);
-    expect(svg).toContain("📊");
-    expect(svg).toContain("OG Test");
-    expect(svg).toContain("card description");
-    expect(svg).toContain("OPEN ARTIFACTS");
-    // self-contained, no external href/src
-    expect(svg).not.toMatch(/href=/);
-    expect(svg).not.toMatch(/<image/);
+    expect(res.headers.get("content-type")).toBe("image/png");
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    // PNG signature: 89 50 4E 47 0D 0A 1A 0A
+    expect(Array.from(bytes.slice(0, 8))).toEqual([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+    ]);
+    expect(bytes.byteLength).toBeGreaterThan(1000);
+  });
+
+  const isPng = (bytes: Uint8Array): boolean =>
+    bytes.byteLength > 1000 &&
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47;
+
+  it("renders a long title that wraps and clips without failing", async () => {
+    const created = await create({
+      title:
+        "A Very Long Artifact Title That Wraps Across Four Full Lines To Exercise Description Clipping",
+      content: "<h1>x</h1>",
+      description:
+        "This description should be clipped so it never collides with the footer wordmark even when the title is very tall on the card.",
+    });
+    const res = await exports.default.fetch(`${BASE}/og/${created.id}`);
+    expect(res.status).toBe(200);
+    expect(isPng(new Uint8Array(await res.arrayBuffer()))).toBe(true);
+  });
+
+  it("renders a valid PNG for non-Latin titles via the branded fallback", async () => {
+    // The embedded fonts are Latin-only; a CJK title must not throw or produce
+    // a broken image — it falls back to the branded card.
+    const created = await create({
+      title: "开源自托管的 Claude Code Artifacts",
+      content: "<h1>x</h1>",
+      description: "任意编码 agent 都能发布可分享的页面。",
+    });
+    const res = await exports.default.fetch(`${BASE}/og/${created.id}`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("image/png");
+    expect(isPng(new Uint8Array(await res.arrayBuffer()))).toBe(true);
   });
 
   it("the OG image URL is absolute and points at /og/:id", async () => {

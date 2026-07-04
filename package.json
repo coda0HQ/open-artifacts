@@ -17,6 +17,7 @@
   "license": "ISC",
   "packageManager": "pnpm@10.33.0",
   "dependencies": {
+    "@resvg/resvg-wasm": "^2.6.2",
     "hono": "^4.12.27"
   },
   "devDependencies": {
