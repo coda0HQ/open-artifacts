@@ -10,20 +10,45 @@ Read this only when building at `--level 3`. Respect `prefers-reduced-motion`
 at every level — wrap motion in a `@media (prefers-reduced-motion: no-preference)`
 guard so reduced-motion users get the static version.
 
-## Easing
+## Every animation needs a one-sentence reason
 
-Spring-like motion without a physics library. These cubic-beziers cover 90%
-of cases:
+Before adding motion, name what it communicates: hierarchy (directing the
+eye), narrative (revealing in a sequence that matters), feedback
+(acknowledging an action), or state (showing something changed). "It looks
+cool" is not a reason; motion without a reason is the AI-generated feeling.
+
+## Easing and duration
+
+`--ease-out-expo` (settle, premium) and `--ease-spring` (overshoot, lively)
+ship in the token contract — don't redefine them. Add locally if needed:
 
 ```css
---ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);   /* overshoot, lively */
---ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);      /* settle, premium */
---ease-in-out-quad: cubic-bezier(0.45, 0, 0.55, 1);  /* balanced */
+--ease-in-out-quad: cubic-bezier(0.45, 0, 0.55, 1);  /* balanced, ambient */
 ```
 
 Use `--ease-out-expo` for entrances (things arriving), `--ease-spring` for
 emphasis (one or two moments per page, not everywhere). Never linear for
-organic motion.
+organic motion, never bounce/elastic on UI. Durations follow the ladder:
+
+| Duration | Use |
+| --- | --- |
+| 100–150ms | feedback — press, toggle, color |
+| 200–300ms | state — menu, tooltip, hover reveal |
+| 300–500ms | layout — accordion, drawer, view transition |
+| 500–800ms | entrances — load sequence, hero reveal (L3 only) |
+
+Exits run ~75% of the matching entrance duration — leaving is quicker than
+arriving.
+
+## Motion materials
+
+Transform + opacity are the reliable defaults, not the whole palette.
+Bounded `filter: blur()`, `clip-path` wipes, masks, and shadow/glow shifts
+are legitimate premium materials when they materially improve the moment and
+stay smooth. The rule is not "transform only" — it is: never animate
+layout-driving properties (`top`/`left`/`width`/`height`/margins), keep
+expensive paint areas small and isolated, and verify smoothness mentally on
+a mid-range phone.
 
 ## Page-load sequence
 
@@ -196,13 +221,17 @@ as a loading state.
   0%, 100% { opacity: 0.4; transform: scale(1); }
   50%      { opacity: 0.6; transform: scale(1.04); }
 }
-.glow { animation: breathe 8s var(--ease-in-out-quad) infinite; }
+/* bezier inlined so this snippet works without the optional local token */
+.glow { animation: breathe 8s cubic-bezier(0.45, 0, 0.55, 1) infinite; }
 ```
 
 ## Anti-patterns
 
-- Animating `top`/`left`/`margin` — use `transform` and `opacity` only.
-- `linear` easing for organic motion.
+- Animating `top`/`left`/`margin` — use `transform` (and the bounded
+  materials above).
+- `linear` easing for organic motion; bounce/elastic anywhere.
+- A `scroll` event listener — `IntersectionObserver`, `animation-timeline`,
+  or nothing.
 - Stagger cascades longer than 6 items or 800ms.
 - Scroll-triggered theatre on a document (that's L3 for a landing page, not
   for an API reference).

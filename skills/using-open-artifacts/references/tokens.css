@@ -1,112 +1,157 @@
 /*
  * Open Artifacts — shared design-token contract.
  *
- * Every artifact page binds this token set into :root, then a direction
- * (see design.md) overrides the identity tokens (--bg, --fg, --accent,
- * --font-display, --font-body). Structure and state tokens stay constant
- * across directions, so components written against this contract render
- * consistently no matter which direction is active.
+ * Paste this file verbatim at the top of your <style>, then write your
+ * direction overrides BELOW it, unlayered. The contract lives in
+ * `@layer oa-tokens`, and unlayered CSS always beats layered CSS — so your
+ * plain `:root { ... }` override wins over every block in here, including
+ * the explicit light block (which otherwise out-specifies a bare `:root`).
  *
- * Paste this block verbatim at the top of your <style>, then add the
- * chosen direction's :root overrides beneath it. Both light and dark
- * theme blocks must be defined (the viewer stamps data-theme on <html>).
+ * A direction override defines BOTH of these, always:
  *
- * Adapted from open-design's design-system token schema (A1/A2 layers),
- * retargeted to this project's strict no-external-requests CSP: no web
- * fonts are loaded, so font stacks are system-only or inlined @font-face.
+ *   :root { ... light identity tokens + fonts ... }
+ *   :root[data-theme="dark"] { ... dark identity tokens ... }
+ *
+ * Structure and state tokens stay constant across directions, so
+ * components written against this contract render consistently no matter
+ * which direction is active.
+ *
+ * Adapted from open-design's design-system token schema, retargeted to
+ * this project's strict no-external-requests CSP: no web fonts are
+ * loaded, so font stacks are installed-face or inlined @font-face only.
  */
 
-:root {
-  /* ── Identity (A1) — override per direction ─────────────────────── */
-  --bg: #ffffff;
-  --surface: #f8f8f8;
-  --fg: #18181b;
-  --muted: #71717a;
-  --border: #e4e4e7;
-  --accent: #6457f0;
-  --font-display: system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-body: system-ui, -apple-system, "Segoe UI", sans-serif;
+@layer oa-tokens {
+  :root {
+    /* ── Identity — override per direction ──────────────────────────── */
+    --bg: #ffffff;
+    --surface: #f8f8f8;
+    --fg: #18181b;
+    --muted: #71717a;
+    --border: #e4e4e7;
+    --accent: #6457f0;
+    --font-display: system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-body: system-ui, -apple-system, "Segoe UI", sans-serif;
 
-  /* ── Accent states (A2) — derived from --accent ─────────────────── */
-  --accent-on: #ffffff;
-  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
-  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+    /* ── Accent states — derived from --accent ──────────────────────── */
+    --accent-on: #ffffff;
+    --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+    --accent-active: color-mix(in oklab, var(--accent), black 14%);
 
-  /* ── Semantic state — separate from the accent hue ──────────────── */
-  --success: #16a34a;
-  --warn: #eab308;
-  --danger: #dc2626;
+    /* ── Semantic state — separate from the accent hue ──────────────── */
+    --success: #16a34a;
+    --warn: #eab308;
+    --danger: #dc2626;
 
-  /* ── Richer tiers (B-slot) — alias to identity by default ───────── */
-  --fg-2: var(--fg);
-  --surface-warm: var(--surface);
-  --border-soft: var(--border);
-  --meta: var(--muted);
+    /* ── Derived tiers — adapt to any direction and theme ───────────── */
+    /* Second elevation step. Derived from --surface toward --fg, so in a
+       dark theme "raised" is lighter — depth via lightness, not shadow. */
+    --surface-2: color-mix(in oklab, var(--surface), var(--fg) 4%);
+    /* Tinted accent fill for pills, highlights, chart areas. */
+    --accent-soft: color-mix(in oklab, var(--accent), transparent 88%);
 
-  /* ── Monospace ──────────────────────────────────────────────────── */
-  --font-mono:
-    ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    /* ── Monospace ──────────────────────────────────────────────────── */
+    --font-mono:
+      ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
 
-  /* ── Spacing scale — 4px grid ───────────────────────────────────── */
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 20px;
-  --space-6: 24px;
-  --space-8: 32px;
-  --space-12: 48px;
+    /* ── Spacing scale — 4px grid ───────────────────────────────────── */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-8: 32px;
+    --space-12: 48px;
 
-  /* ── Radius scale ───────────────────────────────────────────────── */
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-pill: 9999px;
+    /* ── Radius scale ───────────────────────────────────────────────── */
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-pill: 9999px;
 
-  /* ── Elevation — three sanctioned levels, no fourth ─────────────── */
-  --elev-flat: none;
-  --elev-ring: 0 0 0 1px var(--border);
-  --elev-raised: 0 2px 8px color-mix(in oklab, var(--fg), transparent 92%);
+    /* ── Elevation — three sanctioned levels, no fourth ─────────────── */
+    --elev-flat: none;
+    --elev-ring: 0 0 0 1px var(--border);
+    --elev-raised: 0 2px 8px color-mix(in oklab, var(--fg), transparent 92%);
 
-  /* ── Focus — layered outside the element via box-shadow ─────────── */
-  --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 70%);
+    /* ── Focus — layered outside the element via box-shadow ─────────── */
+    --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 70%);
 
-  /* ── Motion — short, purposeful, stable easing ──────────────────── */
-  --motion-fast: 150ms;
-  --motion-base: 200ms;
-  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+    /* ── Motion — short, purposeful, stable easing ──────────────────── */
+    --motion-fast: 150ms; /* feedback: press, toggle, color */
+    --motion-base: 200ms; /* state: menu, tooltip, hover */
+    --motion-slow: 400ms; /* layout: accordion, drawer, modal */
+    --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+    --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1); /* entrances, settle */
+    --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1); /* emphasis, sparingly */
 
-  /* ── Layout structure ───────────────────────────────────────────── */
-  --container-max: 72ch;
-  --section-y: var(--space-12);
+    /* ── Layout structure ───────────────────────────────────────────── */
+    --container-max: 72ch;
+    --section-y: var(--space-12);
 
-  /* ── Type scale — modular, 1.250 ratio (major third) ────────────── */
-  --text-xs: 0.75rem; /* 12px — captions, eyebrows */
-  --text-sm: 0.875rem; /* 14px — secondary, metadata */
-  --text-base: 1rem; /* 16px — body */
-  --text-lg: 1.25rem; /* 20px — lead */
-  --text-xl: 1.5rem; /* 24px — h3 */
-  --text-2xl: 2rem; /* 32px — h2 */
-  --text-3xl: 2.5rem; /* 40px — h1 */
-  --text-4xl: 3.5rem; /* 56px — display */
+    /* ── Type scale — modular, 1.250 ratio (major third) ────────────── */
+    --text-xs: 0.75rem; /* 12px — captions, eyebrows */
+    --text-sm: 0.875rem; /* 14px — secondary, metadata */
+    --text-base: 1rem; /* 16px — body */
+    --text-lg: 1.25rem; /* 20px — lead */
+    --text-xl: 1.5rem; /* 24px — h3 */
+    --text-2xl: 2rem; /* 32px — h2 */
+    --text-3xl: 2.5rem; /* 40px — h1 */
+    --text-4xl: 3.5rem; /* 56px — display, fixed */
+    /* Fluid hero size for brand-register pages. Caps at 72px — well under
+       the 6rem shouting ceiling — and stays 2-line-safe at 360px. */
+    --text-display: clamp(2.5rem, 1.6rem + 3vw, 4.5rem);
+
+    /* ── Type craft ─────────────────────────────────────────────────── */
+    --tracking-caps: 0.08em; /* all-caps / small-caps labels */
+    --leading-display: 1.1;
+    --leading-body: 1.6;
+  }
+
+  /* OS-dark tier: covers the pre-stamp first frame and JS-off viewers.
+     Once the viewer stamps data-theme (it always does when JS runs), the
+     blocks below take over. */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #131316;
+      --surface: #1c1c21;
+      --fg: #e7e7ea;
+      --muted: #9a9aa2;
+      --border: #2e2e33;
+      --accent: #8d82f5;
+    }
+  }
+
+  /* Dark theme: override identity tokens only. State/structure carry over. */
+  :root[data-theme="dark"] {
+    --bg: #131316;
+    --surface: #1c1c21;
+    --fg: #e7e7ea;
+    --muted: #9a9aa2;
+    --border: #2e2e33;
+    --accent: #8d82f5;
+  }
+
+  /* Light theme: explicit so data-theme="light" wins over OS-dark. Your
+     unlayered direction override still beats this block. */
+  :root[data-theme="light"] {
+    --bg: #ffffff;
+    --surface: #f8f8f8;
+    --fg: #18181b;
+    --muted: #71717a;
+    --border: #e4e4e7;
+    --accent: #6457f0;
+  }
 }
 
-/* Dark theme: override identity tokens only. State/structure carry over. */
-:root[data-theme="dark"] {
-  --bg: #131316;
-  --surface: #1c1c21;
-  --fg: #e7e7ea;
-  --muted: #9a9aa2;
-  --border: #2e2e33;
-  --accent: #8d82f5;
-}
-
-/* Light theme: explicit so data-theme="light" wins over OS-dark. */
-:root[data-theme="light"] {
-  --bg: #ffffff;
-  --surface: #f8f8f8;
-  --fg: #18181b;
-  --muted: #71717a;
-  --border: #e4e4e7;
-  --accent: #6457f0;
+/* Bind the contract to the canvas. Without this, the viewer skeleton's own
+   background/font stay in charge and a direction's --bg/--font-body never
+   actually repaint the page. Deliberately OUTSIDE the layer: it must beat
+   the viewer's unlayered reset by source order. */
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  line-height: var(--leading-body);
 }

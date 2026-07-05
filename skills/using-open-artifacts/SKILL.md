@@ -50,20 +50,29 @@ Workflow: (1) understand the brief — output kind, fidelity, audience, any
 brand/design system; (2) explore resources — if the project has a design
 system (tokens, theme, component styles), read it fully and apply it;
 precedence is the user's words, then the project's system, then your choices;
-(3) plan — sketch 4–6 named palette values, type roles, a one-sentence
-layout concept, and vocalize the system before building; (4) build with real
-content, never lorem ipsum; (5) verify once at the end — re-read your own
-output, `grep` for unclosed tags / dangling `<script>`, trace the main
-interaction. Do not loop on renders.
+(3) plan out loud — a one-line design read ("Reading this as: X for Y, in a
+Z direction"), the scene sentence that picks light vs dark, 4–6 named
+palette values, type roles, a one-sentence layout concept; (4) build with
+real content, never lorem ipsum; (5) run the ship gate from `design.md`
+once at the end — structural grep, the P0 checklist (contrast in both
+themes, 360px, banned tropes, states, reduced motion, copy audit), then the
+five-dimension critique (philosophy / hierarchy / execution / specificity /
+restraint) — fix anything under 3/5, re-score once, publish. Do not loop on
+renders.
 
 **Read `${CLAUDE_SKILL_DIR}/references/design.md` before writing a page.** It
-has the full design philosophy, the anti-AI-slop tropes to avoid, a shared
-token contract (`${CLAUDE_SKILL_DIR}/references/tokens.css` — paste it into
-your `<style>` first, then override identity tokens per direction), a
+has the full design philosophy: the brand-vs-product register split (earned
+familiarity vs distinctiveness), the anti-AI-slop bans, a shared token
+contract (`${CLAUDE_SKILL_DIR}/references/tokens.css` — paste it into your
+`<style>` first, then override identity tokens per direction), an
+installed-font specimen library (the CSP blocks *downloading* fonts, not the
+OS library — Iowan, Charter, Avenir, Optima and friends are available), a
 5-direction library (Editorial / Modern minimal / Human / Tech utility /
-Brutalist) with ready-to-paste OKLch palettes and font stacks for when no
-brand is specified, a component contract (buttons/cards/inputs/tables/pills
-written against tokens), and the hard constraints below.
+Brutalist) with ready-to-paste OKLch palettes, guidance for visual material
+under the CSP (SVG charts/diagrams/typographic set-pieces instead of
+text-only slabs), a component contract written against tokens, the viewer
+frame specifics (sticky header height, theme stamping), and the ship gate
+run before every publish.
 
 ### Production level (1 / 2 / 3)
 
@@ -102,9 +111,10 @@ images, fetch/XHR/WebSockets):
 - Do not use localStorage/sessionStorage (the sandbox blocks them); keep
   state in memory.
 - Include a concise `<title>` — it becomes the artifact title.
-- Support both themes: style with `@media (prefers-color-scheme: dark)` AND
-  `:root[data-theme="dark"]` / `:root[data-theme="light"]` overrides (a theme
-  toggle stamps `data-theme` on the root element and must win both ways).
+- Support both themes: paste the token contract (`references/tokens.css`) —
+  it handles OS preference and the viewer's `data-theme` stamping via
+  `@layer`. Your direction override goes below it, unlayered: a `:root`
+  block (light) plus a `:root[data-theme="dark"]` block, both mandatory.
 - Responsive: no horizontal body scroll; wide tables/code get their own
   `overflow-x: auto` container.
 - Markdown files (`.md`) are rendered client-side; HTML is best for anything
@@ -113,11 +123,14 @@ images, fetch/XHR/WebSockets):
 **Avoid AI-slop tropes** (`design.md` has the full match-and-refuse list):
 side-stripe accent borders, gradient text (`background-clip: text`), decorative
 glassmorphism, identical card grids, the hero-metric template, an uppercase
-eyebrow or `01 / 02 / 03` marker above every section, and headings that
-overflow at mobile width. Verify contrast (body ≥ 4.5:1) and never ship muted
-gray on a tinted near-white. Modern CSS is fully available inline —
-`text-wrap: pretty/balance`, CSS Grid, container queries, `color-mix()`,
-`:has()`, view transitions, `clamp()` for fluid type.
+eyebrow or `01 / 02 / 03` marker above every section, headings that overflow
+at mobile width, and invented content — no fake metrics, testimonials, or
+"Acme Corp"; an honest placeholder beats a fake stat. Verify contrast (body
+≥ 4.5:1 in both themes) and never ship muted gray on a tinted near-white.
+Full-viewport sections use `min-height: calc(100dvh - var(--oa-header-h,
+2.5rem))` — the viewer adds a sticky header. Modern CSS is fully available
+inline — `text-wrap: pretty/balance`, CSS Grid, container queries,
+`color-mix()`, `:has()`, view transitions, `clamp()` for fluid type.
 
 ## Publishing
 
