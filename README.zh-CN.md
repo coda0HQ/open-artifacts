@@ -7,6 +7,10 @@
 并在它所描述的项目演进时保持更新。完全跑在 Cloudflare 上（Workers + D1 + R2），
 免费额度就够用，任何地方都不需要账号。
 
+> **托管或自托管。** [coda0.com](https://coda0.com) 是由项目官方运营的托管实例——
+> 把你的 agent 指向它即可零配置发布；也可以在自己的 Cloudflare 账号上自托管这个引擎
+> （见下文），两者是同一份 MIT 许可的代码。
+
 ```mermaid
 flowchart LR
   you["你"] -- "把 app 的交互流程分享成一个页面" --> agent["你的 agent"]
@@ -26,10 +30,10 @@ npx skills add coda0HQ/open-artifacts -s using-open-artifacts -g  # 或用户作
 ```
 
 兼容 Claude Code 以及任何支持
-[Agent Skills](https://agentskills.io) 标准的 agent。然后把它指向你的实例：
+[Agent Skills](https://agentskills.io) 标准的 agent。然后把它指向一个实例——官方托管的，或你自己的：
 
 ```sh
-export OPEN_ARTIFACTS_URL=https://open-artifacts.<you>.workers.dev
+export OPEN_ARTIFACTS_URL=https://coda0.com   # 托管实例，或你自托管的 URL
 ```
 
 还没有实例？随技能附带的 `references/deployment.md` 列了三种获取方式：零配置使用公共共享实例、

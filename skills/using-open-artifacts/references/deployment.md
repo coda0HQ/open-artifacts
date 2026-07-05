@@ -4,9 +4,10 @@ The skill publishes to an **Open Artifacts instance** — a Cloudflare Worker
 that stores content and serves pages. You need to point the skill at one.
 Three ways to get an instance; pick based on your trust/storage needs.
 
-## A — Use the public instance (zero setup)
+## A — Use coda0.com, the official hosted instance (zero setup)
 
-Point the skill at the shared instance and start publishing:
+[coda0.com](https://coda0.com) is the managed instance of Open Artifacts, run
+by the project. Point the skill at it and start publishing:
 
 ```sh
 export OPEN_ARTIFACTS_URL=https://coda0.com

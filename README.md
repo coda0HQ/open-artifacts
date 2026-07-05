@@ -8,6 +8,11 @@ URLs, protect them with passwords (zero-knowledge, client-side encryption),
 and keep them updated as the project they describe evolves. Runs entirely on
 Cloudflare (Workers + D1 + R2), fits in the free tier, no accounts anywhere.
 
+> **Hosted or self-hosted.** [coda0.com](https://coda0.com) is the official
+> managed instance, run by the project — point your agent at it for zero-setup
+> publishing. Or self-host the engine on your own Cloudflare account (see
+> below); it's the same MIT-licensed code either way.
+
 ```mermaid
 flowchart LR
   you["you"] -- "share the app's interaction flows as a page" --> agent["your agent"]
@@ -27,11 +32,11 @@ npx skills add coda0HQ/open-artifacts -s using-open-artifacts -g  # or user scop
 ```
 
 Works with Claude Code and any agent supporting the
-[Agent Skills](https://agentskills.io) standard. Then point it at your
-instance:
+[Agent Skills](https://agentskills.io) standard. Then point it at an instance —
+the hosted one, or your own:
 
 ```sh
-export OPEN_ARTIFACTS_URL=https://open-artifacts.<you>.workers.dev
+export OPEN_ARTIFACTS_URL=https://coda0.com   # hosted; or your self-hosted URL
 ```
 
 No instance yet? `references/deployment.md` (bundled with the skill) lists

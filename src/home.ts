@@ -5,10 +5,10 @@
 // deploy never runs this, so its landing page stays "Open Artifacts".
 
 const CODA0_DESCRIPTION =
-  "coda0 — the hosted home for Open Artifacts. Publish self-contained HTML and Markdown pages from any coding agent, share by URL, protect with a password, and keep them in sync as your project evolves.";
+  "coda0 — the managed, hosted home for the open-source Open Artifacts engine. Publish self-contained HTML and Markdown pages from any coding agent, share by URL, protect with a password, and keep them in sync as your project evolves.";
 
 const CODA0_LEAD =
-  'The hosted home for <a href="https://github.com/coda0HQ/open-artifacts" target="_blank" rel="noopener noreferrer">Open Artifacts</a> — publish self-contained HTML and Markdown pages from any coding agent, share by URL, protect with a password, and keep them in sync as your project evolves.';
+  'The managed home for <a href="https://github.com/coda0HQ/open-artifacts" target="_blank" rel="noopener noreferrer">Open Artifacts</a> — the open-source engine that lets any coding agent publish self-contained pages to shareable URLs, password-protect them, and keep them in sync. Hosted here, or self-host it yourself.';
 
 // True only for the hosted SaaS host. Keyed on the request host (mirroring the
 // landing page's own rule) so the coda0 brand appears on coda0.com and never on
