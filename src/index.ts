@@ -7,6 +7,7 @@ import {
   parseVersionParam,
   storeFrom,
 } from "./api";
+import { brandHomepageForCoda0, isCoda0Host } from "./home";
 import { renderOgCardPng } from "./og";
 import {
   badVersionPage,
@@ -19,6 +20,19 @@ import {
 const app = new Hono<AppContext>();
 
 app.route("/api", api);
+
+// The landing page ships as a neutral "Open Artifacts" static asset. The Worker
+// runs first for "/" (wrangler.jsonc run_worker_first) so it can rebrand the
+// asset to "coda0" in the HTML itself on the hosted host — for crawlers and
+// no-JS visitors, not just after the client script. Every other deploy returns
+// the asset untouched, so a self-hoster's page stays "Open Artifacts".
+app.get("/", async (c) => {
+  const asset = await c.env.ASSETS.fetch(c.req.raw);
+  if (!isCoda0Host(new URL(c.req.url).hostname)) return asset;
+  if (!(asset.headers.get("content-type") ?? "").includes("text/html"))
+    return asset;
+  return brandHomepageForCoda0(asset);
+});
 
 app.get("/a/:id", async (c) => {
   const store = storeFrom(c);

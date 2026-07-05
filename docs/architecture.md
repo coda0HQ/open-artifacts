@@ -182,8 +182,11 @@ out of scope for v1 (documented).
 - Vitest 4.1 + @cloudflare/vitest-pool-workers 0.18 (`cloudflareTest()` Vite
   plugin; integration via `exports.default.fetch()` from `cloudflare:workers`)
 - Biome, pnpm, TypeScript strict; `wrangler types` generates `Env`
-- Static assets (`public/`) for the landing page with
-  `run_worker_first: ["/api/*", "/a/*"]`
+- Static assets (`public/`) for the landing page. `run_worker_first` includes
+  `/` so the Worker fetches the asset via the `ASSETS` binding and, only on the
+  hosted host (`coda0.com`), rewrites its brand tokens to "coda0" with
+  `HTMLRewriter` (`src/home.ts`) — server-side, so crawlers and no-JS visitors
+  see the SaaS identity. Every other deploy returns the asset untouched.
 
 ## Limits
 

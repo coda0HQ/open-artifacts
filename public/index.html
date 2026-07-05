@@ -291,26 +291,6 @@ footer .sep{color:var(--border-strong);margin:0 .5rem}
   });
   paint();
 
-  // Two faces, one file. On the hosted instance (coda0.com) the page presents
-  // as "coda0"; every other deploy — a self-hoster's Worker — keeps the neutral
-  // "Open Artifacts" identity baked into the static HTML. This mirrors the
-  // "same codebase, behavior by config" invariant the Worker itself follows,
-  // and never leaks the SaaS brand onto a forked deploy. The repo link in the
-  // topbar and footer is always present, so the open source is reachable either
-  // way; on coda0 the lead names it explicitly.
-  var host=location.hostname;
-  if(host==="coda0.com"||host==="www.coda0.com"){
-    document.title="coda0";
-    var nameEl=document.querySelector(".brand-name");
-    if(nameEl)nameEl.textContent="coda0";
-    var chipEl=document.querySelector(".chip-text");
-    if(chipEl)chipEl.textContent="hosted instance";
-    var titleEl=document.getElementById("hero-title");
-    if(titleEl)titleEl.textContent="coda0";
-    var leadEl=document.getElementById("hero-lead");
-    if(leadEl)leadEl.innerHTML='The hosted home for <a href="https://github.com/FradSer/open-artifacts" target="_blank" rel="noopener noreferrer">Open Artifacts</a> — publish self-contained HTML and Markdown pages from any coding agent, share by URL, protect with a password, and keep them in sync as your project evolves.';
-  }
-
   // Fill the OPEN_ARTIFACTS_URL command with this instance's real origin.
   var origin=location.origin;
   var originEl=document.querySelector("#env-cmd .origin");
