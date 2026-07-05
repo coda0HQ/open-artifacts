@@ -21,8 +21,8 @@ flowchart LR
 ## 给你的 agent 装上技能
 
 ```sh
-npx skills add FradSer/open-artifacts -s using-open-artifacts   # 项目作用域（.claude/skills/）
-npx skills add FradSer/open-artifacts -s using-open-artifacts -g  # 或用户作用域
+npx skills add coda0HQ/open-artifacts -s using-open-artifacts   # 项目作用域（.claude/skills/）
+npx skills add coda0HQ/open-artifacts -s using-open-artifacts -g  # 或用户作用域
 ```
 
 兼容 Claude Code 以及任何支持
@@ -57,7 +57,7 @@ node .claude/skills/using-open-artifacts/scripts/artifact.mjs create page.html \
 ## 部署你自己的实例
 
 ```sh
-git clone https://github.com/FradSer/open-artifacts && cd open-artifacts
+git clone https://github.com/coda0HQ/open-artifacts && cd open-artifacts
 pnpm install
 npx wrangler d1 create open-artifacts        # 把 database_id 写进 wrangler.jsonc
 npx wrangler r2 bucket create open-artifacts-content

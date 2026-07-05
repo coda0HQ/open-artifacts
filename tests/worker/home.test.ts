@@ -45,6 +45,6 @@ describe("brandHomepageForCoda0", () => {
   it("names the open-artifacts repo in the rewritten hero lead", async () => {
     const html = await brand(SAMPLE);
     expect(html).toContain("The hosted home for");
-    expect(html).toContain('href="https://github.com/FradSer/open-artifacts"');
+    expect(html).toContain('href="https://github.com/coda0HQ/open-artifacts"');
   });
 });

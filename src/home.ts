@@ -8,7 +8,7 @@ const CODA0_DESCRIPTION =
   "coda0 — the hosted home for Open Artifacts. Publish self-contained HTML and Markdown pages from any coding agent, share by URL, protect with a password, and keep them in sync as your project evolves.";
 
 const CODA0_LEAD =
-  'The hosted home for <a href="https://github.com/FradSer/open-artifacts" target="_blank" rel="noopener noreferrer">Open Artifacts</a> — publish self-contained HTML and Markdown pages from any coding agent, share by URL, protect with a password, and keep them in sync as your project evolves.';
+  'The hosted home for <a href="https://github.com/coda0HQ/open-artifacts" target="_blank" rel="noopener noreferrer">Open Artifacts</a> — publish self-contained HTML and Markdown pages from any coding agent, share by URL, protect with a password, and keep them in sync as your project evolves.';
 
 // True only for the hosted SaaS host. Keyed on the request host (mirroring the
 // landing page's own rule) so the coda0 brand appears on coda0.com and never on

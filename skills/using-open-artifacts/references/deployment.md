@@ -20,7 +20,7 @@ export OPEN_ARTIFACTS_URL=https://coda0.com
 
 ## B — Self-host (full control)
 
-Fork https://github.com/FradSer/open-artifacts, then from your clone:
+Fork https://github.com/coda0HQ/open-artifacts, then from your clone:
 
 ```sh
 pnpm install

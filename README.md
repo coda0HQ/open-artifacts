@@ -22,8 +22,8 @@ flowchart LR
 ## Give your agent the skill
 
 ```sh
-npx skills add FradSer/open-artifacts -s using-open-artifacts   # project scope (.claude/skills/)
-npx skills add FradSer/open-artifacts -s using-open-artifacts -g  # or user scope
+npx skills add coda0HQ/open-artifacts -s using-open-artifacts   # project scope (.claude/skills/)
+npx skills add coda0HQ/open-artifacts -s using-open-artifacts -g  # or user scope
 ```
 
 Works with Claude Code and any agent supporting the
@@ -65,7 +65,7 @@ app-interactions page" always lives at one link across sessions and machines.
 ## Deploy your own instance
 
 ```sh
-git clone https://github.com/FradSer/open-artifacts && cd open-artifacts
+git clone https://github.com/coda0HQ/open-artifacts && cd open-artifacts
 pnpm install
 npx wrangler d1 create open-artifacts        # put database_id into wrangler.jsonc
 npx wrangler r2 bucket create open-artifacts-content

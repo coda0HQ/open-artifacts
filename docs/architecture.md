@@ -9,7 +9,7 @@ describe evolves.
 ## Components
 
 ```
-                 npx skills add FradSer/open-artifacts
+                 npx skills add coda0HQ/open-artifacts
                                 │
 ┌─ user's project ──────────────▼─────────────┐
 │  .claude/skills/using-open-artifacts/       │
@@ -147,7 +147,7 @@ stays under the CPU cap.
 ## The skill and auto-updating artifacts
 
 Repo layout `skills/using-open-artifacts/{SKILL.md,scripts/artifact.mjs,references/design.md}`
-works with `npx skills add FradSer/open-artifacts` (vercel-labs/skills installs
+works with `npx skills add coda0HQ/open-artifacts` (vercel-labs/skills installs
 to `.claude/skills/` by default, `-g` for `~/.claude/skills/`; follows the
 Agent Skills standard so ~70 agents are supported).
 
