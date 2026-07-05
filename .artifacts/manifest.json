@@ -23,8 +23,7 @@
         "src/og.ts",
         "src/index.ts",
         "wrangler.jsonc",
-        "skills/using-open-artifacts/SKILL.md",
-        "skills/using-open-artifacts/scripts/artifact.mjs"
+        "skills/using-open-artifacts/**"
       ],
       "snapshot": {
         "README.md": "ab066bbb294ff0b0f7eed8faaf7277473c509e7657f201a0e09da45d3bd8a9ae",
@@ -39,12 +38,17 @@
         "src/og.ts": "6a98c992e5374ae2114260cf64e0dd440b7b8e24839a54e1687fd4127bf5f8ad",
         "src/index.ts": "9bdf4f58857316733b17f01f61745b71f4383e5048efe389eeec1be1b2850973",
         "wrangler.jsonc": "870a14d7bcf752797ea7417d223918de78806e038e7fa8e625a04a56734e9b74",
-        "skills/using-open-artifacts/SKILL.md": "09531129a41f873786916fb47a8b2127380915fd661d56bb22d3cafb4b8b5a68",
+        "skills/using-open-artifacts/SKILL.md": "e1e674c76f1083b511d9b13bdfa8ce59b462cce02aa7152cf6e0795eb15f446c",
+        "skills/using-open-artifacts/references/deployment.md": "6893035c6b9c099c7ad26a3ea180ef3d153ed237da75f8e81bf03532d479ae2c",
+        "skills/using-open-artifacts/references/design.md": "8d19289ef2c89444be5fd264870de3e7324b7fd23140a164e8d38cd330f81b4a",
+        "skills/using-open-artifacts/references/icons.md": "b6fa700da17590956a4feaf5f729583154597285dd51e194c2c3e59b319ca7c2",
+        "skills/using-open-artifacts/references/motion.md": "d1f7e5235e8ab85ad47235d64eec5f6a4439a169ccbd742bf19729be03dcd926",
+        "skills/using-open-artifacts/references/tokens.css": "4b8fbb4d82b1b8a09981f21ddd54bf90a54775def622d5c0ef6098dbb27ef581",
         "skills/using-open-artifacts/scripts/artifact.mjs": "6e60c6cf21fcb39a0e8620468a945e447a29fe8539de6b168cd0285fbab5e6c0"
       },
       "sourceFile": ".artifacts/sources/project-intro.html",
-      "version": 12,
-      "updatedAt": "2026-07-05T13:24:08.709Z"
+      "version": 15,
+      "updatedAt": "2026-07-05T14:52:31.276Z"
     }
   ]
 }

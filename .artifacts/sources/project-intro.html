@@ -2,6 +2,8 @@
   Design direction: BRUTALIST (Are.na / Yale) — PERMANENTLY LOCKED.
   Do not change direction on regenerate. Refresh content only; keep
   serif display + mono body + full-strength --fg borders + grid bg.
+  Token contract: @layer oa-tokens (see references/tokens.css); the
+  direction override below stays UNLAYERED so it wins in both themes.
   See skills/using-open-artifacts/references/design.md §Direction library.
 -->
 <title>Open Artifacts — self-hosted Claude Code Artifacts on Cloudflare</title>
@@ -9,116 +11,152 @@
 /*
  * Open Artifacts — shared design-token contract.
  *
- * Every artifact page binds this token set into :root, then a direction
- * (see design.md) overrides the identity tokens (--bg, --fg, --accent,
- * --font-display, --font-body). Structure and state tokens stay constant
- * across directions, so components written against this contract render
- * consistently no matter which direction is active.
+ * Paste this file verbatim at the top of your <style>, then write your
+ * direction overrides BELOW it, unlayered. The contract lives in
+ * `@layer oa-tokens`, and unlayered CSS always beats layered CSS — so your
+ * plain `:root { ... }` override wins over every block in here, including
+ * the explicit light block (which otherwise out-specifies a bare `:root`).
  *
- * Paste this block verbatim at the top of your <style>, then add the
- * chosen direction's :root overrides beneath it. Both light and dark
- * theme blocks must be defined (the viewer stamps data-theme on <html>).
+ * A direction override defines BOTH of these, always:
  *
- * Adapted from open-design's design-system token schema (A1/A2 layers),
- * retargeted to this project's strict no-external-requests CSP: no web
- * fonts are loaded, so font stacks are system-only or inlined @font-face.
+ *   :root { ... light identity tokens + fonts ... }
+ *   :root[data-theme="dark"] { ... dark identity tokens ... }
+ *
+ * Structure and state tokens stay constant across directions, so
+ * components written against this contract render consistently no matter
+ * which direction is active.
+ *
+ * Adapted from open-design's design-system token schema, retargeted to
+ * this project's strict no-external-requests CSP: no web fonts are
+ * loaded, so font stacks are installed-face or inlined @font-face only.
  */
 
-:root {
-  /* ── Identity (A1) — override per direction ─────────────────────── */
-  --bg: #ffffff;
-  --surface: #f8f8f8;
-  --fg: #18181b;
-  --muted: #71717a;
-  --border: #e4e4e7;
-  --accent: #6457f0;
-  --font-display: system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-body: system-ui, -apple-system, "Segoe UI", sans-serif;
+@layer oa-tokens {
+  :root {
+    /* ── Identity — override per direction ──────────────────────────── */
+    --bg: #ffffff;
+    --surface: #f8f8f8;
+    --fg: #18181b;
+    --muted: #71717a;
+    --border: #e4e4e7;
+    --accent: #6457f0;
+    --font-display: system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-body: system-ui, -apple-system, "Segoe UI", sans-serif;
 
-  /* ── Accent states (A2) — derived from --accent ─────────────────── */
-  --accent-on: #ffffff;
-  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
-  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+    /* ── Accent states — derived from --accent ──────────────────────── */
+    --accent-on: #ffffff;
+    --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+    --accent-active: color-mix(in oklab, var(--accent), black 14%);
 
-  /* ── Semantic state — separate from the accent hue ──────────────── */
-  --success: #16a34a;
-  --warn: #eab308;
-  --danger: #dc2626;
+    /* ── Semantic state — separate from the accent hue ──────────────── */
+    --success: #16a34a;
+    --warn: #eab308;
+    --danger: #dc2626;
 
-  /* ── Richer tiers (B-slot) — alias to identity by default ───────── */
-  --fg-2: var(--fg);
-  --surface-warm: var(--surface);
-  --border-soft: var(--border);
-  --meta: var(--muted);
+    /* ── Derived tiers — adapt to any direction and theme ───────────── */
+    --surface-2: color-mix(in oklab, var(--surface), var(--fg) 4%);
+    --accent-soft: color-mix(in oklab, var(--accent), transparent 88%);
 
-  /* ── Monospace ──────────────────────────────────────────────────── */
-  --font-mono:
-    ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    /* ── Monospace ──────────────────────────────────────────────────── */
+    --font-mono:
+      ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
 
-  /* ── Spacing scale — 4px grid ───────────────────────────────────── */
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 20px;
-  --space-6: 24px;
-  --space-8: 32px;
-  --space-12: 48px;
+    /* ── Spacing scale — 4px grid ───────────────────────────────────── */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-8: 32px;
+    --space-12: 48px;
 
-  /* ── Radius scale ───────────────────────────────────────────────── */
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-pill: 9999px;
+    /* ── Radius scale ───────────────────────────────────────────────── */
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-pill: 9999px;
 
-  /* ── Elevation — three sanctioned levels, no fourth ─────────────── */
-  --elev-flat: none;
-  --elev-ring: 0 0 0 1px var(--border);
-  --elev-raised: 0 2px 8px color-mix(in oklab, var(--fg), transparent 92%);
+    /* ── Elevation — three sanctioned levels, no fourth ─────────────── */
+    --elev-flat: none;
+    --elev-ring: 0 0 0 1px var(--border);
+    --elev-raised: 0 2px 8px color-mix(in oklab, var(--fg), transparent 92%);
 
-  /* ── Focus — layered outside the element via box-shadow ─────────── */
-  --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 70%);
+    /* ── Focus — layered outside the element via box-shadow ─────────── */
+    --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 70%);
 
-  /* ── Motion — short, purposeful, stable easing ──────────────────── */
-  --motion-fast: 150ms;
-  --motion-base: 200ms;
-  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+    /* ── Motion — short, purposeful, stable easing ──────────────────── */
+    --motion-fast: 150ms; /* feedback: press, toggle, color */
+    --motion-base: 200ms; /* state: menu, tooltip, hover */
+    --motion-slow: 400ms; /* layout: accordion, drawer, modal */
+    --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+    --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1); /* entrances, settle */
+    --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1); /* emphasis, sparingly */
 
-  /* ── Layout structure ───────────────────────────────────────────── */
-  --container-max: 72ch;
-  --section-y: var(--space-12);
+    /* ── Layout structure ───────────────────────────────────────────── */
+    --container-max: 72ch;
+    --section-y: var(--space-12);
 
-  /* ── Type scale — modular, 1.250 ratio (major third) ────────────── */
-  --text-xs: 0.75rem; /* 12px — captions, eyebrows */
-  --text-sm: 0.875rem; /* 14px — secondary, metadata */
-  --text-base: 1rem; /* 16px — body */
-  --text-lg: 1.25rem; /* 20px — lead */
-  --text-xl: 1.5rem; /* 24px — h3 */
-  --text-2xl: 2rem; /* 32px — h2 */
-  --text-3xl: 2.5rem; /* 40px — h1 */
-  --text-4xl: 3.5rem; /* 56px — display */
+    /* ── Type scale — modular, 1.250 ratio (major third) ────────────── */
+    --text-xs: 0.75rem; /* 12px — captions, eyebrows */
+    --text-sm: 0.875rem; /* 14px — secondary, metadata */
+    --text-base: 1rem; /* 16px — body */
+    --text-lg: 1.25rem; /* 20px — lead */
+    --text-xl: 1.5rem; /* 24px — h3 */
+    --text-2xl: 2rem; /* 32px — h2 */
+    --text-3xl: 2.5rem; /* 40px — h1 */
+    --text-4xl: 3.5rem; /* 56px — display, fixed */
+    --text-display: clamp(2.5rem, 1.6rem + 3vw, 4.5rem);
+
+    /* ── Type craft ─────────────────────────────────────────────────── */
+    --tracking-caps: 0.08em; /* all-caps / small-caps labels */
+    --leading-display: 1.1;
+    --leading-body: 1.6;
+  }
+
+  /* OS-dark tier: covers the pre-stamp first frame and JS-off viewers. */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #131316;
+      --surface: #1c1c21;
+      --fg: #e7e7ea;
+      --muted: #9a9aa2;
+      --border: #2e2e33;
+      --accent: #8d82f5;
+    }
+  }
+
+  /* Dark theme: override identity tokens only. State/structure carry over. */
+  :root[data-theme="dark"] {
+    --bg: #131316;
+    --surface: #1c1c21;
+    --fg: #e7e7ea;
+    --muted: #9a9aa2;
+    --border: #2e2e33;
+    --accent: #8d82f5;
+  }
+
+  /* Light theme: explicit so data-theme="light" wins over OS-dark. Your
+     unlayered direction override still beats this block. */
+  :root[data-theme="light"] {
+    --bg: #ffffff;
+    --surface: #f8f8f8;
+    --fg: #18181b;
+    --muted: #71717a;
+    --border: #e4e4e7;
+    --accent: #6457f0;
+  }
 }
 
-/* Dark theme: override identity tokens only. State/structure carry over. */
-:root[data-theme="dark"] {
-  --bg: #131316;
-  --surface: #1c1c21;
-  --fg: #e7e7ea;
-  --muted: #9a9aa2;
-  --border: #2e2e33;
-  --accent: #8d82f5;
+/* Bind the contract to the canvas. Deliberately OUTSIDE the layer. */
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  line-height: var(--leading-body);
 }
 
-/* Light theme: explicit so data-theme="light" wins over OS-dark. */
-:root[data-theme="light"] {
-  --bg: #ffffff;
-  --surface: #f8f8f8;
-  --fg: #18181b;
-  --muted: #71717a;
-  --border: #e4e4e7;
-  --accent: #6457f0;
-}
-
+/* ── Direction override — Brutalist (LOCKED), unlayered ─────────────── */
 :root{
   --bg:oklch(98% 0.004 240); --surface:oklch(100% 0 0);
   --fg:oklch(15% 0.02 100); --muted:oklch(40% 0.02 100);
@@ -126,33 +164,34 @@
   --font-display:'Times New Roman','Iowan Old Style',Georgia,serif;
   --font-body:ui-monospace,'IBM Plex Mono','JetBrains Mono',Menlo,monospace;
   --container-max:64rem;
-  --ease-spring:cubic-bezier(0.34,1.56,0.64,1);
-  --ease-out-expo:cubic-bezier(0.16,1,0.3,1);
 }
 :root[data-theme="dark"]{--bg:oklch(15% 0.02 100);--surface:oklch(20% 0.02 100);--fg:oklch(94% 0.004 100);--muted:oklch(64% 0.008 100);--border:oklch(94% 0.004 100);--accent:oklch(68% 0.22 25)}
-:root[data-theme="light"]{--bg:oklch(98% 0.004 240);--surface:oklch(100% 0 0);--fg:oklch(15% 0.02 100);--muted:oklch(40% 0.02 100);--border:oklch(15% 0.02 100);--accent:oklch(60% 0.22 25)}
 
-*{scroll-behavior:smooth;scroll-margin-top:5rem}
-body{background:var(--bg);color:var(--fg);font-family:var(--font-body);font-size:var(--text-base);line-height:1.65;margin:0;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+/* ── Page styles ────────────────────────────────────────────────────── */
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+[id]{scroll-margin-top:calc(var(--oa-header-h,2.5rem) + 3.5rem)}
+body{font-size:var(--text-base);line-height:1.65;margin:0;-webkit-font-smoothing:antialiased;overflow-x:hidden}
 svg.ic{width:1em;height:1em;fill:currentColor;vertical-align:-.125em;flex-shrink:0}
 
 .bg-grid{position:fixed;inset:0;z-index:-1;pointer-events:none;background-image:linear-gradient(var(--border) 1px,transparent 1px),linear-gradient(90deg,var(--border) 1px,transparent 1px);background-size:48px 48px;opacity:.04;mask-image:radial-gradient(ellipse at center,#000 30%,transparent 75%)}
 
 .wrap{max-width:var(--container-max);margin:0 auto;padding:var(--space-12) var(--space-6) var(--space-12)}
 
-nav.tabs{position:sticky;top:0;z-index:50;background:var(--bg);border-bottom:2px solid var(--fg);margin:0 calc(50% - 50vw);padding:var(--space-3) max(var(--space-6),calc(50vw - var(--container-max)/2))}
+nav.tabs{position:sticky;top:var(--oa-header-h,2.5rem);z-index:50;background:var(--bg);border-bottom:2px solid var(--fg);margin:0 calc(50% - 50vw);padding:var(--space-3) max(var(--space-6),calc(50vw - var(--container-max)/2))}
 nav.tabs .inner{max-width:var(--container-max);margin:0 auto;display:flex;gap:var(--space-1);overflow-x:auto;scrollbar-width:none}
 nav.tabs .inner::-webkit-scrollbar{display:none}
-nav.tabs a{font-family:var(--font-mono);font-size:var(--text-xs);color:var(--muted);text-decoration:none;padding:var(--space-2) var(--space-3);white-space:nowrap;transition:color var(--motion-fast) var(--ease-out-expo),background var(--motion-fast);text-transform:uppercase;letter-spacing:.06em;display:inline-flex;align-items:center;gap:.4em}
+nav.tabs a{font-family:var(--font-mono);font-size:var(--text-xs);color:var(--muted);text-decoration:none;padding:var(--space-2) var(--space-3);white-space:nowrap;transition:color var(--motion-fast) var(--ease-out-expo),background var(--motion-fast);text-transform:uppercase;letter-spacing:var(--tracking-caps);display:inline-flex;align-items:center;gap:.4em}
 nav.tabs a:hover{color:var(--fg)}
 nav.tabs a.active{color:var(--bg);background:var(--fg)}
+nav.tabs a:focus-visible{outline:none;box-shadow:var(--focus-ring)}
 
-header.hero{min-height:78vh;display:flex;flex-direction:column;justify-content:center;padding:var(--space-8) 0;margin-bottom:var(--space-12)}
+header.hero{min-height:78dvh;display:flex;flex-direction:column;justify-content:center;padding:var(--space-8) 0;margin-bottom:var(--space-12)}
 .eyebrow{font-family:var(--font-mono);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.15em;color:var(--accent);margin:0 0 var(--space-4);display:flex;align-items:center;gap:.5em}
 h1{font-family:var(--font-display);font-size:clamp(4rem,12vw,9rem);font-weight:900;letter-spacing:-.04em;line-height:.85;margin:0 0 var(--space-6);text-wrap:balance}
 h1 .accent{color:var(--accent);font-style:italic}
 .lede{font-size:var(--text-lg);color:var(--muted);max-width:48ch;margin:0;line-height:1.5}
-.lede strong{color:var(--fg);font-weight:600;background:linear-gradient(transparent 60%,color-mix(in oklab,var(--accent),transparent 75%) 60%)}
+.lede strong{color:var(--fg);font-weight:600;background:linear-gradient(transparent 60%,var(--accent-soft) 60%)}
 
 .cta{display:flex;flex-wrap:wrap;gap:var(--space-3);margin-top:var(--space-8)}
 .btn{display:inline-flex;align-items:center;gap:.5rem;background:var(--fg);color:var(--bg);padding:var(--space-3) var(--space-5);border:2px solid var(--fg);font:inherit;font-weight:600;text-decoration:none;cursor:pointer;transition:transform var(--motion-fast) var(--ease-spring),background var(--motion-fast),color var(--motion-fast);text-transform:uppercase;letter-spacing:.04em;font-size:var(--text-sm)}
@@ -168,32 +207,35 @@ h1 .accent{color:var(--accent);font-style:italic}
 [data-rise]{opacity:0;animation:rise-in .7s var(--ease-out-expo) forwards;animation-delay:calc(var(--i,0) * 90ms)}
 @media (prefers-reduced-motion:reduce){[data-rise]{opacity:1;animation:none}}
 
-[data-reveal]{opacity:0;transform:translateY(32px);transition:opacity .8s var(--ease-out-expo),transform .8s var(--ease-out-expo)}
-[data-reveal].in{opacity:1;transform:none}
-[data-reveal].in > *{animation:rise-in .6s var(--ease-out-expo) backwards;animation-delay:calc(var(--i,0) * 70ms)}
-@media (prefers-reduced-motion:reduce){[data-reveal]{opacity:1;transform:none;transition:none}}
+/* Hidden state gated on .js (added by script line 1) so no-JS renderers,
+   print, and headless screenshots get full visibility by default. */
+.js [data-reveal]{opacity:0;transform:translateY(32px);transition:opacity .8s var(--ease-out-expo),transform .8s var(--ease-out-expo)}
+.js [data-reveal].in{opacity:1;transform:none}
+.js [data-reveal].in > *{animation:rise-in .6s var(--ease-out-expo) backwards;animation-delay:calc(var(--i,0) * 70ms)}
+@media (prefers-reduced-motion:reduce){.js [data-reveal]{opacity:1;transform:none;transition:none}}
 
 section{margin-bottom:var(--space-12)}
 section > h2{font-family:var(--font-display);font-size:clamp(2.5rem,6vw,4rem);font-weight:900;letter-spacing:-.03em;margin:0 0 var(--space-6);line-height:.9;display:flex;align-items:baseline;gap:var(--space-4);border-bottom:2px solid var(--fg);padding-bottom:var(--space-3)}
 section > h2 .idx{font-family:var(--font-mono);font-size:var(--text-xs);color:var(--accent);font-weight:400;letter-spacing:.1em;flex-shrink:0}
 
-.features{display:grid;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));gap:0;border:2px solid var(--fg)}
+/* 18rem floor → 3/2/1 columns; six cells divide evenly at every width */
+.features{display:grid;grid-template-columns:repeat(auto-fit,minmax(18rem,1fr));gap:0;border:2px solid var(--fg)}
 .feature{background:var(--surface);padding:var(--space-5);border:1px solid var(--border);transition:background var(--motion-fast),color var(--motion-fast);position:relative;overflow:hidden}
 .feature::before{content:"";position:absolute;inset:0;background:var(--accent);transform:translateY(101%);transition:transform var(--motion-base) var(--ease-out-expo);z-index:0}
 .feature:hover::before{transform:translateY(0)}
 .feature:hover{color:#fff}
 .feature > *{position:relative;z-index:1}
-.feature:hover .n,.feature:hover h3,.feature:hover p,.feature:hover svg.ic{color:#fff;fill:currentColor}
+.feature:hover h3,.feature:hover p,.feature:hover svg.ic{color:#fff;fill:currentColor}
 .feature .ic{font-size:1.5rem;color:var(--accent);margin-bottom:var(--space-3);transition:color var(--motion-fast)}
-.feature .n{font-family:var(--font-mono);font-size:var(--text-xs);color:var(--accent);margin-bottom:var(--space-2);letter-spacing:.06em;transition:color var(--motion-fast)}
 .feature h3{margin:0 0 var(--space-2);font-size:var(--text-base);font-weight:700;font-family:var(--font-body);transition:color var(--motion-fast)}
 .feature p{margin:0;color:var(--muted);font-size:var(--text-sm);line-height:1.5;transition:color var(--motion-fast)}
 .feature p code{font-family:var(--font-mono);font-size:.85em;border:1px solid currentColor;padding:.1em .35em}
 
 .codeblock{position:relative;background:var(--surface);border:2px solid var(--fg);overflow:hidden;margin:var(--space-4) 0}
-.codeblock .tab{font-family:var(--font-mono);font-size:var(--text-xs);color:var(--bg);padding:var(--space-2) var(--space-4);border-bottom:2px solid var(--fg);background:var(--fg);text-transform:uppercase;letter-spacing:.08em;display:flex;justify-content:space-between;align-items:center}
+.codeblock .tab{font-family:var(--font-mono);font-size:var(--text-xs);color:var(--bg);padding:var(--space-2) var(--space-4);border-bottom:2px solid var(--fg);background:var(--fg);text-transform:uppercase;letter-spacing:var(--tracking-caps);display:flex;justify-content:space-between;align-items:center}
 .codeblock button.copy{font-family:var(--font-mono);font-size:var(--text-xs);background:transparent;color:inherit;border:1px solid currentColor;padding:.15rem .5rem;cursor:pointer;transition:background var(--motion-fast),color var(--motion-fast);text-transform:uppercase;letter-spacing:.04em;display:inline-flex;align-items:center;gap:.3em}
 .codeblock button.copy:hover{background:var(--accent);border-color:var(--accent);color:#fff}
+.codeblock button.copy:focus-visible{outline:none;box-shadow:var(--focus-ring)}
 .codeblock button.copy.copied{background:var(--accent);color:#fff;border-color:var(--accent)}
 .codeblock pre{margin:0;padding:var(--space-4);font-family:var(--font-mono);font-size:var(--text-xs);line-height:1.65;overflow-x:auto;color:var(--fg)}
 .codeblock .k{color:var(--accent);font-weight:600}
@@ -206,6 +248,7 @@ section > h2 .idx{font-family:var(--font-mono);font-size:var(--text-xs);color:va
 .flow .step[open]{background:color-mix(in oklab,var(--accent),transparent 92%)}
 .flow .step summary{list-style:none;cursor:pointer;padding:var(--space-4);display:flex;align-items:center;gap:var(--space-3);font-family:var(--font-mono);font-size:var(--text-sm)}
 .flow .step summary::-webkit-details-marker{display:none}
+.flow .step summary:focus-visible{outline:none;box-shadow:var(--focus-ring)}
 .flow .step summary .ic{color:var(--muted);transition:color var(--motion-fast),transform var(--motion-fast) var(--ease-spring)}
 .flow .step[open] summary .ic.arr{color:var(--accent);transform:rotate(90deg)}
 .flow .step summary .label{flex:1}
@@ -214,7 +257,7 @@ section > h2 .idx{font-family:var(--font-mono);font-size:var(--text-xs);color:va
 
 .demo{background:var(--surface);border:2px solid var(--fg);overflow:hidden;margin-top:var(--space-4)}
 .demo .panel{padding:var(--space-5)}
-.demo .panel h4{margin:0 0 var(--space-3);font-size:var(--text-xs);font-weight:600;color:var(--bg);background:var(--fg);display:inline-block;padding:var(--space-1) var(--space-3);font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.08em}
+.demo .panel h4{margin:0 0 var(--space-3);font-size:var(--text-xs);font-weight:600;color:var(--bg);background:var(--fg);display:inline-block;padding:var(--space-1) var(--space-3);font-family:var(--font-mono);text-transform:uppercase;letter-spacing:var(--tracking-caps)}
 .demo .field{margin-bottom:var(--space-3)}
 .demo .field label{display:block;font-size:var(--text-xs);color:var(--muted);margin-bottom:var(--space-1);font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.04em}
 .demo .field input,.demo .field select{width:100%;background:var(--bg);color:var(--fg);border:2px solid var(--fg);padding:var(--space-2) var(--space-3);font:inherit;font-size:var(--text-sm);font-family:var(--font-mono)}
@@ -234,7 +277,7 @@ section > h2 .idx{font-family:var(--font-mono);font-size:var(--text-xs);color:va
 .arch .row:last-child{border-bottom:0}
 .arch .row:hover{background:color-mix(in oklab,var(--accent),transparent 94%)}
 @media (max-width:40rem){.arch .row{grid-template-columns:1fr}}
-.arch .row .label{font-family:var(--font-mono);font-size:var(--text-xs);color:var(--accent);text-transform:uppercase;letter-spacing:.08em;font-weight:600;display:flex;align-items:center;gap:.5em}
+.arch .row .label{font-family:var(--font-mono);font-size:var(--text-xs);color:var(--accent);text-transform:uppercase;letter-spacing:var(--tracking-caps);font-weight:600;display:flex;align-items:center;gap:.5em}
 .arch .row .body{font-size:var(--text-sm);font-family:var(--font-body)}
 .arch .row .body strong{color:var(--fg);font-weight:700}
 .arch .row .body code{font-family:var(--font-mono);font-size:.85em;background:var(--bg);border:1px solid var(--border);padding:.1em .35em}
@@ -242,6 +285,7 @@ section > h2 .idx{font-family:var(--font-mono);font-size:var(--text-xs);color:va
 footer{margin-top:var(--space-12);padding:var(--space-5) 0;border-top:2px solid var(--fg);display:flex;justify-content:space-between;align-items:center;color:var(--muted);font-size:var(--text-sm)}
 footer a{color:var(--accent);text-decoration:none;font-weight:600;display:inline-flex;align-items:center;gap:.4em}
 footer a:hover{text-decoration:underline}
+footer a:focus-visible{outline:none;box-shadow:var(--focus-ring)}
 </style>
 <div class="bg-grid"></div>
 <nav class="tabs"><div class="inner">
@@ -266,12 +310,12 @@ footer a:hover{text-decoration:underline}
   <section id="what" data-reveal>
     <h2><span class="idx">01</span> What it does</h2>
     <div class="features">
-      <div class="feature"><svg class="ic" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M14 10H10V14H14V10ZM16 10V14H19V10H16ZM14 19V16H10V19H14ZM16 19H19V16H16V19ZM14 5H10V8H14V5ZM16 5V8H19V5H16ZM8 10H5V14H8V10ZM8 19V16H5V19H8ZM8 5H5V8H8V5ZM4 3H20C20.5523 3 21 3.44772 21 4V20C21 20.5523 20.5523 21 20 21H4C3.44772 21 3 20.5523 3 20V4C3 3.44772 3.44772 3 4 3Z"/></svg><div class="n">01</div><h3>Agent-native</h3><p>Install a skill with <code>npx skills add</code>. Tell your agent "publish this as a page" — it writes the file and posts it.</p></div>
-      <div class="feature"><svg class="ic" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M10 6V8H5V19H16V14H18V20C18 20.5523 17.5523 21 17 21H4C3.44772 21 3 20.5523 3 20V7C3 6.44772 3.44772 6 4 6H10ZM21 3V11H19L18.9999 6.413L11.2071 14.2071L9.79289 12.7929L17.5849 5H13V3H21Z"/></svg><div class="n">02</div><h3>Stable URLs</h3><p>Bind an artifact to a <em>channel</em>; every regeneration lands on the same link as a new version.</p></div>
-      <div class="feature"><svg class="ic" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M19 10H20C20.5523 10 21 10.4477 21 11V21C21 21.5523 20.5523 22 20 22H4C3.44772 22 3 21.5523 3 21V11C3 10.4477 3.44772 10 4 10H5V9C5 5.13401 8.13401 2 12 2C15.866 2 19 5.13401 19 9V10ZM5 12V20H19V12H5ZM11 14H13V18H11V14ZM17 10V9C17 6.23858 14.7614 4 12 4C9.23858 4 7 6.23858 7 9V10H17Z"/></svg><div class="n">03</div><h3>Zero-knowledge</h3><p>Password-protected artifacts are encrypted on your machine (PBKDF2 + AES-256-GCM). Server holds only ciphertext.</p></div>
-      <div class="feature"><svg class="ic" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M13.0001 7.82843V20H11.0001V7.82843L5.63614 13.1924L4.22192 11.7782L12.0001 4L19.7783 11.7782L18.3641 13.1924L13.0001 7.82843Z"/></svg><div class="n">04</div><h3>Auto-updates</h3><p>The skill watches an artifact's source files and can install a Stop hook that flags drift at end-of-turn. Regenerate and <code>update</code>, or <code>ack</code> to dismiss.</p></div>
-      <div class="feature"><svg class="ic" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12C22 17.5228 17.5228 22 12 22ZM12 20C16.4183 20 20 16.4183 20 12C20 7.58172 16.4183 4 12 4C7.58172 4 4 7.58172 4 12C4 16.4183 7.58172 20 12 20ZM11 7H13V9H11V7ZM11 11H13V17H11V11Z"/></svg><div class="n">05</div><h3>Sandboxed</h3><p>Strict <code>sandbox</code> CSP — opaque origin, no external requests, no storage access. Untrusted HTML, contained.</p></div>
-      <div class="feature"><svg class="ic" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C17.5222 2 22 5.97778 22 10.8889C22 13.9556 19.5111 16.4444 16.4444 16.4444H14.4778C13.5556 16.4444 12.8111 17.1889 12.8111 18.1111C12.8111 18.5333 12.9778 18.9222 13.2333 19.2111C13.5 19.5111 13.6667 19.9 13.6667 20.3333C13.6667 21.2556 12.9 22 12 22C6.47778 22 2 17.5222 2 12C2 6.47778 6.47778 2 12 2ZM10.8111 18.1111C10.8111 16.0843 12.451 14.4444 14.4778 14.4444H16.4444C18.4065 14.4444 20 12.851 20 10.8889C20 7.1392 16.4677 4 12 4C7.58235 4 4 7.58235 4 12C4 16.19 7.2226 19.6285 11.324 19.9718C10.9948 19.4168 10.8111 18.7761 10.8111 18.1111ZM7.5 12C6.67157 12 6 11.3284 6 10.5C6 9.67157 6.67157 9 7.5 9C8.32843 9 9 9.67157 9 10.5C9 11.3284 8.32843 12 7.5 12ZM16.5 12C15.6716 12 15 11.3284 15 10.5C15 9.67157 15.6716 9 16.5 9C17.3284 9 18 9.67157 18 10.5C18 11.3284 17.3284 12 16.5 12ZM12 9C11.1716 9 10.5 8.32843 10.5 7.5C10.5 6.67157 11.1716 6 12 6C12.8284 6 13.5 6.67157 13.5 7.5C13.5 8.32843 12.8284 9 12 9Z"/></svg><div class="n">06</div><h3>OpenGraph</h3><p>Full OG + Twitter Card meta with a 1200×630 PNG preview card rasterized on the edge. Links unfurl everywhere.</p></div>
+      <div class="feature"><svg class="ic" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M14 10H10V14H14V10ZM16 10V14H19V10H16ZM14 19V16H10V19H14ZM16 19H19V16H16V19ZM14 5H10V8H14V5ZM16 5V8H19V5H16ZM8 10H5V14H8V10ZM8 19V16H5V19H8ZM8 5H5V8H8V5ZM4 3H20C20.5523 3 21 3.44772 21 4V20C21 20.5523 20.5523 21 20 21H4C3.44772 21 3 20.5523 3 20V4C3 3.44772 3.44772 3 4 3Z"/></svg><h3>Agent-native</h3><p>Install a skill with <code>npx skills add</code>. Tell your agent "publish this as a page" — it writes the file and posts it.</p></div>
+      <div class="feature"><svg class="ic" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M10 6V8H5V19H16V14H18V20C18 20.5523 17.5523 21 17 21H4C3.44772 21 3 20.5523 3 20V7C3 6.44772 3.44772 6 4 6H10ZM21 3V11H19L18.9999 6.413L11.2071 14.2071L9.79289 12.7929L17.5849 5H13V3H21Z"/></svg><h3>Stable URLs</h3><p>Bind an artifact to a <em>channel</em>; every regeneration lands on the same link as a new version.</p></div>
+      <div class="feature"><svg class="ic" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M19 10H20C20.5523 10 21 10.4477 21 11V21C21 21.5523 20.5523 22 20 22H4C3.44772 22 3 21.5523 3 21V11C3 10.4477 3.44772 10 4 10H5V9C5 5.13401 8.13401 2 12 2C15.866 2 19 5.13401 19 9V10ZM5 12V20H19V12H5ZM11 14H13V18H11V14ZM17 10V9C17 6.23858 14.7614 4 12 4C9.23858 4 7 6.23858 7 9V10H17Z"/></svg><h3>Zero-knowledge</h3><p>Password-protected artifacts are encrypted on your machine (PBKDF2 + AES-256-GCM). Server holds only ciphertext.</p></div>
+      <div class="feature"><svg class="ic" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M13.0001 7.82843V20H11.0001V7.82843L5.63614 13.1924L4.22192 11.7782L12.0001 4L19.7783 11.7782L18.3641 13.1924L13.0001 7.82843Z"/></svg><h3>Auto-updates</h3><p>The skill watches an artifact's source files and can install a Stop hook that flags drift at end-of-turn. Regenerate and <code>update</code>, or <code>ack</code> to dismiss.</p></div>
+      <div class="feature"><svg class="ic" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12C22 17.5228 17.5228 22 12 22ZM12 20C16.4183 20 20 16.4183 20 12C20 7.58172 16.4183 4 12 4C7.58172 4 4 7.58172 4 12C4 16.4183 7.58172 20 12 20ZM11 7H13V9H11V7ZM11 11H13V17H11V11Z"/></svg><h3>Sandboxed</h3><p>Strict <code>sandbox</code> CSP — opaque origin, no external requests, no storage access. Untrusted HTML, contained.</p></div>
+      <div class="feature"><svg class="ic" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C17.5222 2 22 5.97778 22 10.8889C22 13.9556 19.5111 16.4444 16.4444 16.4444H14.4778C13.5556 16.4444 12.8111 17.1889 12.8111 18.1111C12.8111 18.5333 12.9778 18.9222 13.2333 19.2111C13.5 19.5111 13.6667 19.9 13.6667 20.3333C13.6667 21.2556 12.9 22 12 22C6.47778 22 2 17.5222 2 12C2 6.47778 6.47778 2 12 2ZM10.8111 18.1111C10.8111 16.0843 12.451 14.4444 14.4778 14.4444H16.4444C18.4065 14.4444 20 12.851 20 10.8889C20 7.1392 16.4677 4 12 4C7.58235 4 4 7.58235 4 12C4 16.19 7.2226 19.6285 11.324 19.9718C10.9948 19.4168 10.8111 18.7761 10.8111 18.1111ZM7.5 12C6.67157 12 6 11.3284 6 10.5C6 9.67157 6.67157 9 7.5 9C8.32843 9 9 9.67157 9 10.5C9 11.3284 8.32843 12 7.5 12ZM16.5 12C15.6716 12 15 11.3284 15 10.5C15 9.67157 15.6716 9 16.5 9C17.3284 9 18 9.67157 18 10.5C18 11.3284 17.3284 12 16.5 12ZM12 9C11.1716 9 10.5 8.32843 10.5 7.5C10.5 6.67157 11.1716 6 12 6C12.8284 6 13.5 6.67157 13.5 7.5C13.5 8.32843 12.8284 9 12 9Z"/></svg><h3>OpenGraph</h3><p>Full OG + Twitter Card meta with a 1200×630 PNG preview card rasterized on the edge. Links unfurl everywhere.</p></div>
     </div>
   </section>
 
@@ -280,7 +324,7 @@ footer a:hover{text-decoration:underline}
     <p style="color:var(--muted);font-size:var(--text-sm);margin:0 0 var(--space-2)">Click a step to expand.</p>
     <div class="flow">
       <details class="step"><summary><svg class="ic arr" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M16.1716 10.9999L10.8076 5.63589L12.2218 4.22168L20 11.9999L12.2218 19.778L10.8076 18.3638L16.1716 12.9999H4V10.9999H16.1716Z"/></svg><span class="label">user: "share the app's flows as a page"</span></summary><div class="detail">The user asks the agent in natural language. The skill's <code>SKILL.md</code> teaches the agent when to publish.</div></details>
-      <details class="step"><summary><svg class="ic arr" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M16.1716 10.9999L10.8076 5.63589L12.2218 4.22168L20 11.9999L12.2218 19.778L10.8076 18.3638L16.1716 12.9999H4V10.9999H16.1716Z"/></svg><span class="label">agent writes page.html</span></summary><div class="detail">Self-contained HTML — inline CSS/JS, no external requests — following the design guidance + token contract.</div></details>
+      <details class="step"><summary><svg class="ic arr" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M16.1716 10.9999L10.8076 5.63589L12.2218 4.22168L20 11.9999L12.2218 19.778L10.8076 18.3638L16.1716 12.9999H4V10.9999H16.1716Z"/></svg><span class="label">agent writes page.html</span></summary><div class="detail">Self-contained HTML — inline CSS/JS, no external requests — built against the skill's design charter: a <code>@layer</code> token contract, an installed-font specimen library, and a ship gate (P0 checklist + five-dimension critique) run before publishing.</div></details>
       <details class="step"><summary><svg class="ic arr" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M16.1716 10.9999L10.8076 5.63589L12.2218 4.22168L20 11.9999L12.2218 19.778L10.8076 18.3638L16.1716 12.9999H4V10.9999H16.1716Z"/></svg><span class="label">POST /api/artifacts</span></summary><div class="detail">The skill CLI posts JSON to the Worker. With <code>--channel &lt;slug&gt;</code>, the server binds this topic to a stable URL.</div></details>
       <details class="step"><summary><svg class="ic arr" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M16.1716 10.9999L10.8076 5.63589L12.2218 4.22168L20 11.9999L12.2218 19.778L10.8076 18.3638L16.1716 12.9999H4V10.9999H16.1716Z"/></svg><span class="label">Worker stores in D1 + R2</span></summary><div class="detail">D1 holds metadata + version index + token hashes (strongly consistent). R2 holds the content body (read-after-write, free egress).</div></details>
       <details class="step"><summary><svg class="ic arr" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M16.1716 10.9999L10.8076 5.63589L12.2218 4.22168L20 11.9999L12.2218 19.778L10.8076 18.3638L16.1716 12.9999H4V10.9999H16.1716Z"/></svg><span class="label">viewer opens https://…/a/&lt;id&gt;</span></summary><div class="detail">The Worker wraps content in a skeleton and serves it with <code>Content-Security-Policy: sandbox allow-scripts; default-src 'none'</code>.</div></details>
@@ -295,10 +339,10 @@ footer a:hover{text-decoration:underline}
         <div class="grid2">
           <div>
             <h4>Request</h4>
-            <div class="field"><label>title</label><input id="d-title" type="text" value="Sprint Report"></div>
-            <div class="field"><label>favicon</label><input id="d-favicon" type="text" value="📊"></div>
-            <div class="field"><label>channel slug</label><input id="d-channel" type="text" value="sprint-report"></div>
-            <div class="field"><label>format</label><select id="d-format"><option value="html">html</option><option value="markdown">markdown</option></select></div>
+            <div class="field"><label for="d-title">title</label><input id="d-title" type="text" value="Sprint Report"></div>
+            <div class="field"><label for="d-favicon">favicon</label><input id="d-favicon" type="text" value="📊"></div>
+            <div class="field"><label for="d-channel">channel slug</label><input id="d-channel" type="text" value="sprint-report"></div>
+            <div class="field"><label for="d-format">format</label><select id="d-format"><option value="html">html</option><option value="markdown">markdown</option></select></div>
             <button class="btn" id="d-publish" type="button">Publish <svg class="ic" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M16.1716 10.9999L10.8076 5.63589L12.2218 4.22168L20 11.9999L12.2218 19.778L10.8076 18.3638L16.1716 12.9999H4V10.9999H16.1716Z"/></svg></button>
           </div>
           <div>
@@ -372,7 +416,22 @@ npx wrangler secret put CREATE_TOKEN          <span class="c"># optional gate</s
   </footer>
 </div>
 <script>
-(function(){var links={};document.querySelectorAll('nav.tabs a').forEach(function(a){links[a.getAttribute('href').slice(1)]=a});var sections=Object.keys(links).map(function(id){return document.getElementById(id)}).filter(Boolean);function active(){var y=window.scrollY+80;for(var i=sections.length-1;i>=0;i--){if(sections[i].offsetTop<=y){Object.values(links).forEach(function(l){l.classList.remove('active')});links[sections[i].id].classList.add('active');return}}}window.addEventListener('scroll',active,{passive:true});active()})();
+document.documentElement.classList.add('js');
+(function(){
+  var links={};document.querySelectorAll('nav.tabs a').forEach(function(a){links[a.getAttribute('href').slice(1)]=a});
+  var sections=Object.keys(links).map(function(id){return document.getElementById(id)}).filter(Boolean);
+  var current=null;
+  function mark(id){if(current===id)return;current=id;Object.keys(links).forEach(function(k){links[k].classList.toggle('active',k===current)})}
+  if(!('IntersectionObserver'in window))return;
+  var ratios={};
+  var io=new IntersectionObserver(function(entries){
+    entries.forEach(function(e){ratios[e.target.id]=e.isIntersecting?e.intersectionRatio:0});
+    var best=null,bestR=0;
+    sections.forEach(function(s){var r=ratios[s.id]||0;if(r>bestR){bestR=r;best=s.id}});
+    if(best)mark(best);
+  },{rootMargin:'-15% 0px -55% 0px',threshold:[0,.1,.25,.5,.75,1]});
+  sections.forEach(function(s){io.observe(s)});
+})();
 document.querySelectorAll('.codeblock button.copy').forEach(function(btn){btn.addEventListener('click',function(){var pre=btn.closest('.codeblock').querySelector('pre');var text=pre.innerText;function done(){btn.classList.add('copied');setTimeout(function(){btn.classList.remove('copied')},1500)}if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(done).catch(done)}else{var r=document.createElement('textarea');r.value=text;document.body.appendChild(r);r.select();try{document.execCommand('copy')}catch(e){}r.remove();done()}})});
 (function(){if(!('IntersectionObserver'in window)){document.querySelectorAll('[data-reveal]').forEach(function(e){e.classList.add('in')});return}var io=new IntersectionObserver(function(entries){for(var i=0;i<entries.length;i++){if(entries[i].isIntersecting){entries[i].target.classList.add('in');io.unobserve(entries[i].target)}}},{threshold:0.12,rootMargin:'0px 0px -8% 0px'});document.querySelectorAll('[data-reveal]').forEach(function(el){Array.from(el.children).forEach(function(c,ci){c.style.setProperty('--i',ci)});io.observe(el)})})();
 (function(){var id='7ujo'+Math.random().toString(36).slice(2,8);var v=1;function emit(){var title=document.getElementById('d-title').value||'Untitled';var ch=document.getElementById('d-channel').value||'';var resp=document.getElementById('d-response');var url='https://coda0.com/a/'+id;var note=v===1?'(first publish)':'(channel update)';var body='{\n  <span class="k">"id"</span>: <span class="s">"'+id+'"</span>,\n  <span class="k">"url"</span>: <span class="s">"'+url+'"</span>,\n  <span class="k">"version"</span>: '+v+'\n}';resp.innerHTML='<span class="status">201 '+note+'</span>\n'+body;v++;var toast=document.getElementById('d-toast');toast.textContent=url;toast.classList.add('show');setTimeout(function(){toast.classList.remove('show')},2200)}document.getElementById('d-publish').addEventListener('click',emit)})();
