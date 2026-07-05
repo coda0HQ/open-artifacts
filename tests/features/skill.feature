@@ -33,3 +33,22 @@ Feature: Agent skill for creating and maintaining artifacts
     Given a project directory without .artifacts/manifest.json
     When the agent runs the artifact script with status
     Then the script exits 0 and reports nothing to do
+
+  Scenario: Creating an artifact leaves hook installation to the user
+    Given a Claude Code session with CLAUDE_PROJECT_DIR set to the project
+    When the agent runs the artifact script with create in that session
+    Then no Stop hook is installed automatically
+    And the output hints that install-hook enables end-of-turn staleness checks
+    So that whether to install the hook stays the user's choice
+
+  Scenario: Acknowledge drift without republishing
+    Given a stale manifest entry whose watched files changed but do not affect it
+    When the agent runs the artifact script with ack for that entry
+    Then the snapshot baseline advances to the current file hashes
+    And no request is sent to the server
+    And a subsequent status reports the artifact as up to date
+
+  Scenario: The staleness hook stays quiet when already continuing
+    Given a stale artifact and a Stop hook invocation with stop_hook_active true
+    When the agent runs the artifact script with status --hook on that input
+    Then the script emits nothing and exits 0 so Claude is allowed to stop

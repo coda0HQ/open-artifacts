@@ -121,8 +121,13 @@ gray on a tinted near-white. Modern CSS is fully available inline —
 
 ## Publishing
 
+Write the page source under `.artifacts/sources/` (e.g.
+`.artifacts/sources/app-interactions.html`) so sources sit alongside the
+manifest instead of in the project's visible tree, then pass that path to
+`create`:
+
 ```
-node artifact.mjs create page.html --favicon 📊 \
+node artifact.mjs create .artifacts/sources/app-interactions.html --favicon 📊 \
   --scope "user-facing interaction flows of the app" \
   --channel app-interactions \
   --watch "src/views/**,src/components/**" \
@@ -159,21 +164,28 @@ version; on a version conflict the CLI explains and offers `--force`.
 
 ## Keeping artifacts fresh (do this without being asked)
 
-After completing any task that modified project files in a project that has
-`.artifacts/manifest.json`, run:
+After the first `create` in a project, **ask the user** whether to install the
+staleness Stop hook — don't install it silently. If they agree, run
+`node artifact.mjs install-hook` (adds a `Stop` hook to `.claude/settings.json`
+that surfaces drift at the end of every turn). With the hook installed, at the
+end of a turn whose changes touched an artifact's watched files you are told
+which artifact drifted and why. Either way, you can check on demand:
 
 ```
 node artifact.mjs status
 ```
 
 For each artifact reported stale, decide whether the changed files affect its
-recorded scope. If they do, regenerate the page content to reflect the current
-state of the project and run `update`. If they do not (e.g. a refactor with no
-behavior change for a scope about user-facing flows), leave it and say so.
+recorded scope:
 
-To surface staleness automatically at the end of every Claude Code turn, offer
-the user: `node artifact.mjs install-hook` (adds a Stop hook to
-`.claude/settings.json`).
+- **They affect it** → regenerate the page content to reflect the current state
+  of the project and run `update`. That republishes and refreshes the snapshot.
+- **They don't** (e.g. a refactor with no behavior change for a user-facing
+  scope, or a design direction locked in the scope) → run
+  `node artifact.mjs ack <id>`. This advances the snapshot baseline offline —
+  no republish — so the same unrelated change stops being reported every turn.
+  Don't just leave it stale: with the hook installed it re-nudges on every
+  future turn until the baseline moves via `update` or `ack`.
 
 ## Password protection
 

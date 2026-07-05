@@ -315,6 +315,19 @@ async function commandCreate(file, flags) {
     saveCredentials(credentials);
   }
 
+  // Installing the staleness hook is the user's choice, so create never writes
+  // to their settings — it only hints how to enable end-of-turn drift checks
+  // when this artifact tracks files and no hook is installed yet.
+  if (
+    process.env.CLAUDE_PROJECT_DIR &&
+    watch.length > 0 &&
+    !hookInstalled(process.env.CLAUDE_PROJECT_DIR)
+  ) {
+    console.error(
+      'tip: run "artifact.mjs install-hook" to flag this artifact stale automatically when its watched files change',
+    );
+  }
+
   console.log(json.url);
   const verb = status === 200 ? "updated" : "published";
   console.error(`${verb} artifact ${json.id} (version ${json.version})`);
@@ -419,7 +432,45 @@ function staleArtifacts() {
   return stale;
 }
 
-function commandStatus(flags) {
+// Read the hook payload Claude Code pipes to a Stop hook on stdin. Resolves to
+// the parsed object, or null when there is no usable input (no TTY prompt hang;
+// a short cap keeps the callback fast even if the caller never closes stdin).
+function readHookInput() {
+  return new Promise((resolveInput) => {
+    const stdin = process.stdin;
+    if (stdin.isTTY) return resolveInput(null);
+    let data = "";
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      stdin.pause();
+      stdin.unref?.();
+      try {
+        resolveInput(data ? JSON.parse(data) : null);
+      } catch {
+        resolveInput(null);
+      }
+    };
+    const timer = setTimeout(finish, 100);
+    stdin.setEncoding("utf8");
+    stdin.on("data", (chunk) => {
+      data += chunk;
+    });
+    stdin.on("end", finish);
+    stdin.on("error", finish);
+  });
+}
+
+async function commandStatus(flags) {
+  // In hook mode, respect Claude Code's loop protection: when the Stop hook is
+  // already keeping the turn going (stop_hook_active), stay silent so Claude is
+  // allowed to stop instead of re-nudging up to the 8-continuation cap.
+  if (flags.hook) {
+    const input = await readHookInput();
+    if (input?.stop_hook_active) return;
+  }
   if (!existsSync(MANIFEST_PATH)) {
     if (!flags.hook) console.error("no artifact manifest; nothing to check");
     return;
@@ -459,6 +510,22 @@ function commandStatus(flags) {
   process.exitCode = 1;
 }
 
+// Advance an entry's snapshot baseline to the current file hashes WITHOUT
+// republishing — the "I reviewed the drift and it doesn't affect this artifact"
+// path (e.g. a locked design direction, or an unrelated edit to a broadly
+// watched file). Offline: no server round-trip. This is why status can stop
+// crying wolf without lying that the published page was regenerated.
+function commandAck(id) {
+  const manifest = loadManifest();
+  const entry = findEntry(manifest, id);
+  entry.snapshot = snapshotWatch(entry.watch ?? []);
+  entry.reviewedAt = new Date().toISOString();
+  saveManifest(manifest);
+  console.error(
+    `acknowledged ${id}: snapshot baseline advanced without republishing`,
+  );
+}
+
 function commandList() {
   const manifest = loadManifest();
   if (manifest.artifacts.length === 0) {
@@ -472,31 +539,45 @@ function commandList() {
   }
 }
 
-function commandInstallHook() {
+// Is the staleness Stop hook already present in this project's settings?
+function hookInstalled(projectDir) {
+  const settings = readJson(join(projectDir, ".claude/settings.json"), {});
+  return (settings.hooks?.Stop ?? []).some((group) =>
+    (group.hooks ?? []).some((h) => h.command?.includes("artifact.mjs")),
+  );
+}
+
+// Write the staleness Stop hook into <projectDir>/.claude/settings.json,
+// preserving any existing hooks. Idempotent: returns installed=false if a hook
+// pointing at artifact.mjs is already present.
+function installStopHook(projectDir) {
   const scriptPath = fileURLToPath(import.meta.url);
-  // Claude Code loads hooks from $CLAUDE_PROJECT_DIR/.claude/settings.json, so
-  // resolve the project root from that env var when set (it is set during agent
-  // sessions) and fall back to cwd for human-invoked runs.
-  const projectDir = process.env.CLAUDE_PROJECT_DIR ?? process.cwd();
   const relativeToProject = relative(projectDir, scriptPath);
   const command = relativeToProject.startsWith("..")
     ? `node "${scriptPath}" status --hook`
     : `node "$CLAUDE_PROJECT_DIR/${relativeToProject}" status --hook`;
 
   const settingsPath = join(projectDir, ".claude/settings.json");
+  if (hookInstalled(projectDir)) return { installed: false, settingsPath };
   const settings = readJson(settingsPath, {});
   settings.hooks ??= {};
   settings.hooks.Stop ??= [];
-  const exists = settings.hooks.Stop.some((group) =>
-    (group.hooks ?? []).some((h) => h.command?.includes("artifact.mjs")),
-  );
-  if (exists) {
-    console.error("stop hook already installed");
-    return;
-  }
   settings.hooks.Stop.push({ hooks: [{ type: "command", command }] });
   writeJson(settingsPath, settings);
-  console.error(`installed Stop hook in ${settingsPath}`);
+  return { installed: true, settingsPath };
+}
+
+function commandInstallHook() {
+  // Claude Code loads hooks from $CLAUDE_PROJECT_DIR/.claude/settings.json, so
+  // resolve the project root from that env var when set (it is set during agent
+  // sessions) and fall back to cwd for human-invoked runs.
+  const projectDir = process.env.CLAUDE_PROJECT_DIR ?? process.cwd();
+  const { installed, settingsPath } = installStopHook(projectDir);
+  console.error(
+    installed
+      ? `installed Stop hook in ${settingsPath}`
+      : "stop hook already installed",
+  );
 }
 
 const HELP = `usage: artifact.mjs <command> [options]
@@ -505,6 +586,8 @@ commands:
   create <file>        publish a new artifact
   update <id> [file]   redeploy an artifact (uses recorded sourceFile if omitted)
   status               report artifacts whose watched files changed (exit 1 if stale)
+  ack <id>             mark drift reviewed: advance the snapshot baseline without
+                       republishing (offline; use when changes don't affect it)
   list                 list artifacts in the manifest
   delete <id>          delete an artifact from the server and manifest
   install-hook         add a Claude Code Stop hook that runs status --hook
@@ -576,7 +659,11 @@ async function main() {
       await commandDelete(rest[0], flags);
       break;
     case "status":
-      commandStatus(flags);
+      await commandStatus(flags);
+      break;
+    case "ack":
+      if (!rest[0]) fail("ack requires an artifact id");
+      commandAck(rest[0]);
       break;
     case "list":
       commandList();

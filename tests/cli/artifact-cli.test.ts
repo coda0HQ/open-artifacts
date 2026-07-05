@@ -91,6 +91,15 @@ beforeEach(() => {
   );
 });
 
+// Strip CLAUDE_PROJECT_DIR from the inherited env so tests are hermetic: only
+// the cases that explicitly opt into a Claude Code session (auto-arm on create)
+// see it, regardless of whether the suite itself runs inside one.
+function cleanEnv(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  delete env.CLAUDE_PROJECT_DIR;
+  return env;
+}
+
 async function run(
   args: string[],
   options: { expectFailure?: boolean } = {},
@@ -101,7 +110,7 @@ async function run(
       [SCRIPT, ...args],
       {
         cwd: projectDir,
-        env: { ...process.env, OPEN_ARTIFACTS_URL: apiUrl },
+        env: { ...cleanEnv(), OPEN_ARTIFACTS_URL: apiUrl },
       },
     );
     return { stdout, stderr, code: 0 };
@@ -127,7 +136,7 @@ async function runEnv(
     const { stdout, stderr } = await execFileAsync(
       process.execPath,
       [SCRIPT, ...args],
-      { cwd, env: { ...process.env, ...env } },
+      { cwd, env: { ...cleanEnv(), ...env } },
     );
     return { stdout, stderr, code: 0 };
   } catch (error) {
@@ -138,6 +147,29 @@ async function runEnv(
       code: failed.code ?? 1,
     };
   }
+}
+
+// Run the CLI with a string piped to stdin and closed — needed to exercise the
+// Stop hook input contract (status --hook reads the hook JSON from stdin).
+function runWithStdin(
+  args: string[],
+  input: string,
+): Promise<{ stdout: string; stderr: string; code: number }> {
+  return new Promise((resolveRun) => {
+    const child = execFile(
+      process.execPath,
+      [SCRIPT, ...args],
+      { cwd: projectDir, env: { ...cleanEnv(), OPEN_ARTIFACTS_URL: apiUrl } },
+      (error, stdout, stderr) => {
+        const code =
+          error && typeof (error as { code?: number }).code === "number"
+            ? (error as { code: number }).code
+            : 0;
+        resolveRun({ stdout, stderr, code });
+      },
+    );
+    child.stdin?.end(input);
+  });
 }
 
 function manifest(): {
@@ -355,6 +387,53 @@ describe("status", () => {
     );
   });
 
+  it("stays silent when the hook input has stop_hook_active true", async () => {
+    await run([
+      "create",
+      "report.html",
+      "--favicon",
+      "📊",
+      "--scope",
+      "app interactions",
+      "--watch",
+      "src/**/*.ts",
+    ]);
+    writeFileSync(join(projectDir, "src/main.ts"), "export const x = 99;\n");
+
+    const result = await runWithStdin(
+      ["status", "--hook"],
+      JSON.stringify({ stop_hook_active: true }),
+    );
+    expect(result.code).toBe(0);
+    expect(result.stdout.trim()).toBe("");
+  });
+
+  it("still emits the nudge when stop_hook_active is false", async () => {
+    await run([
+      "create",
+      "report.html",
+      "--favicon",
+      "📊",
+      "--scope",
+      "app interactions",
+      "--watch",
+      "src/**/*.ts",
+    ]);
+    writeFileSync(join(projectDir, "src/main.ts"), "export const x = 99;\n");
+
+    const result = await runWithStdin(
+      ["status", "--hook"],
+      JSON.stringify({ stop_hook_active: false }),
+    );
+    expect(result.code).toBe(0);
+    const parsed = JSON.parse(result.stdout) as {
+      hookSpecificOutput: { additionalContext: string };
+    };
+    expect(parsed.hookSpecificOutput.additionalContext).toContain(
+      "src/main.ts",
+    );
+  });
+
   it("detects newly added files matching the watch globs", async () => {
     await run([
       "create",
@@ -504,5 +583,87 @@ describe("install-hook", () => {
       readFileSync(join(projectDir, ".claude/settings.json"), "utf8"),
     );
     expect(settings.hooks.Stop).toHaveLength(1);
+  });
+});
+
+describe("create leaves hook installation to the user", () => {
+  it("does not write settings.json on create in a session, but hints", async () => {
+    const { code, stderr } = await runEnv(
+      ["create", "report.html", "--favicon", "📊", "--watch", "src/**/*.ts"],
+      projectDir,
+      { OPEN_ARTIFACTS_URL: apiUrl, CLAUDE_PROJECT_DIR: projectDir },
+    );
+    expect(code).toBe(0);
+    expect(existsSync(join(projectDir, ".claude/settings.json"))).toBe(false);
+    expect(stderr).toContain("install-hook");
+  });
+
+  it("does not hint once the hook is already installed", async () => {
+    await runEnv(["install-hook"], projectDir, {
+      CLAUDE_PROJECT_DIR: projectDir,
+    });
+    const { stderr } = await runEnv(
+      ["create", "report.html", "--favicon", "📊", "--watch", "src/**/*.ts"],
+      projectDir,
+      { OPEN_ARTIFACTS_URL: apiUrl, CLAUDE_PROJECT_DIR: projectDir },
+    );
+    expect(stderr).not.toContain("install-hook");
+  });
+
+  it("neither installs nor hints outside a Claude Code session", async () => {
+    const { stderr } = await run([
+      "create",
+      "report.html",
+      "--favicon",
+      "📊",
+      "--watch",
+      "src/**/*.ts",
+    ]);
+    expect(existsSync(join(projectDir, ".claude/settings.json"))).toBe(false);
+    expect(stderr).not.toContain("install-hook");
+  });
+});
+
+describe("ack", () => {
+  it("advances the snapshot baseline offline without republishing", async () => {
+    await run([
+      "create",
+      "report.html",
+      "--favicon",
+      "📊",
+      "--scope",
+      "app interactions",
+      "--watch",
+      "src/**/*.ts",
+    ]);
+    const before = manifest().artifacts[0].snapshot["src/main.ts"];
+    writeFileSync(join(projectDir, "src/main.ts"), "export const x = 42;\n");
+
+    const stale = await run(["status"], { expectFailure: true });
+    expect(stale.code).toBe(1);
+
+    const requestsBefore = requests.length;
+    const ack = await run(["ack", "testid123456"]);
+    expect(ack.code).toBe(0);
+    // ack is purely local: it must not hit the server.
+    expect(requests.length).toBe(requestsBefore);
+
+    const after = manifest().artifacts[0].snapshot["src/main.ts"];
+    expect(after).not.toBe(before);
+
+    const clean = await run(["status"]);
+    expect(clean.code).toBe(0);
+  });
+
+  it("fails on an unknown id", async () => {
+    await run(["create", "report.html", "--favicon", "📊"]);
+    const result = await run(["ack", "nope"], { expectFailure: true });
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toContain("not found");
+  });
+
+  it("requires an id", async () => {
+    const result = await run(["ack"], { expectFailure: true });
+    expect(result.code).not.toBe(0);
   });
 });
