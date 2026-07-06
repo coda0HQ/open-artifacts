@@ -38,6 +38,42 @@ Do not publish for short answers, code snippets, or content the user will
 read once in the conversation. When unsure, answer inline and offer to
 publish.
 
+## Isolate content generation in a sub-agent
+
+Publishing or republishing an artifact means reading project resources,
+reading this skill's design references, writing (or rewriting) a full HTML
+file, and running the CLI. All of that is context a parent conversation
+doesn't need to keep — it only needs the resulting URL and a one-line
+summary.
+
+**Both `create` (first publish) and `update` (republish) — and everything
+in "How to design the page" that leads up to them — run inside an isolated
+sub-agent, never inline in the parent conversation.** In Claude Code,
+dispatch the Agent tool (a general-purpose agent is enough, no special type
+needed); in another harness, use its equivalent sub-task primitive.
+
+Give the sub-agent everything it needs to work alone, then let it work:
+
+- The brief: what's being published or updated, for whom, and why.
+- If updating: the artifact id, and — for a locked design — a pointer to
+  read the existing source file first (the direction comment at the top of
+  `.artifacts/sources/*.html` states what must not change).
+- Any explicit flags the user gave: `--scope`, `--channel`, `--watch`,
+  `--level`, `--password`, `--description`.
+
+The sub-agent does the entire rest of the workflow itself — explore
+resources, plan, read `${CLAUDE_SKILL_DIR}/references/design.md` and
+friends, write the source file, run `create`/`update`, verify — and returns
+**only** a short summary: the URL, the version number, and one line on what
+changed. The parent relays that to the user. It must not read the generated
+HTML, run `create`/`update` itself, or carry the design reasoning in its own
+context.
+
+The lightweight bookkeeping commands — `status`, `ack <id>`,
+`auto-update <id> on|off`, `list`, `install-hook` — don't touch content and
+are fine to run directly in the parent conversation; only `create` and
+`update` need isolation.
+
 ## How to design the page
 
 You are an expert designer producing design artifacts in HTML. **HTML is your
@@ -134,6 +170,9 @@ inline — `text-wrap: pretty/balance`, CSS Grid, container queries,
 
 ## Publishing
 
+*(Run this inside the isolated sub-agent — see "Isolate content generation
+in a sub-agent" above.)*
+
 Write the page source under `.artifacts/sources/` (e.g.
 `.artifacts/sources/app-interactions.html`) so sources sit alongside the
 manifest instead of in the project's visible tree, then pass that path to
@@ -167,6 +206,9 @@ credentials; the slug in the manifest is safe to commit.
 
 ## Updating
 
+*(Run this inside the isolated sub-agent — see "Isolate content generation
+in a sub-agent" above.)*
+
 ```
 node artifact.mjs update <id> [file] [--label "what-changed"]
 ```
@@ -193,12 +235,18 @@ recorded scope:
 
 - **They affect it** → regenerate the page content to reflect the current state
   of the project and run `update`. That republishes and refreshes the snapshot.
+  Regenerating is content generation, so dispatch it to a sub-agent per
+  "Isolate content generation in a sub-agent" above — including when this
+  judgment call is made autonomously via the Stop hook, not just when a
+  human asks directly.
 - **They don't** (e.g. a refactor with no behavior change for a user-facing
   scope, or a design direction locked in the scope) → run
   `node artifact.mjs ack <id>`. This advances the snapshot baseline offline —
   no republish — so the same unrelated change stops being reported every turn.
-  Don't just leave it stale: with the hook installed it re-nudges on every
-  future turn until the baseline moves via `update` or `ack`.
+  `ack` is a pure manifest mutation, not content generation, so it's fine to
+  run directly. Don't just leave it stale: with the hook installed it
+  re-nudges on every future turn until the baseline moves via `update` or
+  `ack`.
 
 ### Opting a specific artifact into the automatic loop
 
