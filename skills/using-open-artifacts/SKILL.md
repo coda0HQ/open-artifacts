@@ -21,6 +21,16 @@ The CLI needs an instance URL, resolved in this order: `--api` flag,
 instance URL and write `.artifacts/config.json`. If the instance requires a
 create token, put it in `OPEN_ARTIFACTS_TOKEN` or `config.json` `createToken`.
 
+State lives in `.artifacts/`: `manifest.json` (committed, shared with
+teammates) and `credentials.json` (gitignored). For artifacts you want to
+keep machine-private, pass `--local` — the entry goes into
+`manifest.local.json`, which the CLI gitignores; reads merge the two (local
+overrides non-local, mirroring Claude Code's `settings.local.json`).
+Credentials always live in the single `credentials.json`. On the **first
+`create` in a project**, ask the user whether the artifact should be local;
+**recommend local** (machine-private by default) and pass `--local` when
+they say yes.
+
 If the user has no instance yet, point them at
 `${CLAUDE_SKILL_DIR}/references/deployment.md` — it has the three ways to get
 one (use the public shared instance with zero setup, self-host on their own
@@ -55,19 +65,23 @@ needed); in another harness, use its equivalent sub-task primitive.
 Give the sub-agent everything it needs to work alone, then let it work:
 
 - The brief: what's being published or updated, for whom, and why.
-- If updating: the artifact id, and — for a locked design — a pointer to
-  read the existing source file first (the direction comment at the top of
-  `.artifacts/sources/*.html` states what must not change).
+- If updating: the artifact id. The sub-agent fetches the current published
+  version from the server (`GET <apiUrl>/api/artifacts/<id>/raw`) as its
+  starting reference — for a locked design, the direction comment at the top
+  of that stored HTML states what must not change. It then reads the project
+  files the artifact's `scope` covers and regenerates the page from there.
+  `update <id>` now requires the regenerated file path (no local source copy
+  is kept — the server is the source of truth).
 - Any explicit flags the user gave: `--scope`, `--channel`, `--watch`,
-  `--level`, `--password`, `--description`.
+  `--level`, `--password`, `--description`, `--local`.
 
 The sub-agent does the entire rest of the workflow itself — explore
 resources, plan, read `${CLAUDE_SKILL_DIR}/references/design.md` and
-friends, write the source file, run `create`/`update`, verify — and returns
-**only** a short summary: the URL, the version number, and one line on what
-changed. The parent relays that to the user. It must not read the generated
-HTML, run `create`/`update` itself, or carry the design reasoning in its own
-context.
+friends, write the page to a temp file, run `create`/`update`, delete the
+temp file, verify — and returns **only** a short summary: the URL, the
+version number, and one line on what changed. The parent relays that to the
+user. It must not read the generated HTML, run `create`/`update` itself, or
+carry the design reasoning in its own context.
 
 The lightweight bookkeeping commands — `status`, `ack <id>`,
 `auto-update <id> on|off`, `list`, `install-hook` — don't touch content and
@@ -173,13 +187,12 @@ inline — `text-wrap: pretty/balance`, CSS Grid, container queries,
 *(Run this inside the isolated sub-agent — see "Isolate content generation
 in a sub-agent" above.)*
 
-Write the page source under `.artifacts/sources/` (e.g.
-`.artifacts/sources/app-interactions.html`) so sources sit alongside the
-manifest instead of in the project's visible tree, then pass that path to
-`create`:
+Write the page to a temp file (e.g. `$(mktemp).html` or a scratch path in
+the OS temp dir — the server is the source of truth, so no local source
+copy is kept), then pass that path to `create`:
 
 ```
-node artifact.mjs create .artifacts/sources/app-interactions.html --favicon 📊 \
+node artifact.mjs create /tmp/app-interactions.html --favicon 📊 \
   --scope "user-facing interaction flows of the app" \
   --channel app-interactions \
   --watch "src/views/**,src/components/**" \
@@ -197,12 +210,20 @@ node artifact.mjs create .artifacts/sources/app-interactions.html --favicon 📊
   update those).
 - `--watch`: comma-separated globs of the source files the artifact was
   derived from.
+- `--local`: write the manifest entry to `.artifacts/manifest.local.json`
+  (gitignored, machine-local) instead of the committed manifest. Reads
+  merge the two (local overrides). On the **first create in a project**,
+  ask the user whether this artifact should be local — **recommend local**
+  (machine-private by default); pass `--local` when they say yes.
+  Credentials always go to the single gitignored `credentials.json`
+  regardless of this flag.
 - Prints the shareable URL on stdout. Give it to the user.
 
-The command records the artifact in `.artifacts/manifest.json` (commit this)
-and its tokens in `.artifacts/credentials.json` (auto-gitignored, never
-commit or print tokens). The channel token (`ch_`) also lives in
-credentials; the slug in the manifest is safe to commit.
+The command records the artifact in `.artifacts/manifest.json` (commit
+this) — or `manifest.local.json` with `--local` (gitignored) — and its
+tokens in `.artifacts/credentials.json` (auto-gitignored, never commit or
+print tokens). The channel token (`ch_`) also lives in credentials; the
+slug in the manifest is safe to commit.
 
 ## Updating
 
@@ -210,10 +231,15 @@ credentials; the slug in the manifest is safe to commit.
 in a sub-agent" above.)*
 
 ```
-node artifact.mjs update <id> [file] [--label "what-changed"]
+node artifact.mjs update <id> <file> [--label "what-changed"]
 ```
 
-Same URL, new version. The manifest supplies the write token and expected
+Same URL, new version. `<file>` is **required** — the sub-agent regenerates
+the page first: fetch the current published version from the server
+(`GET <apiUrl>/api/artifacts/<id>/raw`) as the starting reference (a locked
+design direction's comment lives at the top of that stored HTML), read the
+project files the artifact's `scope` covers, regenerate, write to a temp
+file, and pass it here. The manifest supplies the write token and expected
 version; on a version conflict the CLI explains and offers `--force`.
 `node artifact.mjs list` shows known artifacts.
 

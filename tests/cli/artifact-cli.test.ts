@@ -185,9 +185,22 @@ function manifest(): {
     autoUpdate?: boolean;
   }>;
 } {
-  return JSON.parse(
-    readFileSync(join(projectDir, ".artifacts/manifest.json"), "utf8"),
-  );
+  const path = join(projectDir, ".artifacts/manifest.json");
+  if (!existsSync(path)) return { artifacts: [] };
+  return JSON.parse(readFileSync(path, "utf8"));
+}
+
+function manifestAt(rel: string): {
+  artifacts: Array<Record<string, unknown>>;
+} {
+  const path = join(projectDir, rel);
+  if (!existsSync(path)) return { artifacts: [] };
+  return JSON.parse(readFileSync(path, "utf8"));
+}
+
+function gitignore(): string {
+  const path = join(projectDir, ".gitignore");
+  return existsSync(path) ? readFileSync(path, "utf8") : "";
 }
 
 describe("create", () => {
@@ -296,7 +309,7 @@ describe("update", () => {
     writeFileSync(join(projectDir, "report.html"), "<h1>Report v2</h1>");
     writeFileSync(join(projectDir, "src/main.ts"), "export const x = 2;\n");
 
-    await run(["update", "testid123456"]);
+    await run(["update", "testid123456", "report.html"]);
 
     const put = requests[1];
     expect(put.method).toBe("PUT");
@@ -309,13 +322,22 @@ describe("update", () => {
     expect(entry.version).toBe(2);
   });
 
+  it("fails without a file argument", async () => {
+    await run(["create", "report.html", "--favicon", "📊"]);
+    const result = await run(["update", "testid123456"], {
+      expectFailure: true,
+    });
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toContain("update requires a file argument");
+  });
+
   it("reports a version conflict with guidance", async () => {
     await run(["create", "report.html", "--favicon", "📊"]);
     nextResponse = {
       status: 409,
       body: { error: "conflict", currentVersion: 5 },
     };
-    const result = await run(["update", "testid123456"], {
+    const result = await run(["update", "testid123456", "report.html"], {
       expectFailure: true,
     });
     expect(result.code).not.toBe(0);
@@ -639,6 +661,103 @@ describe("production level", () => {
     );
     expect(result.code).not.toBe(0);
     expect(result.stderr).toMatch(/level/i);
+  });
+});
+
+describe("local mode (--local)", () => {
+  it("writes the entry to manifest.local.json and gitignores it", async () => {
+    await run([
+      "create",
+      "report.html",
+      "--favicon",
+      "📊",
+      "--scope",
+      "report",
+      "--local",
+    ]);
+    // shared manifest untouched; local manifest holds the entry
+    expect(manifest().artifacts).toHaveLength(0);
+    const local = manifestAt(".artifacts/manifest.local.json");
+    expect(local.artifacts).toHaveLength(1);
+    expect(local.artifacts[0].id).toBe("testid123456");
+    // credentials still single-file, holds the token
+    const creds = JSON.parse(
+      readFileSync(join(projectDir, ".artifacts/credentials.json"), "utf8"),
+    );
+    expect(creds.tokens.testid123456).toBeTruthy();
+    // gitignore covers the local files, not credentials.local
+    expect(gitignore()).toContain(".artifacts/manifest.local.json");
+    expect(gitignore()).not.toContain("credentials.local");
+  });
+
+  it("list reads the merged view (local + shared)", async () => {
+    mkdirSync(join(projectDir, ".artifacts"), { recursive: true });
+    writeFileSync(
+      join(projectDir, ".artifacts/manifest.json"),
+      JSON.stringify({
+        artifacts: [
+          { id: "sharedAAA", url: "u", title: "Shared", favicon: "📊" },
+        ],
+      }),
+    );
+    writeFileSync(
+      join(projectDir, ".artifacts/manifest.local.json"),
+      JSON.stringify({
+        artifacts: [
+          { id: "localBBB", url: "u", title: "Local", favicon: "📊" },
+        ],
+      }),
+    );
+    const result = await run(["list"]);
+    expect(result.stdout).toContain("sharedAAA");
+    expect(result.stdout).toContain("localBBB");
+  });
+
+  it("local entry overrides shared entry with the same id", async () => {
+    mkdirSync(join(projectDir, ".artifacts"), { recursive: true });
+    const entry = (title: string) => ({
+      id: "sameID",
+      url: "u",
+      title,
+      favicon: "📊",
+      watch: [],
+      snapshot: {},
+    });
+    writeFileSync(
+      join(projectDir, ".artifacts/manifest.json"),
+      JSON.stringify({ artifacts: [entry("SharedTitle")] }),
+    );
+    writeFileSync(
+      join(projectDir, ".artifacts/manifest.local.json"),
+      JSON.stringify({ artifacts: [entry("LocalTitle")] }),
+    );
+    const result = await run(["list"]);
+    expect(result.stdout).toContain("LocalTitle");
+    expect(result.stdout).not.toContain("SharedTitle");
+  });
+
+  it("status reports staleness across both files", async () => {
+    mkdirSync(join(projectDir, ".artifacts"), { recursive: true });
+    const watch = ["src/**/*.ts"];
+    const stale = (id: string) => ({
+      id,
+      url: "u",
+      title: id,
+      favicon: "📊",
+      watch,
+      snapshot: { "src/main.ts": "deadbeef" },
+    });
+    writeFileSync(
+      join(projectDir, ".artifacts/manifest.json"),
+      JSON.stringify({ artifacts: [stale("sharedStale")] }),
+    );
+    writeFileSync(
+      join(projectDir, ".artifacts/manifest.local.json"),
+      JSON.stringify({ artifacts: [stale("localStale")] }),
+    );
+    const result = await run(["status"], { expectFailure: true });
+    expect(result.stdout).toContain("sharedStale");
+    expect(result.stdout).toContain("localStale");
   });
 });
 

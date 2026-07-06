@@ -12,13 +12,24 @@ import {
   writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
 const PBKDF2_ITERATIONS = 600_000;
-const MANIFEST_PATH = ".artifacts/manifest.json";
-const CREDENTIALS_PATH = ".artifacts/credentials.json";
+const ARTIFACTS_DIR = ".artifacts";
+// *.local.* siblings mirror Claude Code's .claude/settings.local.json +
+// CLAUDE.local.md convention: machine-local, gitignored, merged over the
+// committed sibling at read time (local wins). Only state files get a local
+// variant — credentials is already gitignored, and content lives on the
+// server, so neither needs one.
+const filePair = (base) => ({
+  shared: join(ARTIFACTS_DIR, `${base}.json`),
+  local: join(ARTIFACTS_DIR, `${base}.local.json`),
+});
+const MANIFEST = filePair("manifest");
+const CONFIG = filePair("config");
+const CREDENTIALS_PATH = join(ARTIFACTS_DIR, "credentials.json");
 
 function fail(message) {
   console.error(`error: ${message}`);
@@ -36,7 +47,10 @@ function writeJson(path, value) {
 }
 
 function loadConfig(flags) {
-  const local = readJson(".artifacts/config.json", {});
+  const project = {
+    ...readJson(CONFIG.shared, {}),
+    ...readJson(CONFIG.local, {}),
+  };
   const global = readJson(
     join(homedir(), ".config/open-artifacts/config.json"),
     {},
@@ -44,10 +58,12 @@ function loadConfig(flags) {
   const apiUrl =
     flags.api ??
     process.env.OPEN_ARTIFACTS_URL ??
-    local.apiUrl ??
+    project.apiUrl ??
     global.apiUrl;
   const createToken =
-    process.env.OPEN_ARTIFACTS_TOKEN ?? local.createToken ?? global.createToken;
+    process.env.OPEN_ARTIFACTS_TOKEN ??
+    project.createToken ??
+    global.createToken;
   if (!apiUrl) {
     fail(
       'no instance configured. Set OPEN_ARTIFACTS_URL, pass --api <url>, or write .artifacts/config.json {"apiUrl": "https://..."}',
@@ -56,12 +72,26 @@ function loadConfig(flags) {
   return { apiUrl: apiUrl.replace(/\/+$/, ""), createToken };
 }
 
-function loadManifest() {
-  return readJson(MANIFEST_PATH, { artifacts: [] });
+// Merge shared + local manifest entries. Keyed by id; a local entry with the
+// same id replaces the shared one, local entries with new ids are appended.
+// A channel is also unique — a local entry with a channel already present on
+// a shared entry of a *different* id wins (local overrides), matching the
+// settings.local.json "local overrides project" semantics.
+function mergeArtifacts(shared, local) {
+  const byId = new Map();
+  for (const entry of shared) byId.set(entry.id, entry);
+  for (const entry of local) byId.set(entry.id, entry);
+  return [...byId.values()];
 }
 
-function saveManifest(manifest) {
-  writeJson(MANIFEST_PATH, manifest);
+function loadManifest() {
+  const shared = readJson(MANIFEST.shared, { artifacts: [] });
+  const local = readJson(MANIFEST.local, { artifacts: [] });
+  return { artifacts: mergeArtifacts(shared.artifacts, local.artifacts) };
+}
+
+function saveManifest(manifest, local) {
+  writeJson(local ? MANIFEST.local : MANIFEST.shared, manifest);
 }
 
 function loadCredentials() {
@@ -73,15 +103,46 @@ function saveCredentials(credentials) {
   ensureGitignored();
 }
 
+// Resolve which manifest file (shared vs local) an entry currently lives in.
+// Used by update/delete/ack/auto-update to write back to the right file
+// without persisting an origin tag on the entry.
+function manifestFileForId(id) {
+  if (
+    readJson(MANIFEST.local, { artifacts: [] }).artifacts.some(
+      (a) => a.id === id,
+    )
+  ) {
+    return {
+      local: true,
+      manifest: readJson(MANIFEST.local, { artifacts: [] }),
+    };
+  }
+  return {
+    local: false,
+    manifest: readJson(MANIFEST.shared, { artifacts: [] }),
+  };
+}
+
 function ensureGitignored() {
   if (!existsSync(".git")) return;
-  const line = ".artifacts/credentials.json";
+  // credentials.json is always gitignored. The *.local.* siblings are
+  // gitignored only when they actually exist (created by a --local write),
+  // so we never gitignore speculative patterns a repo doesn't use.
+  const lines = [".artifacts/credentials.json"];
+  if (existsSync(MANIFEST.local)) lines.push(".artifacts/manifest.local.json");
+  if (existsSync(CONFIG.local)) lines.push(".artifacts/config.local.json");
   const current = existsSync(".gitignore")
     ? readFileSync(".gitignore", "utf8")
     : "";
-  if (current.split("\n").some((l) => l.trim() === line)) return;
-  writeFileSync(".gitignore", `${current.replace(/\n*$/, "\n")}${line}\n`);
-  console.error(`note: added ${line} to .gitignore`);
+  const existing = new Set(current.split("\n").map((l) => l.trim()));
+  const missing = lines.filter((l) => !existing.has(l));
+  if (missing.length === 0) return;
+  writeFileSync(
+    ".gitignore",
+    `${current.replace(/\n*$/, "\n")}${missing.join("\n")}\n`,
+  );
+  for (const line of missing)
+    console.error(`note: added ${line} to .gitignore`);
 }
 
 const toBase64 = (bytes) => Buffer.from(bytes).toString("base64");
@@ -277,10 +338,16 @@ async function commandCreate(file, flags) {
     fail(`create failed (${status}): ${json.error ?? "unknown error"}`);
 
   const watch = parseWatch(flags.watch);
-  const manifest = loadManifest();
+  // The manifest we write to is selected by --local. Reads still merge, so a
+  // channel already bound in the other file is detected; but the entry itself
+  // is written/edited in the file matching the flag. This means a `create
+  // --local` on a channel that exists in the shared manifest writes a local
+  // entry with the same id — the local one then overrides the shared on read.
+  const targetFile = flags.local ? MANIFEST.local : MANIFEST.shared;
+  const manifest = readJson(targetFile, { artifacts: [] });
   const source = readFileSync(file, "utf8");
-  // If this channel was already in the manifest, replace the entry instead
-  // of appending a duplicate.
+  // If this channel was already in this manifest file, replace the entry
+  // instead of appending a duplicate.
   const existingIdx = flags.channel
     ? manifest.artifacts.findIndex((a) => a.channel === flags.channel)
     : -1;
@@ -297,7 +364,6 @@ async function commandCreate(file, flags) {
     level: resolveLevel(flags),
     watch,
     snapshot: snapshotWatch(watch),
-    sourceFile: relative(process.cwd(), resolve(file)),
     version: json.version,
     updatedAt: new Date().toISOString(),
   };
@@ -306,7 +372,8 @@ async function commandCreate(file, flags) {
   } else {
     manifest.artifacts.push(entry);
   }
-  saveManifest(manifest);
+  saveManifest(manifest, flags.local);
+  if (flags.local) ensureGitignored();
 
   // First creation returns a one-time write token; a channel-driven update
   // (status 200) does not. Only persist the wt_ when present.
@@ -342,27 +409,28 @@ async function commandCreate(file, flags) {
 
 function findEntry(manifest, id) {
   const entry = manifest.artifacts.find((a) => a.id === id);
-  if (!entry) fail(`artifact ${id} not found in ${MANIFEST_PATH}`);
+  if (!entry) fail(`artifact ${id} not found in ${MANIFEST.shared}`);
   return entry;
 }
 
 async function commandUpdate(id, file, flags) {
+  if (!file)
+    fail(
+      "update requires a file argument: regenerate the page (fetch the current version from the server as a reference, read the project files in the artifact's scope) and pass the new file path",
+    );
   const config = loadConfig(flags);
-  const manifest = loadManifest();
-  const entry = findEntry(manifest, id);
+  const merged = loadManifest();
+  const entry = findEntry(merged, id);
   const credentials = loadCredentials();
   const token = credentials.tokens[id];
   if (!token) fail(`no write token for ${id} in ${CREDENTIALS_PATH}`);
 
-  const sourceFile = file ?? entry.sourceFile;
-  if (!sourceFile)
-    fail("no file given and no sourceFile recorded in the manifest");
   if (entry.encrypted && !flags.password) {
     fail(
       "this artifact is password protected; pass --password to re-encrypt the update",
     );
   }
-  const payload = await preparePayload(sourceFile, {
+  const payload = await preparePayload(file, {
     ...flags,
     format: flags.format ?? entry.format,
     favicon: flags.favicon ?? undefined,
@@ -385,22 +453,28 @@ async function commandUpdate(id, file, flags) {
   if (status !== 200)
     fail(`update failed (${status}): ${json.error ?? "unknown error"}`);
 
-  entry.version = json.version;
-  entry.updatedAt = new Date().toISOString();
-  entry.snapshot = snapshotWatch(entry.watch ?? []);
-  entry.sourceFile = relative(process.cwd(), resolve(sourceFile));
-  if (flags.title) entry.title = flags.title;
-  if (flags.favicon) entry.favicon = flags.favicon;
-  saveManifest(manifest);
+  // Write back to whichever file (shared vs local) the entry lives in. The
+  // merged read above found it; --local is ignored here because an entry's
+  // home file is a property of where it was created, not of this update.
+  const { local, manifest } = manifestFileForId(id);
+  const target = manifest.artifacts.find((a) => a.id === id);
+  target.version = json.version;
+  target.updatedAt = new Date().toISOString();
+  target.snapshot = snapshotWatch(target.watch ?? []);
+  if (flags.title) target.title = flags.title;
+  if (flags.favicon) target.favicon = flags.favicon;
+  saveManifest(manifest, local);
 
-  console.log(json.url ?? entry.url);
+  console.log(json.url ?? target.url);
   console.error(`updated artifact ${id} to version ${json.version}`);
 }
 
 async function commandDelete(id, flags) {
   const config = loadConfig(flags);
-  const manifest = loadManifest();
-  findEntry(manifest, id);
+  // Confirm the entry exists (merged read), then delete from whichever file
+  // it actually lives in.
+  const merged = loadManifest();
+  findEntry(merged, id);
   const credentials = loadCredentials();
   const token = credentials.tokens[id];
   if (!token) fail(`no write token for ${id} in ${CREDENTIALS_PATH}`);
@@ -414,8 +488,9 @@ async function commandDelete(id, flags) {
   if (status !== 200)
     fail(`delete failed (${status}): ${json.error ?? "unknown error"}`);
 
+  const { local, manifest } = manifestFileForId(id);
   manifest.artifacts = manifest.artifacts.filter((a) => a.id !== id);
-  saveManifest(manifest);
+  saveManifest(manifest, local);
   delete credentials.tokens[id];
   saveCredentials(credentials);
   console.error(`deleted artifact ${id}`);
@@ -472,7 +547,7 @@ async function commandStatus(flags) {
     const input = await readHookInput();
     if (input?.stop_hook_active) return;
   }
-  if (!existsSync(MANIFEST_PATH)) {
+  if (!existsSync(MANIFEST.shared) && !existsSync(MANIFEST.local)) {
     if (!flags.hook) console.error("no artifact manifest; nothing to check");
     return;
   }
@@ -524,11 +599,13 @@ async function commandStatus(flags) {
 // watched file). Offline: no server round-trip. This is why status can stop
 // crying wolf without lying that the published page was regenerated.
 function commandAck(id) {
-  const manifest = loadManifest();
-  const entry = findEntry(manifest, id);
+  const merged = loadManifest();
+  findEntry(merged, id);
+  const { local, manifest } = manifestFileForId(id);
+  const entry = manifest.artifacts.find((a) => a.id === id);
   entry.snapshot = snapshotWatch(entry.watch ?? []);
   entry.reviewedAt = new Date().toISOString();
-  saveManifest(manifest);
+  saveManifest(manifest, local);
   console.error(
     `acknowledged ${id}: snapshot baseline advanced without republishing`,
   );
@@ -549,12 +626,14 @@ function commandAutoUpdate(id, mode) {
   if (mode !== "on" && mode !== "off") {
     fail('auto-update mode must be "on" or "off"');
   }
-  const manifest = loadManifest();
-  const entry = findEntry(manifest, id);
+  const merged = loadManifest();
+  findEntry(merged, id);
+  const { local, manifest } = manifestFileForId(id);
+  const entry = manifest.artifacts.find((a) => a.id === id);
 
   if (mode === "off") {
     entry.autoUpdate = false;
-    saveManifest(manifest);
+    saveManifest(manifest, local);
     console.error(`auto-update disabled for ${id}`);
     return;
   }
@@ -568,7 +647,7 @@ function commandAutoUpdate(id, mode) {
   }
 
   entry.autoUpdate = true;
-  saveManifest(manifest);
+  saveManifest(manifest, local);
 
   const projectDir = process.env.CLAUDE_PROJECT_DIR ?? process.cwd();
   const { installed, settingsPath } = installStopHook(projectDir);
@@ -638,7 +717,9 @@ const HELP = `usage: artifact.mjs <command> [options]
 
 commands:
   create <file>        publish a new artifact
-  update <id> [file]   redeploy an artifact (uses recorded sourceFile if omitted)
+  update <id> <file>   redeploy an artifact at the same URL (file required:
+                       regenerate from the server's current version + project
+                       files, then pass the new file)
   status               report artifacts whose watched files changed (exit 1 if stale)
   ack <id>             mark drift reviewed: advance the snapshot baseline without
                        republishing (offline; use when changes don't affect it)
@@ -664,6 +745,10 @@ options:
   --level <1|2|3>      production level: 1=simple doc, 2=interactive UI,
                        3=rich motion. Aliases: --simple / --interactive / --rich.
                        Omit to let the agent pick from the brief.
+  --local              write the manifest entry to .artifacts/manifest.local.json
+                       (gitignored, machine-local) instead of the committed
+                       manifest. Reads merge the two (local overrides). Credentials
+                       always go to the single .artifacts/credentials.json.
   --api <url>          instance URL (default: OPEN_ARTIFACTS_URL or config)
   --force              overwrite on version conflict
   --hook               (status) emit Claude Code hook JSON instead of text
@@ -690,6 +775,7 @@ async function main() {
       api: { type: "string" },
       force: { type: "boolean" },
       hook: { type: "boolean" },
+      local: { type: "boolean" },
       help: { type: "boolean" },
     },
   });
