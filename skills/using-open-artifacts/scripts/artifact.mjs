@@ -292,6 +292,7 @@ async function commandCreate(file, flags) {
     format: payload.format,
     encrypted: Boolean(flags.password),
     scope: flags.scope ?? null,
+    autoUpdate: false,
     channel: flags.channel ?? null,
     level: resolveLevel(flags),
     watch,
@@ -482,8 +483,14 @@ async function commandStatus(flags) {
   }
 
   if (flags.hook) {
+    // Only artifacts explicitly opted into the automatic loop (autoUpdate:
+    // true) may be surfaced here — this is the only thing autoUpdate gates.
+    // A stale-but-not-opted-in artifact stays invisible to the hook even
+    // though it's still reported by a plain, human-run `status` below.
+    const hookStale = stale.filter(({ entry }) => entry.autoUpdate === true);
+    if (hookStale.length === 0) return;
     const scriptPath = fileURLToPath(import.meta.url);
-    const lines = stale.map(({ entry, changed }) => {
+    const lines = hookStale.map(({ entry, changed }) => {
       const scope = entry.scope ? ` It covers: ${entry.scope}.` : "";
       return (
         `Artifact "${entry.title ?? entry.id}" (${entry.url}, id ${entry.id}) was published from sources that have since changed.${scope} ` +
@@ -505,6 +512,7 @@ async function commandStatus(flags) {
   for (const { entry, changed } of stale) {
     console.log(`stale: ${entry.id} ${entry.title ?? ""} (${entry.url})`);
     if (entry.scope) console.log(`  scope: ${entry.scope}`);
+    console.log(`  auto-update: ${entry.autoUpdate === true ? "on" : "off"}`);
     console.log(`  changed: ${changed.join(", ")}`);
   }
   process.exitCode = 1;
@@ -526,6 +534,52 @@ function commandAck(id) {
   );
 }
 
+// Toggle whether an artifact is surfaced by the Stop-hook-driven automatic
+// loop (status --hook). This does NOT change the regenerate-vs-ack judgment
+// SKILL.md describes: that still runs, unchanged, for whatever staleness the
+// hook (or a human's plain `status`) surfaces to the agent. Off/absent by
+// default, so no existing artifact's behavior changes. Turning "on" requires
+// a write token to already exist for this id (otherwise `update` could never
+// succeed for it — the common case for anyone besides the original creator,
+// since credentials.json is gitignored while manifest.json is committed) and
+// installs the Stop hook if it isn't already present, since the flag is
+// inert without it: running this command IS the user's consent for that
+// install (unlike `create`, which only ever hints at install-hook).
+function commandAutoUpdate(id, mode) {
+  if (mode !== "on" && mode !== "off") {
+    fail('auto-update mode must be "on" or "off"');
+  }
+  const manifest = loadManifest();
+  const entry = findEntry(manifest, id);
+
+  if (mode === "off") {
+    entry.autoUpdate = false;
+    saveManifest(manifest);
+    console.error(`auto-update disabled for ${id}`);
+    return;
+  }
+
+  const credentials = loadCredentials();
+  if (!credentials.tokens[id]) {
+    fail(
+      `no write token for ${id} in ${CREDENTIALS_PATH}; auto-update could never publish it. ` +
+        "Run update once with a valid write token (or re-create the artifact) before enabling auto-update.",
+    );
+  }
+
+  entry.autoUpdate = true;
+  saveManifest(manifest);
+
+  const projectDir = process.env.CLAUDE_PROJECT_DIR ?? process.cwd();
+  const { installed, settingsPath } = installStopHook(projectDir);
+  console.error(`auto-update enabled for ${id}`);
+  console.error(
+    installed
+      ? `installed Stop hook in ${settingsPath}`
+      : "stop hook already installed",
+  );
+}
+
 function commandList() {
   const manifest = loadManifest();
   if (manifest.artifacts.length === 0) {
@@ -534,7 +588,7 @@ function commandList() {
   }
   for (const entry of manifest.artifacts) {
     console.log(
-      `${entry.id}  v${entry.version}  ${entry.encrypted ? "[protected] " : ""}${entry.title ?? ""}  ${entry.url}`,
+      `${entry.id}  v${entry.version}  ${entry.encrypted ? "[protected] " : ""}${entry.autoUpdate === true ? "[auto-update] " : ""}${entry.title ?? ""}  ${entry.url}`,
     );
   }
 }
@@ -588,6 +642,10 @@ commands:
   status               report artifacts whose watched files changed (exit 1 if stale)
   ack <id>             mark drift reviewed: advance the snapshot baseline without
                        republishing (offline; use when changes don't affect it)
+  auto-update <id> on|off
+                       toggle whether the Stop hook's automatic loop surfaces
+                       this artifact (opt-in, off by default); "on" also installs
+                       the Stop hook if needed and prints a confirmation
   list                 list artifacts in the manifest
   delete <id>          delete an artifact from the server and manifest
   install-hook         add a Claude Code Stop hook that runs status --hook
@@ -664,6 +722,11 @@ async function main() {
     case "ack":
       if (!rest[0]) fail("ack requires an artifact id");
       commandAck(rest[0]);
+      break;
+    case "auto-update":
+      if (!rest[0]) fail("auto-update requires an artifact id");
+      if (!rest[1]) fail('auto-update requires a mode: "on" or "off"');
+      commandAutoUpdate(rest[0], rest[1]);
       break;
     case "list":
       commandList();

@@ -52,3 +52,25 @@ Feature: Agent skill for creating and maintaining artifacts
     Given a stale artifact and a Stop hook invocation with stop_hook_active true
     When the agent runs the artifact script with status --hook on that input
     Then the script emits nothing and exits 0 so Claude is allowed to stop
+
+  Scenario: Turning on auto-update for one artifact leaves every other artifact untouched
+    Given manifest entries for artifacts "auto-a" and "auto-b", neither opted into auto-update
+    When the agent runs the artifact script with auto-update auto-a on
+    Then the auto-a manifest entry's autoUpdate becomes true
+    And the auto-b manifest entry's autoUpdate is unchanged
+    So that toggling one artifact's auto-update never leaks into another's state
+
+  Scenario: Turning on auto-update installs the Stop hook as the user's explicit consent
+    Given a Claude Code session with CLAUDE_PROJECT_DIR set to the project
+    And a manifest entry for artifact "abc" with a write token on file
+    When the agent runs the artifact script with auto-update abc on
+    Then a Stop hook is installed in .claude/settings.json
+    And the output confirms the hook was installed
+    So that the hook is only ever installed as the direct result of a visible command, never silently
+
+  Scenario: The Stop hook only surfaces artifacts opted into auto-update
+    Given a stale artifact "auto-a" with autoUpdate true and a stale artifact "auto-b" without autoUpdate set
+    When the agent runs the artifact script with status --hook
+    Then the hook JSON mentions auto-a but not auto-b
+    And a plain status still reports both artifacts as stale
+    So that the hands-off Stop-hook loop only ever acts on artifacts the user opted in, while a human's manual check keeps full visibility

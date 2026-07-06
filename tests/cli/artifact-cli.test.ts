@@ -182,6 +182,7 @@ function manifest(): {
     channel: string | null;
     level: number | null;
     encrypted: boolean;
+    autoUpdate?: boolean;
   }>;
 } {
   return JSON.parse(
@@ -372,6 +373,7 @@ describe("status", () => {
       "--watch",
       "src/**/*.ts",
     ]);
+    await run(["auto-update", "testid123456", "on"]);
     writeFileSync(join(projectDir, "src/main.ts"), "export const x = 99;\n");
 
     const result = await run(["status", "--hook"]);
@@ -398,6 +400,7 @@ describe("status", () => {
       "--watch",
       "src/**/*.ts",
     ]);
+    await run(["auto-update", "testid123456", "on"]);
     writeFileSync(join(projectDir, "src/main.ts"), "export const x = 99;\n");
 
     const result = await runWithStdin(
@@ -419,6 +422,7 @@ describe("status", () => {
       "--watch",
       "src/**/*.ts",
     ]);
+    await run(["auto-update", "testid123456", "on"]);
     writeFileSync(join(projectDir, "src/main.ts"), "export const x = 99;\n");
 
     const result = await runWithStdin(
@@ -450,6 +454,102 @@ describe("status", () => {
     const result = await run(["status"], { expectFailure: true });
     expect(result.code).toBe(1);
     expect(result.stdout).toContain("src/new-module.ts");
+  });
+});
+
+describe("status --hook filters to auto-update artifacts", () => {
+  it("hook JSON mentions only the auto-update:true artifact; plain status reports both with auto-update lines", async () => {
+    nextResponse = {
+      status: 201,
+      body: {
+        id: "auto-a",
+        url: "http://example.invalid/a/auto-a",
+        writeToken: `wt_${"a".repeat(43)}`,
+        version: 1,
+      },
+    };
+    await run([
+      "create",
+      "report.html",
+      "--favicon",
+      "📊",
+      "--scope",
+      "scope A",
+      "--watch",
+      "src/main.ts",
+    ]);
+    nextResponse = {
+      status: 201,
+      body: {
+        id: "auto-b",
+        url: "http://example.invalid/a/auto-b",
+        writeToken: `wt_${"b".repeat(43)}`,
+        version: 1,
+      },
+    };
+    await run([
+      "create",
+      "report.html",
+      "--favicon",
+      "📊",
+      "--scope",
+      "scope B",
+      "--watch",
+      "src/main.ts",
+    ]);
+
+    await run(["auto-update", "auto-a", "on"]);
+    // Simulate auto-b being a legacy entry created before this feature
+    // shipped, i.e. the autoUpdate key is entirely absent, not just false.
+    const m = manifest();
+    const entryB = m.artifacts.find((a) => a.id === "auto-b") as {
+      autoUpdate?: boolean;
+    };
+    delete entryB.autoUpdate;
+    writeFileSync(
+      join(projectDir, ".artifacts/manifest.json"),
+      `${JSON.stringify(m, null, 2)}\n`,
+    );
+
+    writeFileSync(join(projectDir, "src/main.ts"), "export const x = 999;\n");
+
+    const hook = await run(["status", "--hook"]);
+    expect(hook.code).toBe(0);
+    const parsed = JSON.parse(hook.stdout) as {
+      hookSpecificOutput: { additionalContext: string };
+    };
+    expect(parsed.hookSpecificOutput.additionalContext).toContain("auto-a");
+    expect(parsed.hookSpecificOutput.additionalContext).not.toContain("auto-b");
+
+    const plain = await run(["status"], { expectFailure: true });
+    expect(plain.code).toBe(1);
+    expect(plain.stdout).toContain("stale: auto-a");
+    expect(plain.stdout).toContain("stale: auto-b");
+    expect(plain.stdout).toContain("auto-update: on");
+    expect(plain.stdout).toContain("auto-update: off");
+  });
+
+  it("hook stays completely silent when stale artifacts exist but none have auto-update on", async () => {
+    await run([
+      "create",
+      "report.html",
+      "--favicon",
+      "📊",
+      "--scope",
+      "s",
+      "--watch",
+      "src/main.ts",
+    ]);
+    writeFileSync(join(projectDir, "src/main.ts"), "export const x = 999;\n");
+
+    const hook = await run(["status", "--hook"]);
+    expect(hook.code).toBe(0);
+    expect(hook.stdout.trim()).toBe("");
+
+    const plain = await run(["status"], { expectFailure: true });
+    expect(plain.code).toBe(1); // human path is unaffected by the filter
+    expect(plain.stdout).toContain("stale: testid123456");
+    expect(plain.stdout).toContain("auto-update: off");
   });
 });
 
@@ -665,5 +765,138 @@ describe("ack", () => {
   it("requires an id", async () => {
     const result = await run(["ack"], { expectFailure: true });
     expect(result.code).not.toBe(0);
+  });
+});
+
+describe("auto-update", () => {
+  it("toggles on for one artifact without affecting another (isolation)", async () => {
+    nextResponse = {
+      status: 201,
+      body: {
+        id: "artifact-a",
+        url: "http://example.invalid/a/artifact-a",
+        writeToken: `wt_${"a".repeat(43)}`,
+        version: 1,
+      },
+    };
+    await run(["create", "report.html", "--favicon", "📊"]);
+    nextResponse = {
+      status: 201,
+      body: {
+        id: "artifact-b",
+        url: "http://example.invalid/a/artifact-b",
+        writeToken: `wt_${"b".repeat(43)}`,
+        version: 1,
+      },
+    };
+    await run(["create", "report.html", "--favicon", "📊"]);
+
+    await run(["auto-update", "artifact-a", "on"]);
+
+    const entries = manifest().artifacts;
+    expect(entries.find((a) => a.id === "artifact-a")?.autoUpdate).toBe(true);
+    expect(entries.find((a) => a.id === "artifact-b")?.autoUpdate).toBeFalsy();
+  });
+
+  it("installs the Stop hook when turned on inside a session", async () => {
+    await run(["create", "report.html", "--favicon", "📊"]);
+    const id = manifest().artifacts[0].id;
+
+    const { code, stderr } = await runEnv(
+      ["auto-update", id, "on"],
+      projectDir,
+      { CLAUDE_PROJECT_DIR: projectDir },
+    );
+    expect(code).toBe(0);
+    expect(stderr).toContain("auto-update enabled");
+    expect(stderr).toContain("installed Stop hook");
+
+    const settings = JSON.parse(
+      readFileSync(join(projectDir, ".claude/settings.json"), "utf8"),
+    );
+    expect(settings.hooks?.Stop?.[0]?.hooks?.[0]?.command).toContain(
+      "status --hook",
+    );
+    expect(manifest().artifacts[0].autoUpdate).toBe(true);
+  });
+
+  it("does not reinstall the hook if already installed (idempotent)", async () => {
+    await run(["create", "report.html", "--favicon", "📊"]);
+    const id = manifest().artifacts[0].id;
+    await runEnv(["install-hook"], projectDir, {
+      CLAUDE_PROJECT_DIR: projectDir,
+    });
+
+    const { stderr } = await runEnv(["auto-update", id, "on"], projectDir, {
+      CLAUDE_PROJECT_DIR: projectDir,
+    });
+    expect(stderr).toContain("already installed");
+    const settings = JSON.parse(
+      readFileSync(join(projectDir, ".claude/settings.json"), "utf8"),
+    );
+    expect(settings.hooks.Stop).toHaveLength(1);
+  });
+
+  it("turning off does not uninstall an already-installed hook", async () => {
+    await run(["create", "report.html", "--favicon", "📊"]);
+    const id = manifest().artifacts[0].id;
+    await runEnv(["auto-update", id, "on"], projectDir, {
+      CLAUDE_PROJECT_DIR: projectDir,
+    });
+
+    const { code, stderr } = await run(["auto-update", id, "off"]);
+    expect(code).toBe(0);
+    expect(stderr).toContain("auto-update disabled");
+    expect(manifest().artifacts[0].autoUpdate).toBe(false);
+    const settings = JSON.parse(
+      readFileSync(join(projectDir, ".claude/settings.json"), "utf8"),
+    );
+    expect(settings.hooks.Stop).toHaveLength(1);
+  });
+
+  it("fails to turn on without a write token for that artifact", async () => {
+    await run(["create", "report.html", "--favicon", "📊"]);
+    const id = manifest().artifacts[0].id;
+    // Simulate a teammate who cloned the repo: manifest.json is committed,
+    // credentials.json (gitignored) is not.
+    writeFileSync(
+      join(projectDir, ".artifacts/credentials.json"),
+      JSON.stringify({ tokens: {} }),
+    );
+    const result = await run(["auto-update", id, "on"], {
+      expectFailure: true,
+    });
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toContain("no write token");
+    expect(manifest().artifacts[0].autoUpdate).toBeFalsy();
+  });
+
+  it("fails on an unknown id", async () => {
+    await run(["create", "report.html", "--favicon", "📊"]);
+    const result = await run(["auto-update", "nope", "on"], {
+      expectFailure: true,
+    });
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toContain("not found");
+  });
+
+  it("fails on an invalid mode argument", async () => {
+    await run(["create", "report.html", "--favicon", "📊"]);
+    const id = manifest().artifacts[0].id;
+    const result = await run(["auto-update", id, "maybe"], {
+      expectFailure: true,
+    });
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toContain('"on" or "off"');
+  });
+
+  it("requires an id and a mode", async () => {
+    const noId = await run(["auto-update"], { expectFailure: true });
+    expect(noId.code).not.toBe(0);
+
+    await run(["create", "report.html", "--favicon", "📊"]);
+    const id = manifest().artifacts[0].id;
+    const noMode = await run(["auto-update", id], { expectFailure: true });
+    expect(noMode.code).not.toBe(0);
   });
 });

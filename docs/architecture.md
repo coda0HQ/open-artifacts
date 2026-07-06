@@ -172,8 +172,17 @@ State in the user's project:
 Auto-update loop: SKILL.md instructs the agent to run `status` after
 completing work and regenerate any stale artifact within its recorded scope;
 a Stop hook (`node ${CLAUDE_SKILL_DIR}/scripts/artifact.mjs status --hook`)
-surfaces staleness even when the agent forgets. Updates from CI/plain git are
-out of scope for v1 (documented).
+surfaces staleness even when the agent forgets. Each manifest entry also
+carries an `autoUpdate` boolean (default `false`/absent): `status --hook`
+only surfaces entries with `autoUpdate === true`, so the hands-off loop only
+ever acts on artifacts explicitly opted in via `artifact.mjs auto-update
+<id> on|off`; a plain, human-run `status` (no `--hook`) is unaffected and
+still reports every stale watched artifact. The regenerate-vs-`ack` judgment
+itself is unchanged either way. Turning `autoUpdate` on also installs the
+Stop hook if not already present — the one other case besides `install-hook`
+itself where the CLI writes `.claude/settings.json`, and it does so only as
+the direct, visible consequence of that explicit command. Updates from
+CI/plain git are out of scope for v1 (documented).
 
 ## Stack
 

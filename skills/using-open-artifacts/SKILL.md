@@ -200,6 +200,37 @@ recorded scope:
   Don't just leave it stale: with the hook installed it re-nudges on every
   future turn until the baseline moves via `update` or `ack`.
 
+### Opting a specific artifact into the automatic loop
+
+By default, the Stop hook (once installed) surfaces **every** stale, watched
+artifact — the regenerate-vs-`ack` judgment above still applies to each one,
+unchanged. If the user wants the hook to stay quiet about most artifacts and
+only nudge about specific ones, turn on that artifact's auto-update flag:
+
+```
+node artifact.mjs auto-update <id> on
+```
+
+This does not change how you decide what to do once an artifact is flagged —
+it only changes **which artifacts the Stop hook is allowed to flag at all**:
+
+- Opt-in, per-artifact, and fully isolated: it flips one manifest entry's
+  `autoUpdate` field and never reads or writes any other entry's state. Off
+  by default — artifacts never toggled (or created before this feature) are
+  treated as off, and the hook stays completely silent about them even
+  while stale.
+- A plain, human-run `node artifact.mjs status` (no `--hook`) is never
+  filtered by this flag — it always reports every stale watched artifact.
+  Only the autonomous, no-human-present Stop-hook path narrows to opted-in
+  artifacts.
+- Turning it **on** requires a write token to already exist for that artifact
+  (fails clearly if not), and installs the Stop hook automatically if it
+  isn't already present. Unlike `create`'s hook hint, which never installs
+  anything for you, running `auto-update <id> on` *is* the user's consent to
+  install it — go ahead, and the CLI prints a confirmation when it does.
+- Turning it **off** (`node artifact.mjs auto-update <id> off`) leaves any
+  installed hook in place; it just stops mentioning this artifact.
+
 ## Password protection
 
 ```
