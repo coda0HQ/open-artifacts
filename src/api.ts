@@ -1,5 +1,6 @@
 import type { Context } from "hono";
 import { Hono } from "hono";
+import type { CreateInput } from "./domain";
 import { MAX_CONTENT_BYTES, validateCreate, validateUpdate } from "./domain";
 import type { ArtifactRecord, ArtifactStore } from "./store";
 import { D1R2Store } from "./store";
@@ -103,6 +104,50 @@ export function parseVersionParam(
 
 export const api = new Hono<AppContext>();
 
+// Publish a create payload as a new version of the channel's artifact. A
+// channel publish carries no baseVersion, so losing the compare-and-swap only
+// means another publish landed first — retry on a fresh snapshot instead of
+// surfacing a 409 the caller can do nothing about.
+async function publishToChannel(
+  c: Context<AppContext>,
+  store: ArtifactStore,
+  record: ArtifactRecord,
+  input: CreateInput,
+  channel: string,
+): Promise<Response> {
+  let snapshot: ArtifactRecord | null = record;
+  let currentVersion = record.currentVersion;
+  for (let attempt = 0; attempt < 3 && snapshot !== null; attempt += 1) {
+    const result = await store.update(snapshot, {
+      content: input.content,
+      format: input.format,
+      title: input.title,
+      description: input.description,
+      favicon: input.favicon,
+      label: input.label,
+      encrypted: input.encrypted,
+      baseVersion: null,
+      force: false,
+    });
+    if (typeof result === "number") {
+      return c.json({
+        id: snapshot.id,
+        url: artifactUrl(c, snapshot.id),
+        version: result,
+        channel,
+      });
+    }
+    currentVersion = result.currentVersion;
+    snapshot = await store.get(snapshot.id);
+  }
+  return c.json({ error: "version conflict", currentVersion }, 409);
+}
+
+const isChannelBindingConflict = (error: unknown): boolean =>
+  error instanceof Error &&
+  error.message.includes("UNIQUE constraint failed") &&
+  error.message.includes("channel_hash");
+
 api.post("/artifacts", async (c) => {
   const createToken = c.env.CREATE_TOKEN;
   if (createToken !== undefined && createToken !== "") {
@@ -145,45 +190,33 @@ api.post("/artifacts", async (c) => {
     return c.json({ error: "channel must be a channel token (ch_...)" }, 400);
   }
 
-  if (channelRaw !== null) {
-    const channelHash = await sha256Hex(channelRaw);
+  const channelHash = channelRaw !== null ? await sha256Hex(channelRaw) : null;
+  if (channelRaw !== null && channelHash !== null) {
     const existing = await store.findByChannel(channelHash);
     if (existing !== null) {
-      const result = await store.update(existing, {
-        content: parsed.value.content,
-        format: parsed.value.format,
-        title: parsed.value.title,
-        description: parsed.value.description,
-        favicon: parsed.value.favicon,
-        label: parsed.value.label,
-        encrypted: parsed.value.encrypted,
-        baseVersion: null,
-        force: false,
-      });
-      if (typeof result !== "number") {
-        return c.json(
-          { error: "version conflict", currentVersion: result.currentVersion },
-          409,
-        );
-      }
-      return c.json({
-        id: existing.id,
-        url: artifactUrl(c, existing.id),
-        version: result,
-        channel: channelRaw,
-      });
+      return publishToChannel(c, store, existing, parsed.value, channelRaw);
     }
   }
 
   const id = generateId();
   const writeToken = generateWriteToken();
-  const channelHash = channelRaw ? await sha256Hex(channelRaw) : null;
-  await store.create(
-    id,
-    await sha256Hex(writeToken),
-    parsed.value,
-    channelHash,
-  );
+  try {
+    await store.create(
+      id,
+      await sha256Hex(writeToken),
+      parsed.value,
+      channelHash,
+    );
+  } catch (error) {
+    // Two concurrent first publishes to one channel: the unique index lets
+    // exactly one create win; the loser lands here and becomes a version
+    // update on the winner's artifact, keeping the channel's URL stable.
+    if (channelRaw === null || channelHash === null) throw error;
+    if (!isChannelBindingConflict(error)) throw error;
+    const winner = await store.findByChannel(channelHash);
+    if (winner === null) throw error;
+    return publishToChannel(c, store, winner, parsed.value, channelRaw);
+  }
 
   return c.json(
     {

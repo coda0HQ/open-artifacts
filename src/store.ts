@@ -6,6 +6,7 @@ import type {
   UpdateInput,
   VersionMeta,
 } from "./domain";
+import { contentByteLength } from "./domain";
 
 export interface ArtifactRecord extends ArtifactMeta {
   tokenHash: string;
@@ -66,6 +67,9 @@ const SCHEMA = [
 
 // Columns added after launch; migrate existing DBs in place. Each ALTER
 // errors if the column already exists, which is fine — the column is there.
+// The unique index makes channel binding race-safe: concurrent first
+// publishes to one channel can only mint one artifact (SQLite allows any
+// number of NULLs, so channel-less artifacts are unaffected).
 const MIGRATIONS = [
   `ALTER TABLE artifacts ADD COLUMN channel_hash TEXT`,
   `ALTER TABLE versions ADD COLUMN title TEXT NOT NULL DEFAULT ''`,
@@ -73,6 +77,7 @@ const MIGRATIONS = [
   `ALTER TABLE versions ADD COLUMN favicon TEXT NOT NULL DEFAULT ''`,
   `ALTER TABLE versions ADD COLUMN format TEXT NOT NULL DEFAULT 'html'`,
   `ALTER TABLE versions ADD COLUMN encrypted INTEGER NOT NULL DEFAULT 0`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_artifacts_channel_hash ON artifacts(channel_hash)`,
 ];
 
 // After the ALTERs above add columns to existing rows with empty defaults,
@@ -88,26 +93,53 @@ SET title = (SELECT title FROM artifacts WHERE artifacts.id = versions.artifact_
 WHERE title = '' AND favicon = ''
 `;
 
-let schemaReady: Promise<unknown> | undefined;
+// "duplicate column name": the ALTER already ran on this database.
+// "UNIQUE constraint failed": the index cannot cover legacy duplicate rows.
+// Anything else is a genuine failure worth surfacing in the logs.
+const isExpectedMigrationError = (error: unknown): boolean =>
+  error instanceof Error &&
+  /duplicate column name|UNIQUE constraint failed/.test(error.message);
+
+// Memoized per database so a second binding (or a fresh test database in the
+// same isolate) never skips its own setup. A failed attempt clears the memo,
+// so a transient D1 error does not poison every subsequent request.
+const schemaReady = new WeakMap<D1Database, Promise<unknown>>();
 
 async function ensureSchema(db: D1Database): Promise<unknown> {
-  // Reset the memoized promise if the previous attempt failed, so a transient
-  // D1 error does not poison every subsequent request in this isolate.
-  if (schemaReady) return schemaReady;
+  const pending = schemaReady.get(db);
+  if (pending) return pending;
   const run = async () => {
     await db.batch(SCHEMA.map((sql) => db.prepare(sql)));
-    // Column added after launch; ALTER errors if the column already exists,
-    // which is fine — the column is there either way.
-    await Promise.all(MIGRATIONS.map((sql) => db.exec(sql).catch(() => {})));
+    // Statements run via prepare(), not exec(): exec() splits its input on
+    // newlines and rejects multi-line statements like BACKFILL. Sequential,
+    // not parallel: the unique index depends on the channel_hash ALTER having
+    // run first on a pre-channel database. Failures don't block requests, but
+    // only the expected ones — column already added, or an index blocked by
+    // legacy duplicate rows (findByChannel orders those deterministically) —
+    // stay silent.
+    for (const sql of MIGRATIONS) {
+      await db
+        .prepare(sql)
+        .run()
+        .catch((error) => {
+          if (!isExpectedMigrationError(error)) {
+            console.warn("migration failed, continuing:", sql, error);
+          }
+        });
+    }
     // Backfill historical version rows that got empty defaults from the
     // ALTER above. No-op once rows are populated.
-    await db.exec(BACKFILL).catch(() => {});
+    await db
+      .prepare(BACKFILL)
+      .run()
+      .catch((error) => console.warn("version backfill failed:", error));
   };
-  schemaReady = run().catch((error) => {
-    schemaReady = undefined;
+  const attempt = run().catch((error) => {
+    schemaReady.delete(db);
     throw error;
   });
-  return schemaReady;
+  schemaReady.set(db, attempt);
+  return attempt;
 }
 
 interface ArtifactRow {
@@ -188,7 +220,7 @@ export class D1R2Store implements ArtifactStore {
         customMetadata: { encrypted: encrypted ? "1" : "0" },
       },
     );
-    await this.db.batch([
+    const insert = this.db.batch([
       this.db
         .prepare(
           `INSERT INTO artifacts (id, token_hash, channel_hash, title, description, favicon, format, encrypted, current_version, created_at, updated_at)
@@ -219,10 +251,17 @@ export class D1R2Store implements ArtifactStore {
           input.favicon,
           input.format,
           input.encrypted ? 1 : 0,
-          input.content.length,
+          contentByteLength(input.content),
           now,
         ),
     ]);
+    // The unique channel index makes a failed insert an expected outcome of
+    // racing first publishes; sweep the object written above so the discarded
+    // id leaves nothing behind in the bucket.
+    await insert.catch(async (error) => {
+      await this.bucket.delete(contentKey(id, 1)).catch(() => {});
+      throw error;
+    });
     return {
       id,
       tokenHash,
@@ -249,8 +288,13 @@ export class D1R2Store implements ArtifactStore {
 
   async findByChannel(channelHash: string): Promise<ArtifactRecord | null> {
     await ensureSchema(this.db);
+    // The unique index caps this at one row; ORDER BY keeps the pick
+    // deterministic (oldest binding wins, id as tiebreaker) on a legacy DB
+    // where duplicates predate the index.
     const row = await this.db
-      .prepare("SELECT * FROM artifacts WHERE channel_hash = ? LIMIT 1")
+      .prepare(
+        "SELECT * FROM artifacts WHERE channel_hash = ? ORDER BY created_at, id LIMIT 1",
+      )
       .bind(channelHash)
       .first<ArtifactRow>();
     return row ? toRecord(row) : null;
@@ -373,7 +417,7 @@ export class D1R2Store implements ArtifactStore {
         vFavicon,
         vFormat,
         input.encrypted ? 1 : 0,
-        input.content.length,
+        contentByteLength(input.content),
         now,
       )
       .run();
@@ -383,9 +427,15 @@ export class D1R2Store implements ArtifactStore {
 
   async delete(id: string): Promise<void> {
     await ensureSchema(this.db);
-    const objects = await this.bucket.list({ prefix: `content/${id}/` });
-    if (objects.objects.length > 0) {
-      await this.bucket.delete(objects.objects.map((o) => o.key));
+    // list() returns at most 1000 keys per page (delete() accepts at most as
+    // many), so drain page by page — an artifact republished from a channel
+    // can easily accumulate more versions than one page holds.
+    for (;;) {
+      const page = await this.bucket.list({ prefix: `content/${id}/` });
+      if (page.objects.length > 0) {
+        await this.bucket.delete(page.objects.map((o) => o.key));
+      }
+      if (!page.truncated) break;
     }
     await this.db.batch([
       this.db.prepare("DELETE FROM versions WHERE artifact_id = ?").bind(id),

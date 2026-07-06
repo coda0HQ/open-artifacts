@@ -52,5 +52,16 @@ export async function renderOgCardPng(options: {
       defaultFontFamily: "Inter",
     },
   });
-  return resvg.render().asPng();
+  // Wasm-side allocations are not garbage collected; free them explicitly or
+  // a long-lived isolate leaks a full render's memory per request.
+  try {
+    const rendered = resvg.render();
+    try {
+      return rendered.asPng();
+    } finally {
+      rendered.free();
+    }
+  } finally {
+    resvg.free();
+  }
 }

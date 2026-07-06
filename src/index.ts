@@ -120,7 +120,7 @@ app.get("/og/:id", async (c) => {
     });
   } catch (error) {
     // A failed rasterization must not surface Hono's HTML error page to a
-    // crawler expecting an image; return a plain error the resets can retry.
+    // crawler expecting an image; return a plain error the requester can retry.
     console.error("og render failed", error);
     return new Response("og render failed", { status: 500 });
   }
