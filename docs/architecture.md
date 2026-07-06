@@ -187,6 +187,13 @@ out of scope for v1 (documented).
   hosted host (`coda0.com`), rewrites its brand tokens to "coda0" with
   `HTMLRewriter` (`src/home.ts`) — server-side, so crawlers and no-JS visitors
   see the SaaS identity. Every other deploy returns the asset untouched.
+- The same host rule drives every other place the service names itself:
+  `home.ts`'s `brandFor(hostname)` is the single source `src/wrap.ts` reads for
+  the viewer header's brand chip (coda0.com always shows "coda0" linking to
+  "/", ignoring `BRAND_URL`; other hosts show the neutral "Open Artifacts"
+  credit only when `BRAND_URL` is set), the not-found/invalid-version pages'
+  "Go to ⟨name⟩" link, and the OG card's wordmark — so a deploy's identity
+  stays consistent everywhere instead of drifting per call site.
 
 ## Limits
 
