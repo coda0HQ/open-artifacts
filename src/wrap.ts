@@ -1,5 +1,6 @@
 import type { ArtifactFormat, EncryptionParams } from "./domain";
 import { MARKED_SOURCE } from "./generated/marked-source";
+import { type Brand, brandFor, isCoda0Host } from "./home";
 
 export function escapeHtml(value: string): string {
   return value
@@ -109,14 +110,21 @@ const BRAND_SVG =
 function headerHtml(
   favicon: string,
   title: string,
+  hostname: string,
   brandUrl?: string | null,
 ): string {
-  const brand = brandUrl
-    ? `<a class="oa-brand" href="${escapeHtml(brandUrl)}" target="_blank" rel="noopener noreferrer" title="Made with Open Artifacts">${BRAND_SVG}<span class="oa-brand-text">Open Artifacts</span></a>`
+  // The hosted host always names itself "coda0" and links its own root,
+  // ignoring BRAND_URL entirely (same override rule as the landing page); a
+  // self-hoster's deploy shows the neutral "Open Artifacts" credit only when
+  // it opts in by setting BRAND_URL.
+  const brand = brandFor(hostname);
+  const href = isCoda0Host(hostname) ? "/" : brandUrl;
+  const chip = href
+    ? `<a class="oa-brand" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" title="Made with ${escapeHtml(brand.name)}">${BRAND_SVG}<span class="oa-brand-text">${escapeHtml(brand.name)}</span></a>`
     : "";
   return `<header class="oa-header">
   <span class="oa-title"><span class="oa-fav">${escapeHtml(favicon)}</span>${escapeHtml(title)}</span>
-  ${brand}
+  ${chip}
   <button id="oa-theme-toggle" type="button" aria-label="Toggle theme"></button>
 </header>`;
 }
@@ -190,6 +198,8 @@ export interface WrapOptions {
   content: string;
   url: string;
   ogImage: string;
+  /** Request hostname; selects the coda0 vs. Open Artifacts identity. */
+  hostname: string;
   /** "Powered by Open Artifacts" link URL; omit to hide the brand entry. */
   brandUrl?: string | null;
 }
@@ -228,10 +238,10 @@ function isRenderable(text: string): boolean {
 
 // Centered brand lockup shown when the title can't be drawn with the Latin
 // fonts — a clean branded card instead of a blank one.
-function fallbackCardSvg(): string {
+function fallbackCardSvg(brand: Brand): string {
   return `${OG_HEAD}
 <g transform="translate(564 231) scale(3)"><path d="${OG_BRAND_D}" fill="#6457f0"/></g>
-<text x="600" y="392" text-anchor="middle" font-size="34" font-family="'Inter SemiBold'" fill="#9a9aa2" letter-spacing="2">OPEN ARTIFACTS</text>
+<text x="600" y="392" text-anchor="middle" font-size="34" font-family="'Inter SemiBold'" fill="#9a9aa2" letter-spacing="2">${escapeHtml(brand.wordmark)}</text>
 </svg>`;
 }
 
@@ -263,9 +273,11 @@ function wrapLines(text: string, maxChars: number, maxLines: number): string[] {
 export function ogCardSvg(options: {
   title: string;
   description: string;
+  hostname: string;
 }): string {
-  const { title, description } = options;
-  if (!isRenderable(title)) return fallbackCardSvg();
+  const { title, description, hostname } = options;
+  const brand = brandFor(hostname);
+  if (!isRenderable(title)) return fallbackCardSvg(brand);
   const titleLines = wrapLines(title, 30, 4);
   const descLines =
     description && isRenderable(description)
@@ -297,7 +309,7 @@ export function ogCardSvg(options: {
 ${titleEls}
 ${descEls.join("\n")}
 <g transform="translate(80 556) scale(1.08)"><path d="${OG_BRAND_D}" fill="#6457f0"/></g>
-<text x="116" y="578" font-size="24" font-family="'Inter SemiBold'" fill="#9a9aa2" letter-spacing="1.5">OPEN ARTIFACTS</text>
+<text x="116" y="578" font-size="24" font-family="'Inter SemiBold'" fill="#9a9aa2" letter-spacing="1.5">${escapeHtml(brand.wordmark)}</text>
 </svg>`;
 }
 
@@ -310,6 +322,7 @@ export function wrapDocument(options: WrapOptions): string {
     content,
     url,
     ogImage,
+    hostname,
     brandUrl,
   } = options;
   const body =
@@ -345,7 +358,7 @@ document.getElementById("oa-content").innerHTML=marked.parse(${jsonForInlineScri
 <style>${RESET_CSS}${format === "markdown" ? MARKDOWN_CSS : ""}</style>
 </head>
 <body>
-${headerHtml(favicon, title, brandUrl)}
+${headerHtml(favicon, title, hostname, brandUrl)}
 ${body}
 <script>${THEME_SCRIPT}</script>
 <script>${LAYOUT_SCRIPT}</script>
@@ -379,6 +392,7 @@ export interface UnlockShellOptions {
   format: ArtifactFormat;
   url: string;
   ogImage: string;
+  hostname: string;
   brandUrl?: string | null;
   envelope: EncryptionParams & { ciphertext: string };
 }
@@ -391,6 +405,7 @@ export function unlockShell(options: UnlockShellOptions): string {
     format,
     url,
     ogImage,
+    hostname,
     brandUrl,
     envelope,
   } = options;
@@ -402,6 +417,7 @@ export function unlockShell(options: UnlockShellOptions): string {
     content: CONTENT_SLOT,
     url,
     ogImage,
+    hostname,
     brandUrl,
   });
 
@@ -474,7 +490,7 @@ input.focus();
 <style>${RESET_CSS}${UNLOCK_CSS}</style>
 </head>
 <body>
-${headerHtml(favicon, title, brandUrl)}
+${headerHtml(favicon, title, hostname, brandUrl)}
 <div class="oa-unlock">
   <form class="oa-card" id="oa-form">
     <div class="oa-emoji">${escapeHtml(favicon)}</div>
@@ -506,12 +522,16 @@ const STATUS_CSS = `
 
 // Minimal, on-brand page for the states that don't render an artifact
 // (missing artifact, invalid ?v=). No header/toggle: the reset's
-// prefers-color-scheme default handles the theme without any JS.
+// prefers-color-scheme default handles the theme without any JS. The "go
+// home" link names and links whichever identity this host presents (coda0 on
+// the hosted host, Open Artifacts everywhere else), mirroring the header chip.
 function statusPage(options: {
   title: string;
   heading: string;
   body: string;
+  hostname: string;
 }): string {
+  const brand = brandFor(options.hostname);
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -525,25 +545,27 @@ function statusPage(options: {
 <span class="oa-mark">${BRAND_SVG}</span>
 <h1>${options.heading}</h1>
 <p>${options.body}</p>
-<a href="/">Go to Open Artifacts</a>
+<a href="/">Go to ${escapeHtml(brand.name)}</a>
 </div>
 </body>
 </html>
 `;
 }
 
-export function notFoundPage(): string {
+export function notFoundPage(hostname: string): string {
   return statusPage({
     title: "Artifact not found",
     heading: "Artifact not found",
     body: "This link does not exist, or the artifact it pointed to was deleted.",
+    hostname,
   });
 }
 
-export function badVersionPage(): string {
+export function badVersionPage(hostname: string): string {
   return statusPage({
     title: "Invalid version",
     heading: "Invalid version",
     body: "The <code>?v=</code> parameter must be a positive integer version number.",
+    hostname,
   });
 }

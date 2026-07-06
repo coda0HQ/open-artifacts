@@ -37,11 +37,12 @@ app.get("/", async (c) => {
 app.get("/a/:id", async (c) => {
   const store = storeFrom(c);
   const record = await store.get(c.req.param("id"));
+  const hostname = new URL(c.req.url).hostname;
   const htmlHeaders = (sandbox: boolean) =>
     userContentHeaders({ sandbox, contentType: "text/html; charset=utf-8" });
 
   if (record === null) {
-    return new Response(notFoundPage(), {
+    return new Response(notFoundPage(hostname), {
       status: 404,
       headers: htmlHeaders(true),
     });
@@ -49,7 +50,10 @@ app.get("/a/:id", async (c) => {
 
   const version = parseVersionParam(c.req.query("v"), record.currentVersion);
   if (typeof version !== "number") {
-    const page = version.status === 400 ? badVersionPage() : notFoundPage();
+    const page =
+      version.status === 400
+        ? badVersionPage(hostname)
+        : notFoundPage(hostname);
     return new Response(page, {
       status: version.status,
       headers: htmlHeaders(true),
@@ -58,7 +62,7 @@ app.get("/a/:id", async (c) => {
 
   const content = await store.getContent(record.id, version);
   if (content === null) {
-    return new Response(notFoundPage(), {
+    return new Response(notFoundPage(hostname), {
       status: 404,
       headers: htmlHeaders(true),
     });
@@ -76,6 +80,7 @@ app.get("/a/:id", async (c) => {
       format: record.format,
       url,
       ogImage,
+      hostname,
       brandUrl,
       envelope: { ...content.encrypted, ciphertext: content.body },
     });
@@ -90,6 +95,7 @@ app.get("/a/:id", async (c) => {
     content: content.body,
     url,
     ogImage,
+    hostname,
     brandUrl,
   });
   return new Response(page, { headers: htmlHeaders(true) });
@@ -110,6 +116,7 @@ app.get("/og/:id", async (c) => {
     png = await renderOgCardPng({
       title: record.title,
       description: record.description,
+      hostname: new URL(c.req.url).hostname,
     });
   } catch (error) {
     // A failed rasterization must not surface Hono's HTML error page to a

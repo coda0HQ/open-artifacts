@@ -17,6 +17,24 @@ export function isCoda0Host(hostname: string): boolean {
   return hostname === "coda0.com" || hostname === "www.coda0.com";
 }
 
+export interface Brand {
+  readonly name: string;
+  readonly wordmark: string;
+}
+
+// The identity presented to a visitor, keyed on the same host rule as the
+// landing page. Every touchpoint that names the service outside the landing
+// page itself — the viewer header's brand chip, the not-found/invalid-version
+// pages, and the OG card wordmark — reads from this one place, so coda0.com
+// reads "coda0" everywhere and a self-hoster's deploy keeps the neutral
+// "Open Artifacts" identity everywhere, instead of each call site deciding on
+// its own and drifting out of sync.
+export function brandFor(hostname: string): Brand {
+  return isCoda0Host(hostname)
+    ? { name: "coda0", wordmark: "CODA0" }
+    : { name: "Open Artifacts", wordmark: "OPEN ARTIFACTS" };
+}
+
 const setText = (text: string): HTMLRewriterElementContentHandlers => ({
   element(el: Element) {
     el.setInnerContent(text);

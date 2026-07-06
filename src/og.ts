@@ -41,6 +41,7 @@ function ensureWasm(): Promise<unknown> {
 export async function renderOgCardPng(options: {
   title: string;
   description: string;
+  hostname: string;
 }): Promise<Uint8Array> {
   await ensureWasm();
   const resvg = new Resvg(ogCardSvg(options), {
