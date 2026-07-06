@@ -294,6 +294,70 @@ describe("create", () => {
     );
     expect(new TextDecoder().decode(plain)).toContain("<h1>Report</h1>");
   });
+
+  it("stores the password in credentials.json (gitignored) for later updates", async () => {
+    await run([
+      "create",
+      "report.html",
+      "--favicon",
+      "🔒",
+      "--password",
+      "hunter2",
+    ]);
+    const creds = JSON.parse(
+      readFileSync(join(projectDir, ".artifacts/credentials.json"), "utf8"),
+    );
+    expect(creds.passwords.testid123456).toBe("hunter2");
+    // password is in the gitignored credentials file, never in the manifest
+    expect(JSON.stringify(manifest())).not.toContain("hunter2");
+    expect(gitignore()).toContain(".artifacts/credentials.json");
+  });
+
+  it("update reuses the stored password without re-prompting", async () => {
+    await run([
+      "create",
+      "report.html",
+      "--favicon",
+      "🔒",
+      "--password",
+      "hunter2",
+    ]);
+    writeFileSync(join(projectDir, "report.html"), "<h1>Report v2</h1>");
+    // No --password passed: CLI reads it from credentials and re-encrypts.
+    await run(["update", "testid123456", "report.html"]);
+    const put = requests[1];
+    const putBody = put.body as {
+      content: string;
+      encrypted: { iterations: number };
+    };
+    expect(put.method).toBe("PUT");
+    expect(putBody.encrypted.iterations).toBe(600000);
+    expect(putBody.content).not.toContain("Report v2");
+    expect(JSON.stringify(put.body)).not.toContain("hunter2");
+    expect(put.body.content).not.toContain("Report v2");
+    expect(JSON.stringify(put.body)).not.toContain("hunter2");
+  });
+
+  it("update on an encrypted artifact without stored password fails clearly", async () => {
+    await run([
+      "create",
+      "report.html",
+      "--favicon",
+      "🔒",
+      "--password",
+      "hunter2",
+    ]);
+    // Wipe the stored password to simulate a teammate without it.
+    const credsPath = join(projectDir, ".artifacts/credentials.json");
+    const creds = JSON.parse(readFileSync(credsPath, "utf8"));
+    delete creds.passwords;
+    writeFileSync(credsPath, JSON.stringify(creds));
+    const result = await run(["update", "testid123456", "report.html"], {
+      expectFailure: true,
+    });
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toMatch(/password protected/i);
+  });
 });
 
 describe("update", () => {
@@ -688,6 +752,36 @@ describe("local mode (--local)", () => {
     // gitignore covers the local files, not credentials.local
     expect(gitignore()).toContain(".artifacts/manifest.local.json");
     expect(gitignore()).not.toContain("credentials.local");
+  });
+
+  it("create --local on a channel already in shared migrates it (no ghost)", async () => {
+    // First create writes to the shared manifest (no --local).
+    await run(["create", "report.html", "--favicon", "📊", "--channel", "x"]);
+    expect(manifest().artifacts).toHaveLength(1);
+    expect(manifestAt(".artifacts/manifest.local.json").artifacts).toHaveLength(
+      0,
+    );
+    // Second create with --local on the same channel: server reuses the id,
+    // CLI migrates the entry from shared to local so delete/update can reach it.
+    await run([
+      "create",
+      "report.html",
+      "--favicon",
+      "📊",
+      "--channel",
+      "x",
+      "--local",
+    ]);
+    expect(manifest().artifacts).toHaveLength(0);
+    const local = manifestAt(".artifacts/manifest.local.json");
+    expect(local.artifacts).toHaveLength(1);
+    expect(local.artifacts[0].id).toBe("testid123456");
+    // delete reaches the entry (lives in local) and clears it fully
+    await run(["delete", "testid123456"]);
+    expect(manifestAt(".artifacts/manifest.local.json").artifacts).toHaveLength(
+      0,
+    );
+    expect(manifest().artifacts).toHaveLength(0);
   });
 
   it("list reads the merged view (local + shared)", async () => {

@@ -65,13 +65,15 @@ needed); in another harness, use its equivalent sub-task primitive.
 Give the sub-agent everything it needs to work alone, then let it work:
 
 - The brief: what's being published or updated, for whom, and why.
-- If updating: the artifact id. The sub-agent fetches the current published
-  version from the server (`GET <apiUrl>/api/artifacts/<id>/raw`) as its
-  starting reference — for a locked design, the direction comment at the top
-  of that stored HTML states what must not change. It then reads the project
-  files the artifact's `scope` covers and regenerates the page from there.
-  `update <id>` now requires the regenerated file path (no local source copy
-  is kept — the server is the source of truth).
+- If updating: the artifact id. The sub-agent runs `node artifact.mjs show
+  <id>` to read the current published version as its starting reference —
+  for a locked design, the direction comment at the top of that page states
+  what must not change. (For an encrypted artifact, `show` decrypts locally
+  with the password stored at create time in `credentials.json`, so the
+  plaintext is recovered without re-prompting the user.) It then reads the
+  project files the artifact's `scope` covers and regenerates the page.
+  `update <id> <file>` requires the regenerated file path (no local source
+  copy is kept — the server is the source of truth).
 - Any explicit flags the user gave: `--scope`, `--channel`, `--watch`,
   `--level`, `--password`, `--description`, `--local`.
 
@@ -235,13 +237,15 @@ node artifact.mjs update <id> <file> [--label "what-changed"]
 ```
 
 Same URL, new version. `<file>` is **required** — the sub-agent regenerates
-the page first: fetch the current published version from the server
-(`GET <apiUrl>/api/artifacts/<id>/raw`) as the starting reference (a locked
-design direction's comment lives at the top of that stored HTML), read the
-project files the artifact's `scope` covers, regenerate, write to a temp
-file, and pass it here. The manifest supplies the write token and expected
-version; on a version conflict the CLI explains and offers `--force`.
-`node artifact.mjs list` shows known artifacts.
+the page first: read the current published version as the starting reference
+with `node artifact.mjs show <id>` (prints the stored content; for an
+encrypted artifact it decrypts locally using the password stored at create
+time, so a locked design direction's comment at the top of the page is
+recovered), read the project files the artifact's `scope` covers,
+regenerate, write to a temp file, and pass it here. The manifest supplies
+the write token and expected version; on a version conflict the CLI
+explains and offers `--force`. `node artifact.mjs list` shows known
+artifacts.
 
 ## Keeping artifacts fresh (do this without being asked)
 
@@ -313,10 +317,12 @@ node artifact.mjs create page.html --favicon 🔒 --title "Q3 Numbers" --passwor
 
 Content is encrypted locally (PBKDF2 600k + AES-256-GCM); the server stores
 only ciphertext and viewers decrypt in the browser. Share the URL and the
-password through different channels. Updates to a protected artifact need
-`--password` again (ask the user; the password is never stored). Note: the
-title and favicon are stored in plaintext as metadata — keep them
-non-sensitive.
+password through different channels. The password is stored in
+`.artifacts/credentials.json` (gitignored, machine-local) at create time so
+later `update` and `show` can decrypt without re-prompting the user — pass
+`--password` again only to rotate it. `delete` clears the stored password
+too. Note: the title and favicon are stored in plaintext as metadata —
+keep them non-sensitive.
 
 ## Reading back
 
