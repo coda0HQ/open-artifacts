@@ -122,6 +122,21 @@ describe("channel binding", () => {
     expect(body.channel).toBeUndefined();
   });
 
+  it("concurrent first publishes to one channel land on one artifact", async () => {
+    const [a, b] = await Promise.all([
+      post({ ...ARTIFACT, channel: "ch_racing" }),
+      post({ ...ARTIFACT, content: "<h1>rival</h1>", channel: "ch_racing" }),
+    ]);
+    expect([a.status, b.status].every((s) => s === 200 || s === 201)).toBe(
+      true,
+    );
+    const first = (await a.json()) as CreateResult;
+    const second = (await b.json()) as CreateResult;
+    expect(second.id).toBe(first.id);
+    expect(second.url).toBe(first.url);
+    expect([first.version, second.version].sort()).toEqual([1, 2]);
+  });
+
   it("channel-bound metadata does not leak the channel token", async () => {
     const created = (await (
       await post({ ...ARTIFACT, channel: "ch_secret" })

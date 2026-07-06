@@ -32,6 +32,10 @@ Feature: Update an artifact
     When I PUT new content with label "fixed-charts" to /api/artifacts/abc with the write token
     Then the version history for "abc" contains a version labeled "fixed-charts"
 
+  Scenario: Version size is recorded in bytes
+    When I PUT content containing multi-byte characters with the write token
+    Then the version history reports that version's size as its UTF-8 byte length
+
   Scenario: Concurrent write protection via baseVersion
     Given the artifact is at version 3
     When I PUT new content with baseVersion 2 with the write token
@@ -49,3 +53,8 @@ Feature: Update an artifact
     Then the response status is 200
     And GET /a/abc returns 404
     And all stored versions are removed
+
+  Scenario: Delete removes every version even past one storage page
+    Given the artifact has more stored versions than one storage list page returns
+    When the artifact is deleted
+    Then no stored version objects remain

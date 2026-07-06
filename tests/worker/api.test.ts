@@ -393,6 +393,17 @@ describe("PUT /api/artifacts/:id", () => {
     );
   });
 
+  it("records version size in UTF-8 bytes, not UTF-16 code units", async () => {
+    const content = "<h1>你好，世界</h1>";
+    const created = await createArtifact({ content, title: "Bytes" });
+    const meta = (await (
+      await exports.default.fetch(`${BASE}/api/artifacts/${created.id}`)
+    ).json()) as { versions: Array<{ version: number; size: number }> };
+    expect(meta.versions[0]?.size).toBe(
+      new TextEncoder().encode(content).byteLength,
+    );
+  });
+
   it("stores per-version metadata so old versions keep their old title", async () => {
     const created = await createArtifact({ title: "Original Title" });
     await exports.default.fetch(
