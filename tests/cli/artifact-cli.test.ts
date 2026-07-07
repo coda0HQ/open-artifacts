@@ -32,6 +32,10 @@ let apiUrl: string;
 const requests: RecordedRequest[] = [];
 let nextResponse: { status: number; body: Record<string, unknown> } | null =
   null;
+// Overrides the next GET /raw response so a `show` test can serve the exact
+// bytes the real Worker does: text/plain for a non-encrypted artifact, or a
+// JSON ciphertext envelope for an encrypted one.
+let nextRaw: { contentType: string; body: string } | null = null;
 
 beforeAll(async () => {
   server = createServer((req, res) => {
@@ -45,6 +49,18 @@ beforeAll(async () => {
         auth: req.headers.authorization,
         body: raw ? JSON.parse(raw) : {},
       });
+      // GET /artifacts/:id/raw returns the stored body, not the JSON metadata
+      // envelope — text/plain for non-encrypted, JSON ciphertext for encrypted.
+      if (req.method === "GET" && (req.url ?? "").includes("/raw")) {
+        const rawPreset = nextRaw ?? {
+          contentType: "text/plain; charset=utf-8",
+          body: "<!-- design direction: LOCKED -->\n<h1>Published</h1>",
+        };
+        nextRaw = null;
+        res.writeHead(200, { "content-type": rawPreset.contentType });
+        res.end(rawPreset.body);
+        return;
+      }
       const preset = nextResponse;
       nextResponse = null;
       const status = preset?.status ?? (req.method === "POST" ? 201 : 200);
@@ -854,6 +870,73 @@ describe("local mode (--local)", () => {
     expect(result.stdout).toContain("localStale");
   });
 });
+
+describe("show", () => {
+  it("prints the raw text/plain body for a non-encrypted artifact", async () => {
+    await run(["create", "report.html", "--favicon", "📊"]);
+    const result = await run(["show", "testid123456"]);
+    // Regression: /raw returns text/plain, not JSON — the body must be printed
+    // verbatim, never stringified into "[object Object]".
+    expect(result.stdout).toBe(
+      "<!-- design direction: LOCKED -->\n<h1>Published</h1>",
+    );
+    expect(result.stdout).not.toContain("[object Object]");
+  });
+
+  it("decrypts an encrypted artifact using the stored password", async () => {
+    await run([
+      "create",
+      "report.html",
+      "--favicon",
+      "🔒",
+      "--password",
+      "hunter2",
+    ]);
+    nextRaw = {
+      contentType: "application/json",
+      body: JSON.stringify(await encryptEnvelope("<h1>Secret</h1>", "hunter2")),
+    };
+    const result = await run(["show", "testid123456"]);
+    expect(result.stdout).toBe("<h1>Secret</h1>");
+  });
+});
+
+// Build the {alg, kdf, iterations, salt, iv, ciphertext} envelope the Worker
+// serves from GET /raw for an encrypted artifact, mirroring the CLI's
+// encryptContent so `show` can decrypt it with the stored password.
+async function encryptEnvelope(plaintext: string, password: string) {
+  const salt = webcrypto.getRandomValues(new Uint8Array(16));
+  const iv = webcrypto.getRandomValues(new Uint8Array(12));
+  const iterations = 600000;
+  const baseKey = await webcrypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(password),
+    "PBKDF2",
+    false,
+    ["deriveKey"],
+  );
+  const key = await webcrypto.subtle.deriveKey(
+    { name: "PBKDF2", hash: "SHA-256", salt, iterations },
+    baseKey,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt"],
+  );
+  const ciphertext = await webcrypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    key,
+    new TextEncoder().encode(plaintext),
+  );
+  const b64 = (bytes: Uint8Array) => Buffer.from(bytes).toString("base64");
+  return {
+    alg: "AES-GCM",
+    kdf: "PBKDF2-SHA256",
+    iterations,
+    salt: b64(salt),
+    iv: b64(iv),
+    ciphertext: b64(new Uint8Array(ciphertext)),
+  };
+}
 
 describe("delete", () => {
   it("removes the artifact from the server, manifest, and credentials", async () => {

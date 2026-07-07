@@ -269,7 +269,10 @@ async function request(method, url, body, token) {
   } catch {
     json = { error: text.slice(0, 200) };
   }
-  return { status: response.status, json };
+  // `text` is the unparsed body: endpoints like /raw serve a non-encrypted
+  // artifact as text/plain, which is not JSON and would otherwise be lost to
+  // the catch above. Callers that need the exact bytes read `text`.
+  return { status: response.status, json, text };
 }
 
 function parseWatch(flag) {
@@ -752,11 +755,12 @@ async function commandShow(id, flags) {
   const url = `${config.apiUrl}/api/artifacts/${id}/raw${
     flags.v ? `?v=${flags.v}` : ""
   }`;
-  const { status, json } = await request("GET", url, undefined, token);
+  const { status, json, text } = await request("GET", url, undefined, token);
   if (status !== 200)
     fail(`show failed (${status}): ${json.error ?? "unknown error"}`);
   if (!entry.encrypted) {
-    process.stdout.write(typeof json === "string" ? json : String(json));
+    // /raw serves a non-encrypted artifact as text/plain; print the exact body.
+    process.stdout.write(text);
     return;
   }
   // Encrypted: /raw returns {alg, kdf, iterations, salt, iv, ciphertext}.
