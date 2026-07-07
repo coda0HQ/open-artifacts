@@ -467,7 +467,11 @@ async function commandCreate(file, flags) {
 
 function findEntry(manifest, id) {
   const entry = manifest.artifacts.find((a) => a.id === id);
-  if (!entry) fail(`artifact ${id} not found in ${MANIFEST.shared}`);
+  // `manifest` is the merged view (shared + local), so the error names both
+  // files — naming only MANIFEST.shared misleads --local users whose entry
+  // lives (or should live) in manifest.local.json.
+  if (!entry)
+    fail(`artifact ${id} not found in ${MANIFEST.shared} or ${MANIFEST.local}`);
   return entry;
 }
 

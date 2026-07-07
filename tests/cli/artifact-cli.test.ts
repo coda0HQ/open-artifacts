@@ -1005,6 +1005,17 @@ describe("show", () => {
     expect(result.stdout).toBe("<h1>Old secret</h1>");
     expect(result.stdout).not.toContain("ciphertext");
   });
+
+  it("missing-artifact error names both manifest files (shared + local)", async () => {
+    // findEntry is called with the merged manifest (shared + local). Naming
+    // only the shared file misleads --local users whose entry should live in
+    // manifest.local.json. `ack` reaches findEntry without a server round-trip.
+    const result = await run(["ack", `nope${"x".repeat(8)}`], {
+      expectFailure: true,
+    });
+    expect(result.stderr).toContain(".artifacts/manifest.json");
+    expect(result.stderr).toContain(".artifacts/manifest.local.json");
+  });
 });
 
 // Build the {alg, kdf, iterations, salt, iv, ciphertext} envelope the Worker
