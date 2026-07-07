@@ -392,6 +392,13 @@ async function commandCreate(file, flags) {
   // server-side id) and by channel slug (the user may have rebound it).
   const otherFile = flags.local ? MANIFEST.shared : MANIFEST.local;
   const other = readJson(otherFile, { artifacts: [] });
+  // Capture the entry being migrated out of the other file BEFORE filtering,
+  // so a cross-file re-create can preserve its autoUpdate opt-in (Devin
+  // round-5: a --local re-create on a channel whose entry lives in the shared
+  // manifest must not silently reset autoUpdate).
+  const migrating = other.artifacts.find(
+    (a) => a.id === json.id || (flags.channel && a.channel === flags.channel),
+  );
   const before = other.artifacts.length;
   other.artifacts = other.artifacts.filter(
     (a) => a.id !== json.id && (!flags.channel || a.channel !== flags.channel),
@@ -402,6 +409,11 @@ async function commandCreate(file, flags) {
   const existingIdx = flags.channel
     ? manifest.artifacts.findIndex((a) => a.channel === flags.channel)
     : -1;
+  // Preserve a prior auto-update opt-in across the replace. Same-file
+  // re-create reads it from the target file; cross-file re-create (the entry
+  // just migrated out of `other`) reads it from `migrating` captured above.
+  const previous =
+    existingIdx >= 0 ? manifest.artifacts[existingIdx] : migrating;
   const entry = {
     id: json.id,
     url: json.url,
@@ -410,7 +422,12 @@ async function commandCreate(file, flags) {
     format: payload.format,
     encrypted: Boolean(flags.password),
     scope: flags.scope ?? null,
-    autoUpdate: false,
+    // A channel re-create replaces the entry; preserve a prior auto-update
+    // opt-in instead of silently resetting it to false. (A fresh create, or
+    // an explicit `auto-update <id> on|off`, still sets it as expected —
+    // previous is null for a new channel, and auto-update owns the flag
+    // otherwise.)
+    autoUpdate: previous?.autoUpdate === true,
     channel: flags.channel ?? null,
     level: resolveLevel(flags),
     watch,

@@ -711,6 +711,51 @@ describe("channel binding", () => {
     expect(requests[0].body.channel).not.toBe(requests[1].body.channel);
     expect(manifest().artifacts).toHaveLength(2);
   });
+
+  it("channel re-create preserves a prior auto-update opt-in (no silent reset)", async () => {
+    // First create binds the channel; opt it into auto-update.
+    await run(["create", "report.html", "--favicon", "📊", "--channel", "x"]);
+    await run(["auto-update", "testid123456", "on"]);
+    expect(manifest().artifacts[0].autoUpdate).toBe(true);
+    // A channel-driven re-create replaces the entry. The previous autoUpdate
+    // opt-in must survive — otherwise a re-publish silently turns auto-update
+    // off (Devin round-5 finding).
+    writeFileSync(join(projectDir, "report.html"), "<h1>v2</h1>");
+    await run(["create", "report.html", "--favicon", "📊", "--channel", "x"]);
+    expect(manifest().artifacts).toHaveLength(1);
+    expect(manifest().artifacts[0].autoUpdate).toBe(true);
+  });
+
+  it("channel re-create does not invent autoUpdate when it was never set", async () => {
+    await run(["create", "report.html", "--favicon", "📊", "--channel", "y"]);
+    expect(manifest().artifacts[0].autoUpdate).toBeFalsy();
+    writeFileSync(join(projectDir, "report.html"), "<h1>v2</h1>");
+    await run(["create", "report.html", "--favicon", "📊", "--channel", "y"]);
+    expect(manifest().artifacts[0].autoUpdate).toBeFalsy();
+  });
+
+  it("--local re-create of a channel in shared preserves the prior autoUpdate opt-in across migration", async () => {
+    // Entry starts in the shared manifest with autoUpdate on.
+    await run(["create", "report.html", "--favicon", "📊", "--channel", "m"]);
+    await run(["auto-update", "testid123456", "on"]);
+    expect(manifest().artifacts[0].autoUpdate).toBe(true);
+    // Re-create with --local migrates shared -> local. The autoUpdate opt-in
+    // must survive the cross-file migration (Devin round-5 amplification).
+    writeFileSync(join(projectDir, "report.html"), "<h1>v2</h1>");
+    await run([
+      "create",
+      "report.html",
+      "--favicon",
+      "📊",
+      "--channel",
+      "m",
+      "--local",
+    ]);
+    expect(manifest().artifacts).toHaveLength(0); // migrated out of shared
+    const local = manifestAt(".artifacts/manifest.local.json");
+    expect(local.artifacts).toHaveLength(1);
+    expect(local.artifacts[0].autoUpdate).toBe(true);
+  });
 });
 
 describe("production level", () => {
