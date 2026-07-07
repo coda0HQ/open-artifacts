@@ -32,6 +32,10 @@ let apiUrl: string;
 const requests: RecordedRequest[] = [];
 let nextResponse: { status: number; body: Record<string, unknown> } | null =
   null;
+// Overrides the next GET /raw response so a `show` test can serve the exact
+// bytes the real Worker does: text/plain for a non-encrypted artifact, or a
+// JSON ciphertext envelope for an encrypted one.
+let nextRaw: { contentType: string; body: string } | null = null;
 
 beforeAll(async () => {
   server = createServer((req, res) => {
@@ -45,6 +49,18 @@ beforeAll(async () => {
         auth: req.headers.authorization,
         body: raw ? JSON.parse(raw) : {},
       });
+      // GET /artifacts/:id/raw returns the stored body, not the JSON metadata
+      // envelope — text/plain for non-encrypted, JSON ciphertext for encrypted.
+      if (req.method === "GET" && (req.url ?? "").includes("/raw")) {
+        const rawPreset = nextRaw ?? {
+          contentType: "text/plain; charset=utf-8",
+          body: "<!-- design direction: LOCKED -->\n<h1>Published</h1>",
+        };
+        nextRaw = null;
+        res.writeHead(200, { "content-type": rawPreset.contentType });
+        res.end(rawPreset.body);
+        return;
+      }
       const preset = nextResponse;
       nextResponse = null;
       const status = preset?.status ?? (req.method === "POST" ? 201 : 200);
@@ -185,9 +201,22 @@ function manifest(): {
     autoUpdate?: boolean;
   }>;
 } {
-  return JSON.parse(
-    readFileSync(join(projectDir, ".artifacts/manifest.json"), "utf8"),
-  );
+  const path = join(projectDir, ".artifacts/manifest.json");
+  if (!existsSync(path)) return { artifacts: [] };
+  return JSON.parse(readFileSync(path, "utf8"));
+}
+
+function manifestAt(rel: string): {
+  artifacts: Array<Record<string, unknown>>;
+} {
+  const path = join(projectDir, rel);
+  if (!existsSync(path)) return { artifacts: [] };
+  return JSON.parse(readFileSync(path, "utf8"));
+}
+
+function gitignore(): string {
+  const path = join(projectDir, ".gitignore");
+  return existsSync(path) ? readFileSync(path, "utf8") : "";
 }
 
 describe("create", () => {
@@ -281,6 +310,70 @@ describe("create", () => {
     );
     expect(new TextDecoder().decode(plain)).toContain("<h1>Report</h1>");
   });
+
+  it("stores the password in credentials.json (gitignored) for later updates", async () => {
+    await run([
+      "create",
+      "report.html",
+      "--favicon",
+      "🔒",
+      "--password",
+      "hunter2",
+    ]);
+    const creds = JSON.parse(
+      readFileSync(join(projectDir, ".artifacts/credentials.json"), "utf8"),
+    );
+    expect(creds.passwords.testid123456).toBe("hunter2");
+    // password is in the gitignored credentials file, never in the manifest
+    expect(JSON.stringify(manifest())).not.toContain("hunter2");
+    expect(gitignore()).toContain(".artifacts/credentials.json");
+  });
+
+  it("update reuses the stored password without re-prompting", async () => {
+    await run([
+      "create",
+      "report.html",
+      "--favicon",
+      "🔒",
+      "--password",
+      "hunter2",
+    ]);
+    writeFileSync(join(projectDir, "report.html"), "<h1>Report v2</h1>");
+    // No --password passed: CLI reads it from credentials and re-encrypts.
+    await run(["update", "testid123456", "report.html"]);
+    const put = requests[1];
+    const putBody = put.body as {
+      content: string;
+      encrypted: { iterations: number };
+    };
+    expect(put.method).toBe("PUT");
+    expect(putBody.encrypted.iterations).toBe(600000);
+    expect(putBody.content).not.toContain("Report v2");
+    expect(JSON.stringify(put.body)).not.toContain("hunter2");
+    expect(put.body.content).not.toContain("Report v2");
+    expect(JSON.stringify(put.body)).not.toContain("hunter2");
+  });
+
+  it("update on an encrypted artifact without stored password fails clearly", async () => {
+    await run([
+      "create",
+      "report.html",
+      "--favicon",
+      "🔒",
+      "--password",
+      "hunter2",
+    ]);
+    // Wipe the stored password to simulate a teammate without it.
+    const credsPath = join(projectDir, ".artifacts/credentials.json");
+    const creds = JSON.parse(readFileSync(credsPath, "utf8"));
+    delete creds.passwords;
+    writeFileSync(credsPath, JSON.stringify(creds));
+    const result = await run(["update", "testid123456", "report.html"], {
+      expectFailure: true,
+    });
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toMatch(/password protected/i);
+  });
 });
 
 describe("update", () => {
@@ -296,7 +389,7 @@ describe("update", () => {
     writeFileSync(join(projectDir, "report.html"), "<h1>Report v2</h1>");
     writeFileSync(join(projectDir, "src/main.ts"), "export const x = 2;\n");
 
-    await run(["update", "testid123456"]);
+    await run(["update", "testid123456", "report.html"]);
 
     const put = requests[1];
     expect(put.method).toBe("PUT");
@@ -309,13 +402,22 @@ describe("update", () => {
     expect(entry.version).toBe(2);
   });
 
+  it("fails without a file argument", async () => {
+    await run(["create", "report.html", "--favicon", "📊"]);
+    const result = await run(["update", "testid123456"], {
+      expectFailure: true,
+    });
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toContain("update requires a file argument");
+  });
+
   it("reports a version conflict with guidance", async () => {
     await run(["create", "report.html", "--favicon", "📊"]);
     nextResponse = {
       status: 409,
       body: { error: "conflict", currentVersion: 5 },
     };
-    const result = await run(["update", "testid123456"], {
+    const result = await run(["update", "testid123456", "report.html"], {
       expectFailure: true,
     });
     expect(result.code).not.toBe(0);
@@ -609,6 +711,51 @@ describe("channel binding", () => {
     expect(requests[0].body.channel).not.toBe(requests[1].body.channel);
     expect(manifest().artifacts).toHaveLength(2);
   });
+
+  it("channel re-create preserves a prior auto-update opt-in (no silent reset)", async () => {
+    // First create binds the channel; opt it into auto-update.
+    await run(["create", "report.html", "--favicon", "📊", "--channel", "x"]);
+    await run(["auto-update", "testid123456", "on"]);
+    expect(manifest().artifacts[0].autoUpdate).toBe(true);
+    // A channel-driven re-create replaces the entry. The previous autoUpdate
+    // opt-in must survive — otherwise a re-publish silently turns auto-update
+    // off (Devin round-5 finding).
+    writeFileSync(join(projectDir, "report.html"), "<h1>v2</h1>");
+    await run(["create", "report.html", "--favicon", "📊", "--channel", "x"]);
+    expect(manifest().artifacts).toHaveLength(1);
+    expect(manifest().artifacts[0].autoUpdate).toBe(true);
+  });
+
+  it("channel re-create does not invent autoUpdate when it was never set", async () => {
+    await run(["create", "report.html", "--favicon", "📊", "--channel", "y"]);
+    expect(manifest().artifacts[0].autoUpdate).toBeFalsy();
+    writeFileSync(join(projectDir, "report.html"), "<h1>v2</h1>");
+    await run(["create", "report.html", "--favicon", "📊", "--channel", "y"]);
+    expect(manifest().artifacts[0].autoUpdate).toBeFalsy();
+  });
+
+  it("--local re-create of a channel in shared preserves the prior autoUpdate opt-in across migration", async () => {
+    // Entry starts in the shared manifest with autoUpdate on.
+    await run(["create", "report.html", "--favicon", "📊", "--channel", "m"]);
+    await run(["auto-update", "testid123456", "on"]);
+    expect(manifest().artifacts[0].autoUpdate).toBe(true);
+    // Re-create with --local migrates shared -> local. The autoUpdate opt-in
+    // must survive the cross-file migration (Devin round-5 amplification).
+    writeFileSync(join(projectDir, "report.html"), "<h1>v2</h1>");
+    await run([
+      "create",
+      "report.html",
+      "--favicon",
+      "📊",
+      "--channel",
+      "m",
+      "--local",
+    ]);
+    expect(manifest().artifacts).toHaveLength(0); // migrated out of shared
+    const local = manifestAt(".artifacts/manifest.local.json");
+    expect(local.artifacts).toHaveLength(1);
+    expect(local.artifacts[0].autoUpdate).toBe(true);
+  });
 });
 
 describe("production level", () => {
@@ -641,6 +788,317 @@ describe("production level", () => {
     expect(result.stderr).toMatch(/level/i);
   });
 });
+
+describe("local mode (--local)", () => {
+  it("writes the entry to manifest.local.json and gitignores it", async () => {
+    await run([
+      "create",
+      "report.html",
+      "--favicon",
+      "📊",
+      "--scope",
+      "report",
+      "--local",
+    ]);
+    // shared manifest untouched; local manifest holds the entry
+    expect(manifest().artifacts).toHaveLength(0);
+    const local = manifestAt(".artifacts/manifest.local.json");
+    expect(local.artifacts).toHaveLength(1);
+    expect(local.artifacts[0].id).toBe("testid123456");
+    // credentials still single-file, holds the token
+    const creds = JSON.parse(
+      readFileSync(join(projectDir, ".artifacts/credentials.json"), "utf8"),
+    );
+    expect(creds.tokens.testid123456).toBeTruthy();
+    // gitignore covers the local files, not credentials.local
+    expect(gitignore()).toContain(".artifacts/manifest.local.json");
+    expect(gitignore()).not.toContain("credentials.local");
+  });
+
+  it("create --local on a channel already in shared migrates it (no ghost)", async () => {
+    // First create writes to the shared manifest (no --local).
+    await run(["create", "report.html", "--favicon", "📊", "--channel", "x"]);
+    expect(manifest().artifacts).toHaveLength(1);
+    expect(manifestAt(".artifacts/manifest.local.json").artifacts).toHaveLength(
+      0,
+    );
+    // Second create with --local on the same channel: server reuses the id,
+    // CLI migrates the entry from shared to local so delete/update can reach it.
+    await run([
+      "create",
+      "report.html",
+      "--favicon",
+      "📊",
+      "--channel",
+      "x",
+      "--local",
+    ]);
+    expect(manifest().artifacts).toHaveLength(0);
+    const local = manifestAt(".artifacts/manifest.local.json");
+    expect(local.artifacts).toHaveLength(1);
+    expect(local.artifacts[0].id).toBe("testid123456");
+    // delete reaches the entry (lives in local) and clears it fully
+    await run(["delete", "testid123456"]);
+    expect(manifestAt(".artifacts/manifest.local.json").artifacts).toHaveLength(
+      0,
+    );
+    expect(manifest().artifacts).toHaveLength(0);
+  });
+
+  it("create without --local on a channel already in local migrates it back (no ghost)", async () => {
+    // First create writes to the local manifest (--local).
+    await run([
+      "create",
+      "report.html",
+      "--favicon",
+      "📊",
+      "--channel",
+      "x",
+      "--local",
+    ]);
+    expect(manifestAt(".artifacts/manifest.local.json").artifacts).toHaveLength(
+      1,
+    );
+    expect(manifest().artifacts).toHaveLength(0);
+    // Second create WITHOUT --local on the same channel: server reuses the id,
+    // CLI migrates the entry from local back to shared so delete/update reach
+    // the shared entry instead of shadowing it with an unreachable local ghost.
+    await run(["create", "report.html", "--favicon", "📊", "--channel", "x"]);
+    expect(manifestAt(".artifacts/manifest.local.json").artifacts).toHaveLength(
+      0,
+    );
+    expect(manifest().artifacts).toHaveLength(1);
+    expect(manifest().artifacts[0].id).toBe("testid123456");
+    // delete reaches the entry (now lives in shared) and clears it fully
+    await run(["delete", "testid123456"]);
+    expect(manifest().artifacts).toHaveLength(0);
+    expect(manifestAt(".artifacts/manifest.local.json").artifacts).toHaveLength(
+      0,
+    );
+  });
+
+  it("list reads the merged view (local + shared)", async () => {
+    mkdirSync(join(projectDir, ".artifacts"), { recursive: true });
+    writeFileSync(
+      join(projectDir, ".artifacts/manifest.json"),
+      JSON.stringify({
+        artifacts: [
+          { id: "sharedAAA", url: "u", title: "Shared", favicon: "📊" },
+        ],
+      }),
+    );
+    writeFileSync(
+      join(projectDir, ".artifacts/manifest.local.json"),
+      JSON.stringify({
+        artifacts: [
+          { id: "localBBB", url: "u", title: "Local", favicon: "📊" },
+        ],
+      }),
+    );
+    const result = await run(["list"]);
+    expect(result.stdout).toContain("sharedAAA");
+    expect(result.stdout).toContain("localBBB");
+  });
+
+  it("local entry overrides shared entry with the same id", async () => {
+    mkdirSync(join(projectDir, ".artifacts"), { recursive: true });
+    const entry = (title: string) => ({
+      id: "sameID",
+      url: "u",
+      title,
+      favicon: "📊",
+      watch: [],
+      snapshot: {},
+    });
+    writeFileSync(
+      join(projectDir, ".artifacts/manifest.json"),
+      JSON.stringify({ artifacts: [entry("SharedTitle")] }),
+    );
+    writeFileSync(
+      join(projectDir, ".artifacts/manifest.local.json"),
+      JSON.stringify({ artifacts: [entry("LocalTitle")] }),
+    );
+    const result = await run(["list"]);
+    expect(result.stdout).toContain("LocalTitle");
+    expect(result.stdout).not.toContain("SharedTitle");
+  });
+
+  it("status reports staleness across both files", async () => {
+    mkdirSync(join(projectDir, ".artifacts"), { recursive: true });
+    const watch = ["src/**/*.ts"];
+    const stale = (id: string) => ({
+      id,
+      url: "u",
+      title: id,
+      favicon: "📊",
+      watch,
+      snapshot: { "src/main.ts": "deadbeef" },
+    });
+    writeFileSync(
+      join(projectDir, ".artifacts/manifest.json"),
+      JSON.stringify({ artifacts: [stale("sharedStale")] }),
+    );
+    writeFileSync(
+      join(projectDir, ".artifacts/manifest.local.json"),
+      JSON.stringify({ artifacts: [stale("localStale")] }),
+    );
+    const result = await run(["status"], { expectFailure: true });
+    expect(result.stdout).toContain("sharedStale");
+    expect(result.stdout).toContain("localStale");
+  });
+});
+
+describe("show", () => {
+  it("prints the raw text/plain body for a non-encrypted artifact", async () => {
+    await run(["create", "report.html", "--favicon", "📊"]);
+    const result = await run(["show", "testid123456"]);
+    // Regression: /raw returns text/plain, not JSON — the body must be printed
+    // verbatim, never stringified into "[object Object]".
+    expect(result.stdout).toBe(
+      "<!-- design direction: LOCKED -->\n<h1>Published</h1>",
+    );
+    expect(result.stdout).not.toContain("[object Object]");
+  });
+
+  it("decrypts an encrypted artifact using the stored password", async () => {
+    await run([
+      "create",
+      "report.html",
+      "--favicon",
+      "🔒",
+      "--password",
+      "hunter2",
+    ]);
+    nextRaw = {
+      contentType: "application/json",
+      body: JSON.stringify(await encryptEnvelope("<h1>Secret</h1>", "hunter2")),
+    };
+    const result = await run(["show", "testid123456"]);
+    expect(result.stdout).toBe("<h1>Secret</h1>");
+  });
+
+  it("prints a historical unencrypted version even when the current version is encrypted", async () => {
+    // v2 (current) is encrypted, but --v 1 fetches a pre-rotation text/plain
+    // body. The CLI must NOT try to decrypt text/plain (would crash on
+    // fromBase64(undefined)); it prints the body verbatim.
+    mkdirSync(join(projectDir, ".artifacts"), { recursive: true });
+    writeFileSync(
+      join(projectDir, ".artifacts/manifest.json"),
+      JSON.stringify({
+        artifacts: [
+          {
+            id: "testid123456",
+            url: "u",
+            title: "Rotated",
+            favicon: "🔒",
+            encrypted: true,
+          },
+        ],
+      }),
+    );
+    writeFileSync(
+      join(projectDir, ".artifacts/credentials.json"),
+      JSON.stringify({
+        tokens: { testid123456: `wt_${"x".repeat(43)}` },
+        passwords: { testid123456: "hunter2" },
+      }),
+    );
+    nextRaw = {
+      contentType: "text/plain; charset=utf-8",
+      body: "<!-- v1 plaintext -->\n<h1>Before encryption</h1>",
+    };
+    const result = await run(["show", "testid123456", "--v", "1"]);
+    expect(result.stdout).toBe(
+      "<!-- v1 plaintext -->\n<h1>Before encryption</h1>",
+    );
+    expect(result.stdout).not.toContain("[object Object]");
+  });
+
+  it("decrypts a historical encrypted version even when the current version is unencrypted", async () => {
+    // v2 (current) is unencrypted, but --v 1 fetches a pre-rotation ciphertext
+    // envelope. The CLI must detect encryption from the response and decrypt,
+    // not print raw ciphertext JSON.
+    mkdirSync(join(projectDir, ".artifacts"), { recursive: true });
+    writeFileSync(
+      join(projectDir, ".artifacts/manifest.json"),
+      JSON.stringify({
+        artifacts: [
+          {
+            id: "testid123456",
+            url: "u",
+            title: "Rotated",
+            favicon: "📊",
+            encrypted: false,
+          },
+        ],
+      }),
+    );
+    writeFileSync(
+      join(projectDir, ".artifacts/credentials.json"),
+      JSON.stringify({
+        tokens: { testid123456: `wt_${"x".repeat(43)}` },
+        passwords: { testid123456: "hunter2" },
+      }),
+    );
+    nextRaw = {
+      contentType: "application/json",
+      body: JSON.stringify(
+        await encryptEnvelope("<h1>Old secret</h1>", "hunter2"),
+      ),
+    };
+    const result = await run(["show", "testid123456", "--v", "1"]);
+    expect(result.stdout).toBe("<h1>Old secret</h1>");
+    expect(result.stdout).not.toContain("ciphertext");
+  });
+
+  it("missing-artifact error names both manifest files (shared + local)", async () => {
+    // findEntry is called with the merged manifest (shared + local). Naming
+    // only the shared file misleads --local users whose entry should live in
+    // manifest.local.json. `ack` reaches findEntry without a server round-trip.
+    const result = await run(["ack", `nope${"x".repeat(8)}`], {
+      expectFailure: true,
+    });
+    expect(result.stderr).toContain(".artifacts/manifest.json");
+    expect(result.stderr).toContain(".artifacts/manifest.local.json");
+  });
+});
+
+// Build the {alg, kdf, iterations, salt, iv, ciphertext} envelope the Worker
+// serves from GET /raw for an encrypted artifact, mirroring the CLI's
+// encryptContent so `show` can decrypt it with the stored password.
+async function encryptEnvelope(plaintext: string, password: string) {
+  const salt = webcrypto.getRandomValues(new Uint8Array(16));
+  const iv = webcrypto.getRandomValues(new Uint8Array(12));
+  const iterations = 600000;
+  const baseKey = await webcrypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(password),
+    "PBKDF2",
+    false,
+    ["deriveKey"],
+  );
+  const key = await webcrypto.subtle.deriveKey(
+    { name: "PBKDF2", hash: "SHA-256", salt, iterations },
+    baseKey,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt"],
+  );
+  const ciphertext = await webcrypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    key,
+    new TextEncoder().encode(plaintext),
+  );
+  const b64 = (bytes: Uint8Array) => Buffer.from(bytes).toString("base64");
+  return {
+    alg: "AES-GCM",
+    kdf: "PBKDF2-SHA256",
+    iterations,
+    salt: b64(salt),
+    iv: b64(iv),
+    ciphertext: b64(new Uint8Array(ciphertext)),
+  };
+}
 
 describe("delete", () => {
   it("removes the artifact from the server, manifest, and credentials", async () => {

@@ -74,3 +74,32 @@ Feature: Agent skill for creating and maintaining artifacts
     Then the hook JSON mentions auto-a but not auto-b
     And a plain status still reports both artifacts as stale
     So that the hands-off Stop-hook loop only ever acts on artifacts the user opted in, while a human's manual check keeps full visibility
+
+  Scenario: The skill asks about local mode on first publish and recommends local
+    Given a project directory without any .artifacts/manifest.json or .artifacts/manifest.local.json
+    When the agent is about to publish its first artifact
+    Then the skill asks the user whether the artifact should be local (machine-private, gitignored)
+    And recommends local as the default
+    So that whether the manifest is committed to the repo is the user's choice, not a silent default
+
+  Scenario: Publishing with --local writes to the gitignored local manifest
+    Given a project directory and a local HTML file "report.html"
+    When the agent runs the artifact script with create and --local
+    Then the manifest entry is written to .artifacts/manifest.local.json
+    And .artifacts/manifest.json is not created
+    And .artifacts/manifest.local.json is added to .gitignore
+    And the write token is still stored in the single .artifacts/credentials.json
+
+  Scenario: Reads merge the shared and local manifests, local overriding
+    Given a shared manifest with an entry for id "abc" titled "Shared"
+    And a local manifest with an entry for id "abc" titled "Local"
+    When the agent runs the artifact script with list
+    Then the output shows the entry titled "Local"
+    And does not show "Shared"
+    So a machine-local override takes precedence over the committed entry
+
+  Scenario: Update requires a file and regenerates from the server's current version
+    Given a manifest entry for artifact "abc"
+    When the agent runs the artifact script with update abc and no file
+    Then the script fails with a message explaining a file is required
+    So that no stale local source copy is assumed to exist

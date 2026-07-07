@@ -12,13 +12,24 @@ import {
   writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
 const PBKDF2_ITERATIONS = 600_000;
-const MANIFEST_PATH = ".artifacts/manifest.json";
-const CREDENTIALS_PATH = ".artifacts/credentials.json";
+const ARTIFACTS_DIR = ".artifacts";
+// *.local.* siblings mirror Claude Code's .claude/settings.local.json +
+// CLAUDE.local.md convention: machine-local, gitignored, merged over the
+// committed sibling at read time (local wins). Only state files get a local
+// variant — credentials is already gitignored, and content lives on the
+// server, so neither needs one.
+const filePair = (base) => ({
+  shared: join(ARTIFACTS_DIR, `${base}.json`),
+  local: join(ARTIFACTS_DIR, `${base}.local.json`),
+});
+const MANIFEST = filePair("manifest");
+const CONFIG = filePair("config");
+const CREDENTIALS_PATH = join(ARTIFACTS_DIR, "credentials.json");
 
 function fail(message) {
   console.error(`error: ${message}`);
@@ -36,7 +47,10 @@ function writeJson(path, value) {
 }
 
 function loadConfig(flags) {
-  const local = readJson(".artifacts/config.json", {});
+  const project = {
+    ...readJson(CONFIG.shared, {}),
+    ...readJson(CONFIG.local, {}),
+  };
   const global = readJson(
     join(homedir(), ".config/open-artifacts/config.json"),
     {},
@@ -44,10 +58,12 @@ function loadConfig(flags) {
   const apiUrl =
     flags.api ??
     process.env.OPEN_ARTIFACTS_URL ??
-    local.apiUrl ??
+    project.apiUrl ??
     global.apiUrl;
   const createToken =
-    process.env.OPEN_ARTIFACTS_TOKEN ?? local.createToken ?? global.createToken;
+    process.env.OPEN_ARTIFACTS_TOKEN ??
+    project.createToken ??
+    global.createToken;
   if (!apiUrl) {
     fail(
       'no instance configured. Set OPEN_ARTIFACTS_URL, pass --api <url>, or write .artifacts/config.json {"apiUrl": "https://..."}',
@@ -56,12 +72,27 @@ function loadConfig(flags) {
   return { apiUrl: apiUrl.replace(/\/+$/, ""), createToken };
 }
 
-function loadManifest() {
-  return readJson(MANIFEST_PATH, { artifacts: [] });
+// Merge shared + local manifest entries. Keyed by id only: a local entry with
+// the same id replaces the shared one, local entries with new ids are appended
+// (matching settings.local.json "local overrides project" semantics). A
+// channel can't span both files with different ids in practice — create-time
+// migration (commandCreate) keeps each id/channel in exactly one file — so
+// id-keyed dedup is the only merge path that actually occurs.
+function mergeArtifacts(shared, local) {
+  const byId = new Map();
+  for (const entry of shared) byId.set(entry.id, entry);
+  for (const entry of local) byId.set(entry.id, entry);
+  return [...byId.values()];
 }
 
-function saveManifest(manifest) {
-  writeJson(MANIFEST_PATH, manifest);
+function loadManifest() {
+  const shared = readJson(MANIFEST.shared, { artifacts: [] });
+  const local = readJson(MANIFEST.local, { artifacts: [] });
+  return { artifacts: mergeArtifacts(shared.artifacts, local.artifacts) };
+}
+
+function saveManifest(manifest, local) {
+  writeJson(local ? MANIFEST.local : MANIFEST.shared, manifest);
 }
 
 function loadCredentials() {
@@ -73,18 +104,50 @@ function saveCredentials(credentials) {
   ensureGitignored();
 }
 
+// Resolve which manifest file (shared vs local) an entry currently lives in.
+// Used by update/delete/ack/auto-update to write back to the right file
+// without persisting an origin tag on the entry.
+function manifestFileForId(id) {
+  if (
+    readJson(MANIFEST.local, { artifacts: [] }).artifacts.some(
+      (a) => a.id === id,
+    )
+  ) {
+    return {
+      local: true,
+      manifest: readJson(MANIFEST.local, { artifacts: [] }),
+    };
+  }
+  return {
+    local: false,
+    manifest: readJson(MANIFEST.shared, { artifacts: [] }),
+  };
+}
+
 function ensureGitignored() {
   if (!existsSync(".git")) return;
-  const line = ".artifacts/credentials.json";
+  // credentials.json is always gitignored. The *.local.* siblings are
+  // gitignored only when they actually exist (created by a --local write),
+  // so we never gitignore speculative patterns a repo doesn't use.
+  const lines = [".artifacts/credentials.json"];
+  if (existsSync(MANIFEST.local)) lines.push(".artifacts/manifest.local.json");
+  if (existsSync(CONFIG.local)) lines.push(".artifacts/config.local.json");
   const current = existsSync(".gitignore")
     ? readFileSync(".gitignore", "utf8")
     : "";
-  if (current.split("\n").some((l) => l.trim() === line)) return;
-  writeFileSync(".gitignore", `${current.replace(/\n*$/, "\n")}${line}\n`);
-  console.error(`note: added ${line} to .gitignore`);
+  const existing = new Set(current.split("\n").map((l) => l.trim()));
+  const missing = lines.filter((l) => !existing.has(l));
+  if (missing.length === 0) return;
+  writeFileSync(
+    ".gitignore",
+    `${current.replace(/\n*$/, "\n")}${missing.join("\n")}\n`,
+  );
+  for (const line of missing)
+    console.error(`note: added ${line} to .gitignore`);
 }
 
 const toBase64 = (bytes) => Buffer.from(bytes).toString("base64");
+const fromBase64 = (str) => new Uint8Array(Buffer.from(str, "base64"));
 
 async function encryptContent(plaintext, password) {
   const subtle = webcrypto.subtle;
@@ -117,6 +180,39 @@ async function encryptContent(plaintext, password) {
       iterations: PBKDF2_ITERATIONS,
     },
   };
+}
+
+// Symmetric inverse of encryptContent. The server's /raw endpoint returns
+// {alg, kdf, iterations, salt, iv, ciphertext} for encrypted artifacts; this
+// recovers the plaintext so an agent updating a password-protected artifact
+// can read back the current page (e.g. a locked design-direction comment)
+// without a local source copy. The password is read from credentials.json
+// (gitignored, machine-local) so the agent does not re-prompt the user.
+async function decryptContent(payload, password) {
+  const subtle = webcrypto.subtle;
+  const salt = fromBase64(payload.salt);
+  const iv = fromBase64(payload.iv);
+  const iterations = payload.iterations;
+  const baseKey = await subtle.importKey(
+    "raw",
+    new TextEncoder().encode(password),
+    "PBKDF2",
+    false,
+    ["deriveKey"],
+  );
+  const key = await subtle.deriveKey(
+    { name: "PBKDF2", hash: "SHA-256", salt, iterations },
+    baseKey,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["decrypt"],
+  );
+  const plaintext = await subtle.decrypt(
+    { name: "AES-GCM", iv },
+    key,
+    fromBase64(payload.ciphertext),
+  );
+  return new TextDecoder().decode(plaintext);
 }
 
 function inferFormat(file, explicit) {
@@ -174,7 +270,10 @@ async function request(method, url, body, token) {
   } catch {
     json = { error: text.slice(0, 200) };
   }
-  return { status: response.status, json };
+  // `text` is the unparsed body: endpoints like /raw serve a non-encrypted
+  // artifact as text/plain, which is not JSON and would otherwise be lost to
+  // the catch above. Callers that need the exact bytes read `text`.
+  return { status: response.status, json, text };
 }
 
 function parseWatch(flag) {
@@ -277,13 +376,44 @@ async function commandCreate(file, flags) {
     fail(`create failed (${status}): ${json.error ?? "unknown error"}`);
 
   const watch = parseWatch(flags.watch);
-  const manifest = loadManifest();
+  // The manifest we write to is selected by --local. An entry has exactly one
+  // home file: writing --local on an id/channel that already lives in the
+  // shared manifest MIGRATES it (delete from shared, write to local), and the
+  // reverse — a non-local create on an id/channel in the local manifest —
+  // migrates it back to shared. Without both directions, a shared + local
+  // entry with the same id would leave delete/update (which use
+  // manifestFileForId → local-first) clearing only the local copy and the
+  // shared entry would be unreachable from the CLI.
+  const targetFile = flags.local ? MANIFEST.local : MANIFEST.shared;
+  const manifest = readJson(targetFile, { artifacts: [] });
   const source = readFileSync(file, "utf8");
-  // If this channel was already in the manifest, replace the entry instead
-  // of appending a duplicate.
+  // Migrate the entry out of the *other* manifest file so the new home is the
+  // single source. Match by id (a re-publish on the same channel reuses the
+  // server-side id) and by channel slug (the user may have rebound it).
+  const otherFile = flags.local ? MANIFEST.shared : MANIFEST.local;
+  const other = readJson(otherFile, { artifacts: [] });
+  // Capture the entry being migrated out of the other file BEFORE filtering,
+  // so a cross-file re-create can preserve its autoUpdate opt-in (Devin
+  // round-5: a --local re-create on a channel whose entry lives in the shared
+  // manifest must not silently reset autoUpdate).
+  const migrating = other.artifacts.find(
+    (a) => a.id === json.id || (flags.channel && a.channel === flags.channel),
+  );
+  const before = other.artifacts.length;
+  other.artifacts = other.artifacts.filter(
+    (a) => a.id !== json.id && (!flags.channel || a.channel !== flags.channel),
+  );
+  if (other.artifacts.length !== before) saveManifest(other, !flags.local);
+  // If this channel was already in this manifest file, replace the entry
+  // instead of appending a duplicate.
   const existingIdx = flags.channel
     ? manifest.artifacts.findIndex((a) => a.channel === flags.channel)
     : -1;
+  // Preserve a prior auto-update opt-in across the replace. Same-file
+  // re-create reads it from the target file; cross-file re-create (the entry
+  // just migrated out of `other`) reads it from `migrating` captured above.
+  const previous =
+    existingIdx >= 0 ? manifest.artifacts[existingIdx] : migrating;
   const entry = {
     id: json.id,
     url: json.url,
@@ -292,12 +422,16 @@ async function commandCreate(file, flags) {
     format: payload.format,
     encrypted: Boolean(flags.password),
     scope: flags.scope ?? null,
-    autoUpdate: false,
+    // A channel re-create replaces the entry; preserve a prior auto-update
+    // opt-in instead of silently resetting it to false. (A fresh create, or
+    // an explicit `auto-update <id> on|off`, still sets it as expected —
+    // previous is null for a new channel, and auto-update owns the flag
+    // otherwise.)
+    autoUpdate: previous?.autoUpdate === true,
     channel: flags.channel ?? null,
     level: resolveLevel(flags),
     watch,
     snapshot: snapshotWatch(watch),
-    sourceFile: relative(process.cwd(), resolve(file)),
     version: json.version,
     updatedAt: new Date().toISOString(),
   };
@@ -306,13 +440,22 @@ async function commandCreate(file, flags) {
   } else {
     manifest.artifacts.push(entry);
   }
-  saveManifest(manifest);
+  saveManifest(manifest, flags.local);
+  if (flags.local) ensureGitignored();
 
   // First creation returns a one-time write token; a channel-driven update
   // (status 200) does not. Only persist the wt_ when present.
-  if (json.writeToken) {
+  if (json.writeToken || flags.password) {
     const credentials = loadCredentials();
-    credentials.tokens[json.id] = json.writeToken;
+    if (json.writeToken) credentials.tokens[json.id] = json.writeToken;
+    // The password for an encrypted artifact is stored in credentials.json
+    // (gitignored, machine-local) so a later `update` or `show` can decrypt
+    // the /raw ciphertext without re-prompting the user. The server only ever
+    // holds ciphertext; the password never leaves this machine.
+    if (flags.password) {
+      credentials.passwords ??= {};
+      credentials.passwords[json.id] = flags.password;
+    }
     saveCredentials(credentials);
   }
 
@@ -342,27 +485,38 @@ async function commandCreate(file, flags) {
 
 function findEntry(manifest, id) {
   const entry = manifest.artifacts.find((a) => a.id === id);
-  if (!entry) fail(`artifact ${id} not found in ${MANIFEST_PATH}`);
+  // `manifest` is the merged view (shared + local), so the error names both
+  // files — naming only MANIFEST.shared misleads --local users whose entry
+  // lives (or should live) in manifest.local.json.
+  if (!entry)
+    fail(`artifact ${id} not found in ${MANIFEST.shared} or ${MANIFEST.local}`);
   return entry;
 }
 
 async function commandUpdate(id, file, flags) {
+  if (!file)
+    fail(
+      "update requires a file argument: regenerate the page (fetch the current version from the server as a reference, read the project files in the artifact's scope) and pass the new file path",
+    );
   const config = loadConfig(flags);
-  const manifest = loadManifest();
-  const entry = findEntry(manifest, id);
+  const merged = loadManifest();
+  const entry = findEntry(merged, id);
   const credentials = loadCredentials();
   const token = credentials.tokens[id];
   if (!token) fail(`no write token for ${id} in ${CREDENTIALS_PATH}`);
 
-  const sourceFile = file ?? entry.sourceFile;
-  if (!sourceFile)
-    fail("no file given and no sourceFile recorded in the manifest");
   if (entry.encrypted && !flags.password) {
-    fail(
-      "this artifact is password protected; pass --password to re-encrypt the update",
-    );
+    // Reuse the password stored at create time (gitignored, machine-local)
+    // so updating a password-protected artifact doesn't re-prompt the user.
+    const stored = credentials.passwords?.[id];
+    if (!stored) {
+      fail(
+        "this artifact is password protected; pass --password (or re-create it with --password to store it for future updates)",
+      );
+    }
+    flags = { ...flags, password: stored };
   }
-  const payload = await preparePayload(sourceFile, {
+  const payload = await preparePayload(file, {
     ...flags,
     format: flags.format ?? entry.format,
     favicon: flags.favicon ?? undefined,
@@ -385,22 +539,34 @@ async function commandUpdate(id, file, flags) {
   if (status !== 200)
     fail(`update failed (${status}): ${json.error ?? "unknown error"}`);
 
-  entry.version = json.version;
-  entry.updatedAt = new Date().toISOString();
-  entry.snapshot = snapshotWatch(entry.watch ?? []);
-  entry.sourceFile = relative(process.cwd(), resolve(sourceFile));
-  if (flags.title) entry.title = flags.title;
-  if (flags.favicon) entry.favicon = flags.favicon;
-  saveManifest(manifest);
+  // Write back to whichever file (shared vs local) the entry lives in. The
+  // merged read above found it; --local is ignored here because an entry's
+  // home file is a property of where it was created, not of this update.
+  const { local, manifest } = manifestFileForId(id);
+  const target = manifest.artifacts.find((a) => a.id === id);
+  target.version = json.version;
+  target.updatedAt = new Date().toISOString();
+  target.snapshot = snapshotWatch(target.watch ?? []);
+  if (flags.title) target.title = flags.title;
+  if (flags.favicon) target.favicon = flags.favicon;
+  saveManifest(manifest, local);
+  // Refresh the stored password if a new one was given for this update.
+  if (flags.password) {
+    credentials.passwords ??= {};
+    credentials.passwords[id] = flags.password;
+    saveCredentials(credentials);
+  }
 
-  console.log(json.url ?? entry.url);
+  console.log(json.url ?? target.url);
   console.error(`updated artifact ${id} to version ${json.version}`);
 }
 
 async function commandDelete(id, flags) {
   const config = loadConfig(flags);
-  const manifest = loadManifest();
-  findEntry(manifest, id);
+  // Confirm the entry exists (merged read), then delete from whichever file
+  // it actually lives in.
+  const merged = loadManifest();
+  findEntry(merged, id);
   const credentials = loadCredentials();
   const token = credentials.tokens[id];
   if (!token) fail(`no write token for ${id} in ${CREDENTIALS_PATH}`);
@@ -414,9 +580,11 @@ async function commandDelete(id, flags) {
   if (status !== 200)
     fail(`delete failed (${status}): ${json.error ?? "unknown error"}`);
 
+  const { local, manifest } = manifestFileForId(id);
   manifest.artifacts = manifest.artifacts.filter((a) => a.id !== id);
-  saveManifest(manifest);
+  saveManifest(manifest, local);
   delete credentials.tokens[id];
+  if (credentials.passwords) delete credentials.passwords[id];
   saveCredentials(credentials);
   console.error(`deleted artifact ${id}`);
 }
@@ -472,7 +640,7 @@ async function commandStatus(flags) {
     const input = await readHookInput();
     if (input?.stop_hook_active) return;
   }
-  if (!existsSync(MANIFEST_PATH)) {
+  if (!existsSync(MANIFEST.shared) && !existsSync(MANIFEST.local)) {
     if (!flags.hook) console.error("no artifact manifest; nothing to check");
     return;
   }
@@ -524,11 +692,13 @@ async function commandStatus(flags) {
 // watched file). Offline: no server round-trip. This is why status can stop
 // crying wolf without lying that the published page was regenerated.
 function commandAck(id) {
-  const manifest = loadManifest();
-  const entry = findEntry(manifest, id);
+  const merged = loadManifest();
+  findEntry(merged, id);
+  const { local, manifest } = manifestFileForId(id);
+  const entry = manifest.artifacts.find((a) => a.id === id);
   entry.snapshot = snapshotWatch(entry.watch ?? []);
   entry.reviewedAt = new Date().toISOString();
-  saveManifest(manifest);
+  saveManifest(manifest, local);
   console.error(
     `acknowledged ${id}: snapshot baseline advanced without republishing`,
   );
@@ -549,12 +719,14 @@ function commandAutoUpdate(id, mode) {
   if (mode !== "on" && mode !== "off") {
     fail('auto-update mode must be "on" or "off"');
   }
-  const manifest = loadManifest();
-  const entry = findEntry(manifest, id);
+  const merged = loadManifest();
+  findEntry(merged, id);
+  const { local, manifest } = manifestFileForId(id);
+  const entry = manifest.artifacts.find((a) => a.id === id);
 
   if (mode === "off") {
     entry.autoUpdate = false;
-    saveManifest(manifest);
+    saveManifest(manifest, local);
     console.error(`auto-update disabled for ${id}`);
     return;
   }
@@ -568,7 +740,7 @@ function commandAutoUpdate(id, mode) {
   }
 
   entry.autoUpdate = true;
-  saveManifest(manifest);
+  saveManifest(manifest, local);
 
   const projectDir = process.env.CLAUDE_PROJECT_DIR ?? process.cwd();
   const { installed, settingsPath } = installStopHook(projectDir);
@@ -591,6 +763,44 @@ function commandList() {
       `${entry.id}  v${entry.version}  ${entry.encrypted ? "[protected] " : ""}${entry.autoUpdate === true ? "[auto-update] " : ""}${entry.title ?? ""}  ${entry.url}`,
     );
   }
+}
+
+// Fetch the current published content of an artifact and print it. For an
+// encrypted artifact, /raw returns JSON ciphertext; decrypt it locally with
+// the password stored in credentials.json (gitignored) so the agent can read
+// back the plaintext — e.g. a locked design-direction comment at the top of
+// the page — when regenerating an update. No plaintext source copy is kept
+// on disk (the server is the source of truth); this is the on-demand read.
+async function commandShow(id, flags) {
+  const config = loadConfig(flags);
+  const credentials = loadCredentials();
+  const token = credentials.tokens[id];
+  const url = `${config.apiUrl}/api/artifacts/${id}/raw${
+    flags.v ? `?v=${flags.v}` : ""
+  }`;
+  const { status, json, text } = await request("GET", url, undefined, token);
+  if (status !== 200)
+    fail(`show failed (${status}): ${json.error ?? "unknown error"}`);
+  // Detect encryption from the server response, not the manifest's `encrypted`
+  // flag: that flag reflects only the *current* version, but `--v N` can fetch
+  // a historical version whose encryption state differs (an artifact rotated
+  // to/from password protection between versions). The /raw envelope carries
+  // {alg, kdf, iterations, salt, iv, ciphertext} only for encrypted versions;
+  // unencrypted versions are served as text/plain (which `request` exposes via
+  // `text`, with `json` left as `{error: ...}` from the failed JSON parse).
+  const isEncrypted = json.alg === "AES-GCM" && json.ciphertext !== undefined;
+  if (!isEncrypted) {
+    process.stdout.write(text);
+    return;
+  }
+  const password = flags.password ?? credentials.passwords?.[id];
+  if (!password) {
+    fail(
+      "this artifact is encrypted; pass --password or have stored it at create time (credentials.json, gitignored)",
+    );
+  }
+  const plaintext = await decryptContent(json, password);
+  process.stdout.write(plaintext);
 }
 
 // Is the staleness Stop hook already present in this project's settings?
@@ -638,7 +848,9 @@ const HELP = `usage: artifact.mjs <command> [options]
 
 commands:
   create <file>        publish a new artifact
-  update <id> [file]   redeploy an artifact (uses recorded sourceFile if omitted)
+  update <id> <file>   redeploy an artifact at the same URL (file required:
+                       regenerate from the server's current version + project
+                       files, then pass the new file)
   status               report artifacts whose watched files changed (exit 1 if stale)
   ack <id>             mark drift reviewed: advance the snapshot baseline without
                        republishing (offline; use when changes don't affect it)
@@ -647,6 +859,8 @@ commands:
                        this artifact (opt-in, off by default); "on" also installs
                        the Stop hook if needed and prints a confirmation
   list                 list artifacts in the manifest
+  show <id>            print the current published content (decrypts locally
+                       for encrypted artifacts using the stored password)
   delete <id>          delete an artifact from the server and manifest
   install-hook         add a Claude Code Stop hook that runs status --hook
 
@@ -664,8 +878,13 @@ options:
   --level <1|2|3>      production level: 1=simple doc, 2=interactive UI,
                        3=rich motion. Aliases: --simple / --interactive / --rich.
                        Omit to let the agent pick from the brief.
+  --local              write the manifest entry to .artifacts/manifest.local.json
+                       (gitignored, machine-local) instead of the committed
+                       manifest. Reads merge the two (local overrides). Credentials
+                       always go to the single .artifacts/credentials.json.
   --api <url>          instance URL (default: OPEN_ARTIFACTS_URL or config)
   --force              overwrite on version conflict
+  --v <n>              (show) view a specific version's content
   --hook               (status) emit Claude Code hook JSON instead of text
 `;
 
@@ -690,6 +909,8 @@ async function main() {
       api: { type: "string" },
       force: { type: "boolean" },
       hook: { type: "boolean" },
+      local: { type: "boolean" },
+      v: { type: "string" },
       help: { type: "boolean" },
     },
   });
@@ -730,6 +951,10 @@ async function main() {
       break;
     case "list":
       commandList();
+      break;
+    case "show":
+      if (!rest[0]) fail("show requires an artifact id");
+      await commandShow(rest[0], flags);
       break;
     case "install-hook":
       commandInstallHook();

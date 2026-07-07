@@ -83,6 +83,7 @@ npx wrangler secret put CREATE_TOKEN         # 然后客户端设置 OPEN_ARTIFA
 | --- | --- |
 | 身份 | 无账号。Artifact id 是 12 位加密随机串（不可猜、不列出）。创建时返回一次性的 `writeToken`，只存其 SHA-256。 |
 | 频道 | `--channel <slug>` 把 artifact 绑定到稳定 URL。CLI 把每个频道的 token（`ch_`）保存在 `.artifacts/credentials.json`；之后用它在 `create` 上更新绑定的 artifact（新版本、同一链接），而不是新建一个。服务端只存频道哈希。 |
+| 本地模式 | `--local` 把 manifest 条目写进 `.artifacts/manifest.local.json`（gitignore、本机私有），而非提交进 git 的 `manifest.json`；读取时合并两者（local 覆盖），对齐 Claude Code 的 `settings.local.json` 约定。skill 在首次发布时询问用户、推荐本地。内容仍以服务端为唯一真相——不保留本地页面副本，`update <id> <file>` 从服务端当前版本重新生成。 |
 | 存储 | D1 存元数据/token/版本索引，R2 存内容体（`content/<id>/<version>`）。两者都是强一致的，更新立即可见。 |
 | 版本 | 每次发布都是一个不可变版本，带可选 label 和各自的 title、description、favicon、format、加密状态，因此历史反映每个版本真实的样子。`?v=N` 查看历史；`PUT` 接受 `baseVersion`，冲突时返回 409（用 `force` 覆盖）。 |
 | 服务 | Worker 把存储内容包进一个骨架（CSS reset、emoji favicon、viewport、带 `data-theme` 切换的浅色/深色主题），并以 `Content-Security-Policy: sandbox allow-scripts ...; default-src 'none'` 提供——artifact 脚本跑在不透明源里，无法发起任何外部请求。 |
