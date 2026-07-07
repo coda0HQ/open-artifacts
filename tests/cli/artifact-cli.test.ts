@@ -931,6 +931,80 @@ describe("show", () => {
     const result = await run(["show", "testid123456"]);
     expect(result.stdout).toBe("<h1>Secret</h1>");
   });
+
+  it("prints a historical unencrypted version even when the current version is encrypted", async () => {
+    // v2 (current) is encrypted, but --v 1 fetches a pre-rotation text/plain
+    // body. The CLI must NOT try to decrypt text/plain (would crash on
+    // fromBase64(undefined)); it prints the body verbatim.
+    mkdirSync(join(projectDir, ".artifacts"), { recursive: true });
+    writeFileSync(
+      join(projectDir, ".artifacts/manifest.json"),
+      JSON.stringify({
+        artifacts: [
+          {
+            id: "testid123456",
+            url: "u",
+            title: "Rotated",
+            favicon: "🔒",
+            encrypted: true,
+          },
+        ],
+      }),
+    );
+    writeFileSync(
+      join(projectDir, ".artifacts/credentials.json"),
+      JSON.stringify({
+        tokens: { testid123456: `wt_${"x".repeat(43)}` },
+        passwords: { testid123456: "hunter2" },
+      }),
+    );
+    nextRaw = {
+      contentType: "text/plain; charset=utf-8",
+      body: "<!-- v1 plaintext -->\n<h1>Before encryption</h1>",
+    };
+    const result = await run(["show", "testid123456", "--v", "1"]);
+    expect(result.stdout).toBe(
+      "<!-- v1 plaintext -->\n<h1>Before encryption</h1>",
+    );
+    expect(result.stdout).not.toContain("[object Object]");
+  });
+
+  it("decrypts a historical encrypted version even when the current version is unencrypted", async () => {
+    // v2 (current) is unencrypted, but --v 1 fetches a pre-rotation ciphertext
+    // envelope. The CLI must detect encryption from the response and decrypt,
+    // not print raw ciphertext JSON.
+    mkdirSync(join(projectDir, ".artifacts"), { recursive: true });
+    writeFileSync(
+      join(projectDir, ".artifacts/manifest.json"),
+      JSON.stringify({
+        artifacts: [
+          {
+            id: "testid123456",
+            url: "u",
+            title: "Rotated",
+            favicon: "📊",
+            encrypted: false,
+          },
+        ],
+      }),
+    );
+    writeFileSync(
+      join(projectDir, ".artifacts/credentials.json"),
+      JSON.stringify({
+        tokens: { testid123456: `wt_${"x".repeat(43)}` },
+        passwords: { testid123456: "hunter2" },
+      }),
+    );
+    nextRaw = {
+      contentType: "application/json",
+      body: JSON.stringify(
+        await encryptEnvelope("<h1>Old secret</h1>", "hunter2"),
+      ),
+    };
+    const result = await run(["show", "testid123456", "--v", "1"]);
+    expect(result.stdout).toBe("<h1>Old secret</h1>");
+    expect(result.stdout).not.toContain("ciphertext");
+  });
 });
 
 // Build the {alg, kdf, iterations, salt, iv, ciphertext} envelope the Worker

@@ -751,8 +751,6 @@ function commandList() {
 // on disk (the server is the source of truth); this is the on-demand read.
 async function commandShow(id, flags) {
   const config = loadConfig(flags);
-  const merged = loadManifest();
-  const entry = findEntry(merged, id);
   const credentials = loadCredentials();
   const token = credentials.tokens[id];
   const url = `${config.apiUrl}/api/artifacts/${id}/raw${
@@ -761,12 +759,18 @@ async function commandShow(id, flags) {
   const { status, json, text } = await request("GET", url, undefined, token);
   if (status !== 200)
     fail(`show failed (${status}): ${json.error ?? "unknown error"}`);
-  if (!entry.encrypted) {
-    // /raw serves a non-encrypted artifact as text/plain; print the exact body.
+  // Detect encryption from the server response, not the manifest's `encrypted`
+  // flag: that flag reflects only the *current* version, but `--v N` can fetch
+  // a historical version whose encryption state differs (an artifact rotated
+  // to/from password protection between versions). The /raw envelope carries
+  // {alg, kdf, iterations, salt, iv, ciphertext} only for encrypted versions;
+  // unencrypted versions are served as text/plain (which `request` exposes via
+  // `text`, with `json` left as `{error: ...}` from the failed JSON parse).
+  const isEncrypted = json.alg === "AES-GCM" && json.ciphertext !== undefined;
+  if (!isEncrypted) {
     process.stdout.write(text);
     return;
   }
-  // Encrypted: /raw returns {alg, kdf, iterations, salt, iv, ciphertext}.
   const password = flags.password ?? credentials.passwords?.[id];
   if (!password) {
     fail(
