@@ -800,6 +800,38 @@ describe("local mode (--local)", () => {
     expect(manifest().artifacts).toHaveLength(0);
   });
 
+  it("create without --local on a channel already in local migrates it back (no ghost)", async () => {
+    // First create writes to the local manifest (--local).
+    await run([
+      "create",
+      "report.html",
+      "--favicon",
+      "📊",
+      "--channel",
+      "x",
+      "--local",
+    ]);
+    expect(manifestAt(".artifacts/manifest.local.json").artifacts).toHaveLength(
+      1,
+    );
+    expect(manifest().artifacts).toHaveLength(0);
+    // Second create WITHOUT --local on the same channel: server reuses the id,
+    // CLI migrates the entry from local back to shared so delete/update reach
+    // the shared entry instead of shadowing it with an unreachable local ghost.
+    await run(["create", "report.html", "--favicon", "📊", "--channel", "x"]);
+    expect(manifestAt(".artifacts/manifest.local.json").artifacts).toHaveLength(
+      0,
+    );
+    expect(manifest().artifacts).toHaveLength(1);
+    expect(manifest().artifacts[0].id).toBe("testid123456");
+    // delete reaches the entry (now lives in shared) and clears it fully
+    await run(["delete", "testid123456"]);
+    expect(manifest().artifacts).toHaveLength(0);
+    expect(manifestAt(".artifacts/manifest.local.json").artifacts).toHaveLength(
+      0,
+    );
+  });
+
   it("list reads the merged view (local + shared)", async () => {
     mkdirSync(join(projectDir, ".artifacts"), { recursive: true });
     writeFileSync(

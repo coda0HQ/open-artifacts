@@ -377,22 +377,25 @@ async function commandCreate(file, flags) {
   const watch = parseWatch(flags.watch);
   // The manifest we write to is selected by --local. An entry has exactly one
   // home file: writing --local on an id/channel that already lives in the
-  // shared manifest MIGRATES it (delete from shared, write to local) rather
-  // than leaving a shared ghost that delete/update can't reach. Without this,
-  // a shared + local entry with the same id would leave delete (which uses
-  // manifestFileForId → local-first) clearing only the local copy.
+  // shared manifest MIGRATES it (delete from shared, write to local), and the
+  // reverse — a non-local create on an id/channel in the local manifest —
+  // migrates it back to shared. Without both directions, a shared + local
+  // entry with the same id would leave delete/update (which use
+  // manifestFileForId → local-first) clearing only the local copy and the
+  // shared entry would be unreachable from the CLI.
   const targetFile = flags.local ? MANIFEST.local : MANIFEST.shared;
   const manifest = readJson(targetFile, { artifacts: [] });
   const source = readFileSync(file, "utf8");
-  if (flags.local) {
-    const shared = readJson(MANIFEST.shared, { artifacts: [] });
-    const before = shared.artifacts.length;
-    shared.artifacts = shared.artifacts.filter(
-      (a) =>
-        a.id !== json.id && (!flags.channel || a.channel !== flags.channel),
-    );
-    if (shared.artifacts.length !== before) saveManifest(shared, false);
-  }
+  // Migrate the entry out of the *other* manifest file so the new home is the
+  // single source. Match by id (a re-publish on the same channel reuses the
+  // server-side id) and by channel slug (the user may have rebound it).
+  const otherFile = flags.local ? MANIFEST.shared : MANIFEST.local;
+  const other = readJson(otherFile, { artifacts: [] });
+  const before = other.artifacts.length;
+  other.artifacts = other.artifacts.filter(
+    (a) => a.id !== json.id && (!flags.channel || a.channel !== flags.channel),
+  );
+  if (other.artifacts.length !== before) saveManifest(other, !flags.local);
   // If this channel was already in this manifest file, replace the entry
   // instead of appending a duplicate.
   const existingIdx = flags.channel

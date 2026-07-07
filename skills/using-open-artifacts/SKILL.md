@@ -328,4 +328,7 @@ keep them non-sensitive.
 
 `GET <instance>/api/artifacts/<id>` returns metadata and version history;
 `GET <instance>/api/artifacts/<id>/raw` returns the stored content
-(`?v=N` for older versions). Viewer URLs also accept `?v=N`.
+(`?v=N` for older versions). For a non-encrypted artifact that is the page
+itself (`text/plain`); for an encrypted artifact it is a JSON ciphertext
+envelope — run `node artifact.mjs show <id>` instead, which decrypts locally
+using the password stored at create time. Viewer URLs also accept `?v=N`.
