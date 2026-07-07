@@ -72,11 +72,12 @@ function loadConfig(flags) {
   return { apiUrl: apiUrl.replace(/\/+$/, ""), createToken };
 }
 
-// Merge shared + local manifest entries. Keyed by id; a local entry with the
-// same id replaces the shared one, local entries with new ids are appended.
-// A channel is also unique — a local entry with a channel already present on
-// a shared entry of a *different* id wins (local overrides), matching the
-// settings.local.json "local overrides project" semantics.
+// Merge shared + local manifest entries. Keyed by id only: a local entry with
+// the same id replaces the shared one, local entries with new ids are appended
+// (matching settings.local.json "local overrides project" semantics). A
+// channel can't span both files with different ids in practice — create-time
+// migration (commandCreate) keeps each id/channel in exactly one file — so
+// id-keyed dedup is the only merge path that actually occurs.
 function mergeArtifacts(shared, local) {
   const byId = new Map();
   for (const entry of shared) byId.set(entry.id, entry);
