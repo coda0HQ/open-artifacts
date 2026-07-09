@@ -103,3 +103,22 @@ Feature: Agent skill for creating and maintaining artifacts
     When the agent runs the artifact script with update abc and no file
     Then the script fails with a message explaining a file is required
     So that no stale local source copy is assumed to exist
+
+  Scenario: Publishing a canvas artifact records the mode orthogonally to level
+    Given a project directory and a local HTML file "board.html"
+    When the agent runs the artifact script with create, --level 2, and --canvas
+    Then the manifest entry records level 2 and canvas true
+    And neither level nor canvas is sent to the server
+    So that the shell and the fidelity are chosen independently
+
+  Scenario: Re-publishing without --canvas returns the artifact to a document
+    Given a manifest entry for a channel published with --canvas
+    When the agent runs the artifact script with create on the same channel without --canvas
+    Then the manifest entry records canvas false
+    So that a redesign back to a scrolling document is never silently overridden
+
+  Scenario: An invalid level is still rejected with --canvas
+    Given a project directory and a local HTML file "flow.html"
+    When the agent runs the artifact script with create, --level 4, and --canvas
+    Then the script fails with a message naming level
+    So that --canvas never loosens level validation

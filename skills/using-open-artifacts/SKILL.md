@@ -75,7 +75,7 @@ Give the sub-agent everything it needs to work alone, then let it work:
   `update <id> <file>` requires the regenerated file path (no local source
   copy is kept — the server is the source of truth).
 - Any explicit flags the user gave: `--scope`, `--channel`, `--watch`,
-  `--level`, `--password`, `--description`, `--local`.
+  `--level`, `--canvas`, `--password`, `--description`, `--local`.
 
 The sub-agent does the entire rest of the workflow itself — explore
 resources, plan, read `${CLAUDE_SKILL_DIR}/references/design.md` and
@@ -147,6 +147,17 @@ brief, or override with `--level 1|2|3` (aliases `--simple` /
 Don't gold-plate a doc as L3; don't ship a landing page as L1. The level
 sets the component contract and motion budget, not just "how much
 animation."
+
+### Canvas mode (--canvas)
+
+Orthogonal to level: `--canvas` swaps the page *shell* — an infinite spatial
+plane of pan/zoom **frames** instead of a scrolling document — while `--level`
+keeps meaning fidelity and motion budget. It composes with any level:
+`--level 1 --canvas` is spatial notes, `--level 2 --canvas` a multi-frame
+prototype (the default use), `--level 3 --canvas` a canvas-as-showcase. Read
+`${CLAUDE_SKILL_DIR}/references/canvas.md` before building one — it has the
+complete vendored pan/zoom/focus runtime (CSS + vanilla JS), the frame and
+freeform contracts, and a canvas ship-gate.
 
 ## Authoring content — hard constraints
 

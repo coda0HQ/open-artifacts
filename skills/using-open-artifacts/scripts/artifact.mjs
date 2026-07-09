@@ -430,6 +430,11 @@ async function commandCreate(file, flags) {
     autoUpdate: previous?.autoUpdate === true,
     channel: flags.channel ?? null,
     level: resolveLevel(flags),
+    // Canvas selects the page shell (spatial plane vs scrolling document).
+    // Like `level`, it is a create-flag-owned property of the authored page —
+    // recomputed from this invocation's flags, NOT preserved from `previous`
+    // the way autoUpdate is. A re-create without --canvas resets it.
+    canvas: flags.canvas === true,
     watch,
     snapshot: snapshotWatch(watch),
     version: json.version,
@@ -878,6 +883,8 @@ options:
   --level <1|2|3>      production level: 1=simple doc, 2=interactive UI,
                        3=rich motion. Aliases: --simple / --interactive / --rich.
                        Omit to let the agent pick from the brief.
+  --canvas             build the page as an infinite pan/zoom canvas of frames
+                       instead of a scrolling document. Composes with --level.
   --local              write the manifest entry to .artifacts/manifest.local.json
                        (gitignored, machine-local) instead of the committed
                        manifest. Reads merge the two (local overrides). Credentials
@@ -906,6 +913,7 @@ async function main() {
       simple: { type: "boolean" },
       interactive: { type: "boolean" },
       rich: { type: "boolean" },
+      canvas: { type: "boolean" },
       api: { type: "string" },
       force: { type: "boolean" },
       hook: { type: "boolean" },
