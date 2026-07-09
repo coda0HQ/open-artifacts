@@ -32,6 +32,13 @@ and the motion budget — not just "how much animation."
 When unsure, default to **2**. Don't gold-plate a doc as L3; don't ship a
 landing page as L1.
 
+**Canvas is orthogonal to level.** `--canvas` selects an infinite spatial shell
+(pan/zoom frames) instead of a scrolling document; it composes with any level
+(`--level 2 --canvas` is the common case: a multi-frame prototype). It does not
+replace a level — you still pick 1/2/3 for fidelity and motion budget. When a
+brief is a flow, a set of screens/variants, or a board, reach for it and read
+`${CLAUDE_SKILL_DIR}/references/canvas.md`.
+
 ### Level 1 — simple
 
 - **Posture:** typography-led, document. Real typographic hierarchy,
@@ -603,7 +610,10 @@ layout decisions:
 - A sticky service header (≈3rem) sits above your content and exposes its
   measured height as `--oa-header-h`. Full-viewport sections use
   `min-height: calc(100dvh - var(--oa-header-h, 2.5rem))`; author-authored
-  sticky bars set `top: var(--oa-header-h, 2.5rem)`.
+  sticky bars set `top: var(--oa-header-h, 2.5rem)`. The viewer rewrites the
+  `top` of every `position: sticky` element to this value, so a canvas's zoom
+  cluster (and any other floating control) must be `position: fixed`, never
+  sticky — see `${CLAUDE_SKILL_DIR}/references/canvas.md`.
 - The viewer stamps `data-theme="dark|light"` on `<html>` and ships a theme
   toggle — both theme blocks are mandatory, and the toggle must win over
   `prefers-color-scheme` in both directions (the token contract handles this

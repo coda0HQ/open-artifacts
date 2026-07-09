@@ -243,4 +243,7 @@ as a loading state.
 
 A Level 3 page should have **one orchestrated moment** (the load sequence or
 a scroll-driven hero) and **quiet everything else**. Spend your boldness in
-one place; ornament elsewhere reads as AI-slop.
+one place; ornament elsewhere reads as AI-slop. On a `--canvas` page
+(references/canvas.md) that moment is the overview → focus zoom — don't also
+stack scroll-reveal theatre inside frames, and there is no page scroll to drive
+`animation-timeline: scroll()`. One orchestrated camera move, quiet frames.

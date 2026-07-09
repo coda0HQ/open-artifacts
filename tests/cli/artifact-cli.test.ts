@@ -197,6 +197,7 @@ function manifest(): {
     scope: string | null;
     channel: string | null;
     level: number | null;
+    canvas: boolean;
     encrypted: boolean;
     autoUpdate?: boolean;
   }>;
@@ -786,6 +787,59 @@ describe("production level", () => {
     );
     expect(result.code).not.toBe(0);
     expect(result.stderr).toMatch(/level/i);
+  });
+});
+
+describe("canvas mode", () => {
+  it("--canvas records canvas:true and is not sent to the server", async () => {
+    await run(["create", "report.html", "--favicon", "📊", "--canvas"]);
+    expect(manifest().artifacts[0].canvas).toBe(true);
+    expect(requests[0].body.canvas).toBeUndefined();
+  });
+
+  it("canvas composes with a production level", async () => {
+    await run([
+      "create",
+      "report.html",
+      "--favicon",
+      "📊",
+      "--level",
+      "2",
+      "--canvas",
+    ]);
+    expect(manifest().artifacts[0].level).toBe(2);
+    expect(manifest().artifacts[0].canvas).toBe(true);
+  });
+
+  it("omitting --canvas records canvas:false", async () => {
+    await run(["create", "report.html", "--favicon", "📊"]);
+    expect(manifest().artifacts[0].canvas).toBe(false);
+  });
+
+  it("still rejects an invalid --level alongside --canvas", async () => {
+    const result = await run(
+      ["create", "report.html", "--favicon", "📊", "--level", "4", "--canvas"],
+      { expectFailure: true },
+    );
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toMatch(/level/i);
+  });
+
+  it("channel re-create without --canvas resets a prior canvas:true", async () => {
+    await run([
+      "create",
+      "report.html",
+      "--favicon",
+      "📊",
+      "--channel",
+      "c",
+      "--canvas",
+    ]);
+    expect(manifest().artifacts[0].canvas).toBe(true);
+    writeFileSync(join(projectDir, "report.html"), "<h1>v2</h1>");
+    await run(["create", "report.html", "--favicon", "📊", "--channel", "c"]);
+    expect(manifest().artifacts).toHaveLength(1);
+    expect(manifest().artifacts[0].canvas).toBe(false);
   });
 });
 
