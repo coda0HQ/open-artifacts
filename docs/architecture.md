@@ -15,7 +15,8 @@ describe evolves.
 │  .claude/skills/using-open-artifacts/       │
 │    SKILL.md            (agent instructions) │
 │    scripts/artifact.mjs (publish CLI)       │
-│  .artifacts/manifest.json  (committed)      │
+│  Recipe JSON + ordered fragments (sources)  │
+│  .artifacts/manifest.json  (Manifest v2)    │
 │  .artifacts/credentials.json (gitignored)   │
 └──────────────┬───────────────────────────────┘
                │ HTTPS JSON (bearer tokens)
@@ -68,11 +69,13 @@ vitest miniflare tests.
   `*.workers.dev`. Unset, links derive from the request origin, so a
   self-hosted instance's links stay on its own domain unchanged.
 
-## Mirroring the real Artifact tool contract
+## Artifact rendering contract
 
-- Authors write body-only HTML (a `<title>` tag anywhere is honored); the
-  Worker wraps it at serve time in a doctype/head/body skeleton with a minimal
-  CSS reset, emoji favicon (SVG data URI), viewport meta, and theme support.
+- Authors write a strict Recipe plus ordered fragments. The local builder
+  validates and deterministically composes final HTML or Markdown in memory.
+  The Worker wraps the published body at serve time in a doctype/head/body
+  skeleton with a minimal CSS reset, emoji favicon, viewport meta, and theme
+  support.
 - Theme contract: `@media (prefers-color-scheme: dark)` is the default signal;
   a floating toggle stamps `data-theme="light|dark"` on `<html>` which must
   win in both directions.
@@ -151,12 +154,14 @@ works with `npx skills add coda0HQ/open-artifacts` (vercel-labs/skills installs
 to `.claude/skills/` by default, `-g` for `~/.claude/skills/`; follows the
 Agent Skills standard so ~70 agents are supported).
 
-`artifact.mjs` (Node ≥ 20, zero deps):
+`artifact.mjs` and its Recipe builder (Node ≥ 22, zero deps):
 
-- `create <file> --title --favicon [--password] [--scope "..."] [--watch glob,glob]`
-- `update <id> <file> [--label] [--password]`
+- `validate <recipe>` and `build <recipe> --output <path> [--standalone]`
+- `create <recipe> [--password]`
+- `update <id> [recipe] [--label] [--password]`
+- `migrate <id>` creates Recipe sources for a legacy Manifest v1 entry
 - `status [--hook]` — compares current hashes of files matching each
-  manifest entry's watch globs against the snapshot taken at last publish;
+  Recipe's watch globs against the snapshot taken at last publish;
   reports stale artifacts (exit 1, or Stop-hook JSON with
   `hookSpecificOutput.additionalContext` phrased as factual statements).
 - `list`, `delete <id>`
@@ -165,15 +170,26 @@ Agent Skills standard so ~70 agents are supported).
 
 State in the user's project:
 
-- `.artifacts/manifest.json` (committed): id, url, title, favicon, format,
-  scope description, watch globs, snapshot hash per artifact.
-- `.artifacts/credentials.json` (auto-gitignored): write tokens.
+- Shared Recipe JSON and fragments are commit-ready reproducible sources.
+- `.artifacts/manifest.json` (Manifest v2, committed): id, URL, version,
+  Recipe path, Recipe/input/output hashes, build strategy, and snapshot.
+- `.artifacts/recipes.local/`, `.artifacts/fragments.local/`,
+  `manifest.local.json`, previews, and credentials are gitignored.
+- `.artifacts/credentials.json`: write/channel tokens and named passwords.
+
+The builder rejects unknown Recipe keys, project/symlink escapes, duplicate or
+oversized fragments, CSP-incompatible resources and APIs, malformed scripts,
+and invalid Canvas ABI. It injects tokens for HTML and extracts the vendored
+Canvas CSS/JS from `canvas.md`; Canvas controls are builder-owned. Small builds
+compose directly. Large builds use local structure/detail passes, then both
+paths issue exactly one final publish request.
 
 Auto-update loop: SKILL.md instructs the agent to run `status` after
 completing work and regenerate any stale artifact within its recorded scope;
 a Stop hook (`node ${CLAUDE_SKILL_DIR}/scripts/artifact.mjs status --hook`)
-surfaces staleness even when the agent forgets. Each manifest entry also
-carries an `autoUpdate` boolean (default `false`/absent): `status --hook`
+surfaces staleness even when the agent forgets. The Recipe records
+`artifact.autoUpdate`, mirrored as operational Manifest state:
+`status --hook`
 only surfaces entries with `autoUpdate === true`, so the hands-off loop only
 ever acts on artifacts explicitly opted in via `artifact.mjs auto-update
 <id> on|off`; a plain, human-run `status` (no `--hook`) is unaffected and

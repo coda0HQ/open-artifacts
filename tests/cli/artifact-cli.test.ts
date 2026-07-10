@@ -1,16 +1,16 @@
 import { execFile } from "node:child_process";
-import { webcrypto } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import type { Server } from "node:http";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
@@ -27,15 +27,70 @@ interface RecordedRequest {
   body: Record<string, unknown>;
 }
 
+interface RecipeOptions {
+  title?: string;
+  format?: "html" | "markdown";
+  canvas?: boolean;
+  body?: string;
+  channel?: string | null;
+  watch?: string[];
+  local?: boolean;
+  encrypted?: boolean;
+  autoUpdate?: boolean;
+  mutate?: (recipe: TestRecipe) => void;
+}
+
+interface TestRecipe {
+  version: number;
+  artifact: Record<string, unknown>;
+  document: {
+    language: string;
+    theme: string;
+    fragments: {
+      theme: string[];
+      styles: string[];
+      body: string[];
+      scripts: string[];
+    };
+  };
+  security: {
+    encrypted: boolean;
+    passwordCredential: string | null;
+  };
+  build: { strategy: string };
+}
+
+interface ManifestEntry {
+  id: string;
+  version: number;
+  recipe?: string;
+  strategy?: string;
+  recipeHash?: string;
+  inputHash?: string;
+  outputHash?: string;
+  autoUpdate?: boolean;
+  title?: string;
+  migrationPending?: boolean;
+}
+
+interface ManifestState {
+  manifestVersion?: number;
+  artifacts: ManifestEntry[];
+}
+
+interface CredentialsState {
+  tokens?: Record<string, string>;
+  channels?: Record<string, string>;
+  namedPasswords?: Record<string, string>;
+}
+
 let server: Server;
 let apiUrl: string;
 const requests: RecordedRequest[] = [];
 let nextResponse: { status: number; body: Record<string, unknown> } | null =
   null;
-// Overrides the next GET /raw response so a `show` test can serve the exact
-// bytes the real Worker does: text/plain for a non-encrypted artifact, or a
-// JSON ciphertext envelope for an encrypted one.
 let nextRaw: { contentType: string; body: string } | null = null;
+let projectDir: string;
 
 beforeAll(async () => {
   server = createServer((req, res) => {
@@ -49,16 +104,14 @@ beforeAll(async () => {
         auth: req.headers.authorization,
         body: raw ? JSON.parse(raw) : {},
       });
-      // GET /artifacts/:id/raw returns the stored body, not the JSON metadata
-      // envelope — text/plain for non-encrypted, JSON ciphertext for encrypted.
       if (req.method === "GET" && (req.url ?? "").includes("/raw")) {
-        const rawPreset = nextRaw ?? {
+        const preset = nextRaw ?? {
           contentType: "text/plain; charset=utf-8",
-          body: "<!-- design direction: LOCKED -->\n<h1>Published</h1>",
+          body: '<title>Published</title><style>:root{--accent:blue}:root[data-theme="dark"]{--accent:cyan}</style><h1>Published</h1>',
         };
         nextRaw = null;
-        res.writeHead(200, { "content-type": rawPreset.contentType });
-        res.end(rawPreset.body);
+        res.writeHead(200, { "content-type": preset.contentType });
+        res.end(preset.body);
         return;
       }
       const preset = nextResponse;
@@ -84,8 +137,9 @@ beforeAll(async () => {
   });
   await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
   const address = server.address();
-  if (address === null || typeof address === "string")
+  if (address === null || typeof address === "string") {
     throw new Error("no port");
+  }
   apiUrl = `http://127.0.0.1:${address.port}`;
 });
 
@@ -93,23 +147,20 @@ afterAll(() => {
   server.close();
 });
 
-let projectDir: string;
-
 beforeEach(() => {
   requests.length = 0;
+  nextResponse = null;
+  nextRaw = null;
   projectDir = mkdtempSync(join(tmpdir(), "oa-cli-"));
   mkdirSync(join(projectDir, ".git"));
   mkdirSync(join(projectDir, "src"));
   writeFileSync(join(projectDir, "src/main.ts"), "export const x = 1;\n");
   writeFileSync(
     join(projectDir, "report.html"),
-    "<title>Report</title><h1>Report</h1>",
+    "<title>Legacy</title><h1>Legacy</h1>",
   );
 });
 
-// Strip CLAUDE_PROJECT_DIR from the inherited env so tests are hermetic: only
-// the cases that explicitly opt into a Claude Code session (auto-arm on create)
-// see it, regardless of whether the suite itself runs inside one.
 function cleanEnv(): NodeJS.ProcessEnv {
   const env = { ...process.env };
   delete env.CLAUDE_PROJECT_DIR;
@@ -118,7 +169,7 @@ function cleanEnv(): NodeJS.ProcessEnv {
 
 async function run(
   args: string[],
-  options: { expectFailure?: boolean } = {},
+  options: { expectFailure?: boolean; env?: Record<string, string> } = {},
 ): Promise<{ stdout: string; stderr: string; code: number }> {
   try {
     const { stdout, stderr } = await execFileAsync(
@@ -126,7 +177,11 @@ async function run(
       [SCRIPT, ...args],
       {
         cwd: projectDir,
-        env: { ...cleanEnv(), OPEN_ARTIFACTS_URL: apiUrl },
+        env: {
+          ...cleanEnv(),
+          OPEN_ARTIFACTS_URL: apiUrl,
+          ...options.env,
+        },
       },
     );
     return { stdout, stderr, code: 0 };
@@ -143,1272 +198,572 @@ async function run(
   }
 }
 
-async function runEnv(
-  args: string[],
-  cwd: string,
-  env: Record<string, string>,
-): Promise<{ stdout: string; stderr: string; code: number }> {
-  try {
-    const { stdout, stderr } = await execFileAsync(
-      process.execPath,
-      [SCRIPT, ...args],
-      { cwd, env: { ...cleanEnv(), ...env } },
+function readJson<T>(path: string): T {
+  return JSON.parse(readFileSync(path, "utf8"));
+}
+
+function writeJson(path: string, value: unknown): void {
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+function manifest(local = false): ManifestState {
+  const path = join(
+    projectDir,
+    local ? ".artifacts/manifest.local.json" : ".artifacts/manifest.json",
+  );
+  return existsSync(path) ? readJson<ManifestState>(path) : { artifacts: [] };
+}
+
+function credentials(): CredentialsState {
+  const path = join(projectDir, ".artifacts/credentials.json");
+  return existsSync(path) ? readJson<CredentialsState>(path) : {};
+}
+
+function validCanvasBody(): string {
+  return `<div class="oa-canvas" id="canvas"><div class="oa-plane" id="plane">
+<svg class="oa-connectors"><path d="M0 0L100 0" data-from="first" data-to="second"/></svg>
+<section class="oa-frame" id="first" data-tour="1" style="--x:0;--y:0;--w:390;--h:844"><button class="oa-frame-label">First</button><div class="oa-frame-body" inert>First</div></section>
+<section class="oa-frame" id="second" data-tour="2" style="--x:510;--y:0;--w:390;--h:844"><button class="oa-frame-label">Second</button><div class="oa-frame-body" inert>Second</div></section>
+</div></div>`;
+}
+
+function writeRecipe(
+  name = "report",
+  options: RecipeOptions = {},
+): { recipePath: string; bodyPath: string; themePath: string } {
+  const format = options.format ?? "html";
+  const isPrivate = options.local === true || options.encrypted === true;
+  const recipeDir = join(
+    projectDir,
+    isPrivate ? ".artifacts/recipes.local" : "recipes",
+  );
+  const fragmentDir = join(
+    projectDir,
+    isPrivate
+      ? `.artifacts/fragments.local/${name}`
+      : `recipes/${name}-fragments`,
+  );
+  mkdirSync(recipeDir, { recursive: true });
+  mkdirSync(fragmentDir, { recursive: true });
+  const bodyPath = join(
+    fragmentDir,
+    format === "markdown" ? "body.md" : "body.html",
+  );
+  const themePath = join(fragmentDir, "theme.css");
+  const body =
+    options.body ??
+    (options.canvas
+      ? validCanvasBody()
+      : format === "markdown"
+        ? "# Recipe report\n\nDeterministic Markdown.\n"
+        : '<main class="report"><h1>Recipe report</h1></main>');
+  writeFileSync(bodyPath, body.endsWith("\n") ? body : `${body}\n`);
+  if (format === "html") {
+    writeFileSync(
+      themePath,
+      ':root{--accent:oklch(55% .15 250)}\n:root[data-theme="dark"]{--accent:oklch(72% .14 250)}\n',
     );
-    return { stdout, stderr, code: 0 };
-  } catch (error) {
-    const failed = error as { stdout: string; stderr: string; code: number };
-    return {
-      stdout: failed.stdout,
-      stderr: failed.stderr,
-      code: failed.code ?? 1,
-    };
   }
-}
-
-// Run the CLI with a string piped to stdin and closed — needed to exercise the
-// Stop hook input contract (status --hook reads the hook JSON from stdin).
-function runWithStdin(
-  args: string[],
-  input: string,
-): Promise<{ stdout: string; stderr: string; code: number }> {
-  return new Promise((resolveRun) => {
-    const child = execFile(
-      process.execPath,
-      [SCRIPT, ...args],
-      { cwd: projectDir, env: { ...cleanEnv(), OPEN_ARTIFACTS_URL: apiUrl } },
-      (error, stdout, stderr) => {
-        const code =
-          error && typeof (error as { code?: number }).code === "number"
-            ? (error as { code: number }).code
-            : 0;
-        resolveRun({ stdout, stderr, code });
+  const relativePrefix = isPrivate
+    ? `../fragments.local/${name}`
+    : `${name}-fragments`;
+  const recipe: TestRecipe = {
+    version: 1,
+    artifact: {
+      title: options.title ?? "Recipe report",
+      description: "Deterministic test artifact",
+      favicon: "📊",
+      format,
+      level: options.canvas ? 2 : 1,
+      canvas: options.canvas ?? false,
+      channel: options.channel ?? null,
+      scope: "Recipe CLI tests",
+      watch: options.watch ?? [],
+      local: options.local ?? false,
+      autoUpdate: options.autoUpdate ?? false,
+    },
+    document: {
+      language: "en",
+      theme: "test-direction",
+      fragments: {
+        theme: format === "html" ? [`${relativePrefix}/theme.css`] : [],
+        styles: [],
+        body: [
+          `${relativePrefix}/${format === "markdown" ? "body.md" : "body.html"}`,
+        ],
+        scripts: [],
       },
-    );
-    child.stdin?.end(input);
+    },
+    security: {
+      encrypted: options.encrypted ?? false,
+      passwordCredential: options.encrypted ? "report-password" : null,
+    },
+    build: { strategy: "auto" },
+  };
+  options.mutate?.(recipe);
+  const recipePath = join(recipeDir, `${name}.recipe.json`);
+  writeJson(recipePath, recipe);
+  return { recipePath, bodyPath, themePath };
+}
+
+function seedLegacyManifest(overrides: Record<string, unknown> = {}): void {
+  writeJson(join(projectDir, ".artifacts/manifest.json"), {
+    artifacts: [
+      {
+        id: "testid123456",
+        url: `${apiUrl}/a/testid123456`,
+        title: "Published",
+        favicon: "📄",
+        format: "html",
+        encrypted: false,
+        scope: "Legacy report",
+        channel: null,
+        level: 1,
+        canvas: false,
+        watch: ["src/**"],
+        snapshot: {},
+        version: 1,
+        autoUpdate: false,
+        ...overrides,
+      },
+    ],
+  });
+  writeJson(join(projectDir, ".artifacts/credentials.json"), {
+    tokens: { testid123456: `wt_${"x".repeat(43)}` },
   });
 }
 
-function manifest(): {
-  artifacts: Array<{
-    id: string;
-    version: number;
-    watch: string[];
-    snapshot: Record<string, string>;
-    scope: string | null;
-    channel: string | null;
-    level: number | null;
-    canvas: boolean;
-    encrypted: boolean;
-    autoUpdate?: boolean;
-  }>;
-} {
-  const path = join(projectDir, ".artifacts/manifest.json");
-  if (!existsSync(path)) return { artifacts: [] };
-  return JSON.parse(readFileSync(path, "utf8"));
-}
+describe("Recipe builder", () => {
+  it("validates deterministically without writing state", async () => {
+    const { recipePath } = writeRecipe();
+    const first = await run(["validate", recipePath]);
+    const second = await run(["validate", recipePath]);
 
-function manifestAt(rel: string): {
-  artifacts: Array<Record<string, unknown>>;
-} {
-  const path = join(projectDir, rel);
-  if (!existsSync(path)) return { artifacts: [] };
-  return JSON.parse(readFileSync(path, "utf8"));
-}
-
-function gitignore(): string {
-  const path = join(projectDir, ".gitignore");
-  return existsSync(path) ? readFileSync(path, "utf8") : "";
-}
-
-describe("create", () => {
-  it("publishes, records the manifest entry, and stores the token separately", async () => {
-    const result = await run([
-      "create",
-      "report.html",
-      "--favicon",
-      "📊",
-      "--scope",
-      "app interaction flows",
-      "--watch",
-      "src/**/*.ts",
-    ]);
-    expect(result.stdout.trim()).toBe(`${apiUrl}/a/testid123456`);
-
-    expect(requests).toHaveLength(1);
-    expect(requests[0].method).toBe("POST");
-    expect(requests[0].path).toBe("/api/artifacts");
-    expect(requests[0].body.content).toContain("<h1>Report</h1>");
-    expect(requests[0].body.format).toBe("html");
-
-    const entry = manifest().artifacts[0];
-    expect(entry.id).toBe("testid123456");
-    expect(entry.scope).toBe("app interaction flows");
-    expect(entry.watch).toEqual(["src/**/*.ts"]);
-    expect(Object.keys(entry.snapshot)).toContain("src/main.ts");
-
-    const credentials = JSON.parse(
-      readFileSync(join(projectDir, ".artifacts/credentials.json"), "utf8"),
-    );
-    expect(credentials.tokens.testid123456).toMatch(/^wt_/);
-    expect(JSON.stringify(manifest())).not.toContain("wt_");
-
-    const gitignore = readFileSync(join(projectDir, ".gitignore"), "utf8");
-    expect(gitignore).toContain(".artifacts/credentials.json");
+    expect(JSON.parse(first.stdout)).toEqual(JSON.parse(second.stdout));
+    expect(JSON.parse(first.stdout)).toMatchObject({
+      strategy: "direct",
+      format: "html",
+      canvas: false,
+      fragments: 2,
+    });
+    expect(existsSync(join(projectDir, ".artifacts"))).toBe(false);
+    expect(requests).toHaveLength(0);
   });
 
-  it("requires a favicon", async () => {
+  it("builds an explicit standalone Canvas preview with one injected control cluster", async () => {
+    const { recipePath } = writeRecipe("flow", { canvas: true });
+    const output = join(projectDir, "flow-preview.html");
+
+    await run(["build", recipePath, "--output", output, "--standalone"]);
+
+    const html = readFileSync(output, "utf8");
+    expect(html).toContain("<!doctype html>");
+    expect(html).toContain('id="canvas"');
+    expect(html).toContain('id="zoom-pct"');
+    expect(html).toContain('id="tour-status"');
+    expect(html.match(/class="oa-zoom"/g)).toHaveLength(1);
+    expect(html).toContain("const FRICTION");
+    expect(requests).toHaveLength(0);
+  });
+
+  it("refuses to overwrite a Recipe through a preview symlink", async () => {
+    const { recipePath } = writeRecipe("preview-alias");
+    const alias = join(projectDir, "preview-alias.json");
+    const before = readFileSync(recipePath, "utf8");
+    symlinkSync(recipePath, alias);
+
+    const result = await run(["build", recipePath, "--output", alias], {
+      expectFailure: true,
+    });
+
+    expect(result.stderr).toContain("cannot overwrite the recipe");
+    expect(readFileSync(recipePath, "utf8")).toBe(before);
+  });
+
+  it("rejects direct HTML publishing", async () => {
     const result = await run(["create", "report.html"], {
       expectFailure: true,
     });
-    expect(result.code).not.toBe(0);
-    expect(result.stderr).toContain("favicon");
+
+    expect(result.stderr).toContain("direct HTML/Markdown publishing");
+    expect(requests).toHaveLength(0);
   });
 
-  it("encrypts client-side with --password and never sends plaintext", async () => {
-    await run([
-      "create",
-      "report.html",
-      "--favicon",
-      "🔒",
-      "--title",
-      "Secret Report",
-      "--password",
-      "hunter2",
-    ]);
-    const body = requests[0].body as {
-      content: string;
-      encrypted: { salt: string; iv: string; iterations: number };
-      title: string;
-    };
-    expect(body.encrypted.iterations).toBe(600000);
-    expect(body.content).not.toContain("Report");
-    expect(JSON.stringify(body)).not.toContain("hunter2");
-
-    const fromB64 = (s: string) => Uint8Array.from(Buffer.from(s, "base64"));
-    const baseKey = await webcrypto.subtle.importKey(
-      "raw",
-      new TextEncoder().encode("hunter2"),
-      "PBKDF2",
-      false,
-      ["deriveKey"],
-    );
-    const key = await webcrypto.subtle.deriveKey(
-      {
-        name: "PBKDF2",
-        hash: "SHA-256",
-        salt: fromB64(body.encrypted.salt),
-        iterations: body.encrypted.iterations,
+  it("rejects unknown Recipe keys and CSP-incompatible APIs", async () => {
+    const unknown = writeRecipe("unknown", {
+      mutate: (recipe) => {
+        recipe.artifact.surprise = true;
       },
-      baseKey,
-      { name: "AES-GCM", length: 256 },
-      false,
-      ["decrypt"],
-    );
-    const plain = await webcrypto.subtle.decrypt(
-      { name: "AES-GCM", iv: fromB64(body.encrypted.iv) },
-      key,
-      fromB64(body.content),
-    );
-    expect(new TextDecoder().decode(plain)).toContain("<h1>Report</h1>");
-  });
-
-  it("stores the password in credentials.json (gitignored) for later updates", async () => {
-    await run([
-      "create",
-      "report.html",
-      "--favicon",
-      "🔒",
-      "--password",
-      "hunter2",
-    ]);
-    const creds = JSON.parse(
-      readFileSync(join(projectDir, ".artifacts/credentials.json"), "utf8"),
-    );
-    expect(creds.passwords.testid123456).toBe("hunter2");
-    // password is in the gitignored credentials file, never in the manifest
-    expect(JSON.stringify(manifest())).not.toContain("hunter2");
-    expect(gitignore()).toContain(".artifacts/credentials.json");
-  });
-
-  it("update reuses the stored password without re-prompting", async () => {
-    await run([
-      "create",
-      "report.html",
-      "--favicon",
-      "🔒",
-      "--password",
-      "hunter2",
-    ]);
-    writeFileSync(join(projectDir, "report.html"), "<h1>Report v2</h1>");
-    // No --password passed: CLI reads it from credentials and re-encrypts.
-    await run(["update", "testid123456", "report.html"]);
-    const put = requests[1];
-    const putBody = put.body as {
-      content: string;
-      encrypted: { iterations: number };
-    };
-    expect(put.method).toBe("PUT");
-    expect(putBody.encrypted.iterations).toBe(600000);
-    expect(putBody.content).not.toContain("Report v2");
-    expect(JSON.stringify(put.body)).not.toContain("hunter2");
-    expect(put.body.content).not.toContain("Report v2");
-    expect(JSON.stringify(put.body)).not.toContain("hunter2");
-  });
-
-  it("update on an encrypted artifact without stored password fails clearly", async () => {
-    await run([
-      "create",
-      "report.html",
-      "--favicon",
-      "🔒",
-      "--password",
-      "hunter2",
-    ]);
-    // Wipe the stored password to simulate a teammate without it.
-    const credsPath = join(projectDir, ".artifacts/credentials.json");
-    const creds = JSON.parse(readFileSync(credsPath, "utf8"));
-    delete creds.passwords;
-    writeFileSync(credsPath, JSON.stringify(creds));
-    const result = await run(["update", "testid123456", "report.html"], {
+    });
+    const unknownResult = await run(["validate", unknown.recipePath], {
       expectFailure: true,
     });
-    expect(result.code).not.toBe(0);
-    expect(result.stderr).toMatch(/password protected/i);
+    expect(unknownResult.stderr).toContain("artifact.surprise");
+
+    const unsafe = writeRecipe("unsafe", {
+      body: "<main><h1>Unsafe</h1><button onclick=\"fetch('/secret')\">Load</button></main>",
+    });
+    const unsafeResult = await run(["validate", unsafe.recipePath], {
+      expectFailure: true,
+    });
+    expect(unsafeResult.stderr).toContain("fetch()");
+    expect(requests).toHaveLength(0);
+  });
+
+  it("rejects project traversal and symlink escapes", async () => {
+    const traversal = writeRecipe("traversal", {
+      mutate: (recipe) => {
+        recipe.document.fragments.body = ["../../../outside.html"];
+      },
+    });
+    const traversalResult = await run(["validate", traversal.recipePath], {
+      expectFailure: true,
+    });
+    expect(traversalResult.stderr).toContain("escapes the project root");
+
+    const outsideDir = mkdtempSync(join(tmpdir(), "oa-outside-"));
+    const outside = join(outsideDir, "body.html");
+    writeFileSync(outside, "<h1>Outside</h1>");
+    const escaped = writeRecipe("symlink");
+    const link = join(dirname(escaped.bodyPath), "linked.html");
+    symlinkSync(outside, link);
+    const recipe = readJson<TestRecipe>(escaped.recipePath);
+    recipe.document.fragments.body = ["symlink-fragments/linked.html"];
+    writeJson(escaped.recipePath, recipe);
+    const symlinkResult = await run(["validate", escaped.recipePath], {
+      expectFailure: true,
+    });
+    expect(symlinkResult.stderr).toContain("symlink escapes");
+
+    const privacy = writeRecipe("privacy");
+    const privateDirectory = join(
+      projectDir,
+      ".artifacts/fragments.local/private",
+    );
+    mkdirSync(privateDirectory, { recursive: true });
+    const privateBody = join(privateDirectory, "body.html");
+    writeFileSync(privateBody, "<h1>Private</h1>");
+    const privateLink = join(dirname(privacy.bodyPath), "private.html");
+    symlinkSync(privateBody, privateLink);
+    const privacyRecipe = readJson<TestRecipe>(privacy.recipePath);
+    privacyRecipe.document.fragments.body = ["privacy-fragments/private.html"];
+    writeJson(privacy.recipePath, privacyRecipe);
+    const privacyResult = await run(["validate", privacy.recipePath], {
+      expectFailure: true,
+    });
+    expect(privacyResult.stderr).toContain(
+      "shared Recipes cannot reference private fragments",
+    );
+
+    const watchSecret = join(dirname(projectDir), "watch-secret.txt");
+    writeFileSync(watchSecret, "secret");
+    const watchEscape = writeRecipe("watch-escape", {
+      watch: ["[.][.]/watch-secret.txt"],
+    });
+    const watchResult = await run(["validate", watchEscape.recipePath], {
+      expectFailure: true,
+    });
+    expect(watchResult.stderr).toContain(
+      "artifact.watch resolves outside the project root",
+    );
+  });
+
+  it("selects staged composition for a large fragment set", async () => {
+    const built = writeRecipe("large");
+    const recipe = readJson<TestRecipe>(built.recipePath);
+    recipe.document.fragments.body = [];
+    for (let index = 0; index < 25; index += 1) {
+      const path = join(dirname(built.bodyPath), `section-${index}.html`);
+      writeFileSync(path, `<section><h2>Section ${index}</h2></section>\n`);
+      recipe.document.fragments.body.push(
+        `large-fragments/section-${index}.html`,
+      );
+    }
+    writeJson(built.recipePath, recipe);
+
+    const result = await run(["validate", built.recipePath]);
+
+    expect(JSON.parse(result.stdout).strategy).toBe("staged");
+    expect(requests).toHaveLength(0);
+  });
+
+  it("rejects authored Canvas controls and invalid connector references", async () => {
+    const controls = writeRecipe("controls", {
+      canvas: true,
+      body: `${validCanvasBody()}<div class="oa-zoom"></div>`,
+    });
+    const controlsResult = await run(["validate", controls.recipePath], {
+      expectFailure: true,
+    });
+    expect(controlsResult.stderr).toContain("controls are injected");
+
+    const connector = writeRecipe("connector", {
+      canvas: true,
+      body: validCanvasBody().replace('data-to="second"', 'data-to="missing"'),
+    });
+    const connectorResult = await run(["validate", connector.recipePath], {
+      expectFailure: true,
+    });
+    expect(connectorResult.stderr).toContain("unknown frame");
+
+    const outsideFrame = writeRecipe("outside-frame", {
+      canvas: true,
+      body: `${validCanvasBody()}
+<section class="oa-frame" id="outside" style="--x:0;--y:0;--w:390;--h:844"></section>`,
+    });
+    const outsideResult = await run(["validate", outsideFrame.recipePath], {
+      expectFailure: true,
+    });
+    expect(outsideResult.stderr).toContain("nested inside #plane");
+
+    const template = writeRecipe("template-frame", {
+      canvas: true,
+      body: `<div class="oa-canvas" id="canvas"><div class="oa-plane" id="plane"><template>${validCanvasBody()}</template></div></div>`,
+    });
+    const templateResult = await run(["validate", template.recipePath], {
+      expectFailure: true,
+    });
+    expect(templateResult.stderr).toContain("cannot contain template elements");
   });
 });
 
-describe("update", () => {
-  it("sends the write token and baseVersion, then refreshes the manifest", async () => {
-    await run([
-      "create",
-      "report.html",
-      "--favicon",
-      "📊",
-      "--watch",
-      "src/**/*.ts",
-    ]);
-    writeFileSync(join(projectDir, "report.html"), "<h1>Report v2</h1>");
-    writeFileSync(join(projectDir, "src/main.ts"), "export const x = 2;\n");
+describe("Recipe publishing", () => {
+  it("creates from one in-memory build and writes Manifest v2 after success", async () => {
+    const { recipePath } = writeRecipe();
 
-    await run(["update", "testid123456", "report.html"]);
+    const result = await run(["create", recipePath]);
 
-    const put = requests[1];
-    expect(put.method).toBe("PUT");
-    expect(put.path).toBe("/api/artifacts/testid123456");
-    expect(put.auth).toBe(`Bearer wt_${"x".repeat(43)}`);
-    expect(put.body.baseVersion).toBe(1);
-    expect(put.body.content).toContain("Report v2");
-
-    const entry = manifest().artifacts[0];
-    expect(entry.version).toBe(2);
-  });
-
-  it("fails without a file argument", async () => {
-    await run(["create", "report.html", "--favicon", "📊"]);
-    const result = await run(["update", "testid123456"], {
-      expectFailure: true,
+    expect(result.stdout.trim()).toBe(`${apiUrl}/a/testid123456`);
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({
+      method: "POST",
+      path: "/api/artifacts",
     });
-    expect(result.code).not.toBe(0);
-    expect(result.stderr).toContain("update requires a file argument");
+    expect(requests[0].body.content).toContain("@layer oa-tokens");
+    expect(requests[0].body.content).toContain("Recipe report");
+    const state = manifest();
+    expect(state.manifestVersion).toBe(2);
+    expect(state.artifacts[0]).toMatchObject({
+      id: "testid123456",
+      version: 1,
+      recipe: "recipes/report.recipe.json",
+      strategy: "direct",
+    });
+    expect(state.artifacts[0].recipeHash).toMatch(/^sha256:/);
+    expect(state.artifacts[0].inputHash).toMatch(/^sha256:/);
+    expect(state.artifacts[0].outputHash).toMatch(/^sha256:/);
+    expect(state.artifacts[0].title).toBeUndefined();
+    expect(credentials().tokens?.testid123456).toMatch(/^wt_/);
   });
 
-  it("reports a version conflict with guidance", async () => {
-    await run(["create", "report.html", "--favicon", "📊"]);
+  it("reuses a Recipe channel token across create calls", async () => {
+    const { recipePath } = writeRecipe("channel", { channel: "release-map" });
+
+    await run(["create", recipePath]);
+    await run(["create", recipePath]);
+
+    expect(requests).toHaveLength(2);
+    expect(requests[0].body.channel).toMatch(/^ch_/);
+    expect(requests[1].body.channel).toBe(requests[0].body.channel);
+    expect(credentials().channels?.["release-map"]).toBe(
+      requests[0].body.channel,
+    );
+    expect(manifest().artifacts).toHaveLength(1);
+  });
+
+  it("does not write Manifest state when publication fails", async () => {
+    const { recipePath } = writeRecipe();
+    nextResponse = { status: 400, body: { error: "bad request" } };
+
+    const result = await run(["create", recipePath], { expectFailure: true });
+
+    expect(result.stderr).toContain("create failed (400)");
+    expect(manifest().artifacts).toHaveLength(0);
+  });
+
+  it("updates from the Manifest Recipe with optimistic versioning", async () => {
+    const built = writeRecipe();
+    await run(["create", built.recipePath]);
+    writeFileSync(
+      built.bodyPath,
+      '<main class="report"><h1>Recipe report v2</h1></main>\n',
+    );
+
+    await run(["update", "testid123456"]);
+
+    expect(requests).toHaveLength(2);
+    expect(requests[1]).toMatchObject({
+      method: "PUT",
+      path: "/api/artifacts/testid123456",
+    });
+    expect(requests[1].body.baseVersion).toBe(1);
+    expect(requests[1].body.content).toContain("Recipe report v2");
+    expect(manifest().artifacts[0].version).toBe(2);
+  });
+
+  it("keeps Manifest hashes unchanged on a version conflict", async () => {
+    const built = writeRecipe();
+    await run(["create", built.recipePath]);
+    const before = manifest();
+    writeFileSync(built.bodyPath, "<main><h1>Conflicting update</h1></main>\n");
     nextResponse = {
       status: 409,
       body: { error: "conflict", currentVersion: 5 },
     };
-    const result = await run(["update", "testid123456", "report.html"], {
+
+    const result = await run(["update", "testid123456"], {
       expectFailure: true,
     });
-    expect(result.code).not.toBe(0);
-    expect(result.stderr).toContain("--force");
-    expect(result.stderr).toContain("5");
-  });
-});
 
-describe("status", () => {
-  it("is silent and exits 0 with no manifest", async () => {
-    const result = await run(["status"]);
-    expect(result.code).toBe(0);
+    expect(result.stderr).toContain("version conflict");
+    expect(manifest()).toEqual(before);
   });
 
-  it("exits 0 when watched files are unchanged", async () => {
-    await run([
-      "create",
-      "report.html",
-      "--favicon",
-      "📊",
-      "--watch",
-      "src/**/*.ts",
-    ]);
-    const result = await run(["status"]);
-    expect(result.code).toBe(0);
-  });
-
-  it("reports stale artifacts with exit 1 after a watched file changes", async () => {
-    await run([
-      "create",
-      "report.html",
-      "--favicon",
-      "📊",
-      "--scope",
-      "app interactions",
-      "--watch",
-      "src/**/*.ts",
-    ]);
-    writeFileSync(join(projectDir, "src/main.ts"), "export const x = 99;\n");
-
-    const result = await run(["status"], { expectFailure: true });
-    expect(result.code).toBe(1);
-    expect(result.stdout).toContain("stale: testid123456");
-    expect(result.stdout).toContain("src/main.ts");
-  });
-
-  it("emits Claude hook JSON with --hook", async () => {
-    await run([
-      "create",
-      "report.html",
-      "--favicon",
-      "📊",
-      "--scope",
-      "app interactions",
-      "--watch",
-      "src/**/*.ts",
-    ]);
-    await run(["auto-update", "testid123456", "on"]);
-    writeFileSync(join(projectDir, "src/main.ts"), "export const x = 99;\n");
-
-    const result = await run(["status", "--hook"]);
-    expect(result.code).toBe(0);
-    const parsed = JSON.parse(result.stdout) as {
-      hookSpecificOutput: { additionalContext: string };
-    };
-    expect(parsed.hookSpecificOutput.additionalContext).toContain(
-      "src/main.ts",
-    );
-    expect(parsed.hookSpecificOutput.additionalContext).toContain(
-      "app interactions",
-    );
-  });
-
-  it("stays silent when the hook input has stop_hook_active true", async () => {
-    await run([
-      "create",
-      "report.html",
-      "--favicon",
-      "📊",
-      "--scope",
-      "app interactions",
-      "--watch",
-      "src/**/*.ts",
-    ]);
-    await run(["auto-update", "testid123456", "on"]);
-    writeFileSync(join(projectDir, "src/main.ts"), "export const x = 99;\n");
-
-    const result = await runWithStdin(
-      ["status", "--hook"],
-      JSON.stringify({ stop_hook_active: true }),
-    );
-    expect(result.code).toBe(0);
-    expect(result.stdout.trim()).toBe("");
-  });
-
-  it("still emits the nudge when stop_hook_active is false", async () => {
-    await run([
-      "create",
-      "report.html",
-      "--favicon",
-      "📊",
-      "--scope",
-      "app interactions",
-      "--watch",
-      "src/**/*.ts",
-    ]);
-    await run(["auto-update", "testid123456", "on"]);
-    writeFileSync(join(projectDir, "src/main.ts"), "export const x = 99;\n");
-
-    const result = await runWithStdin(
-      ["status", "--hook"],
-      JSON.stringify({ stop_hook_active: false }),
-    );
-    expect(result.code).toBe(0);
-    const parsed = JSON.parse(result.stdout) as {
-      hookSpecificOutput: { additionalContext: string };
-    };
-    expect(parsed.hookSpecificOutput.additionalContext).toContain(
-      "src/main.ts",
-    );
-  });
-
-  it("detects newly added files matching the watch globs", async () => {
-    await run([
-      "create",
-      "report.html",
-      "--favicon",
-      "📊",
-      "--watch",
-      "src/**/*.ts",
-    ]);
-    writeFileSync(
-      join(projectDir, "src/new-module.ts"),
-      "export const y = 1;\n",
-    );
-    const result = await run(["status"], { expectFailure: true });
-    expect(result.code).toBe(1);
-    expect(result.stdout).toContain("src/new-module.ts");
-  });
-});
-
-describe("status --hook filters to auto-update artifacts", () => {
-  it("hook JSON mentions only the auto-update:true artifact; plain status reports both with auto-update lines", async () => {
-    nextResponse = {
-      status: 201,
-      body: {
-        id: "auto-a",
-        url: "http://example.invalid/a/auto-a",
-        writeToken: `wt_${"a".repeat(43)}`,
-        version: 1,
-      },
-    };
-    await run([
-      "create",
-      "report.html",
-      "--favicon",
-      "📊",
-      "--scope",
-      "scope A",
-      "--watch",
-      "src/main.ts",
-    ]);
-    nextResponse = {
-      status: 201,
-      body: {
-        id: "auto-b",
-        url: "http://example.invalid/a/auto-b",
-        writeToken: `wt_${"b".repeat(43)}`,
-        version: 1,
-      },
-    };
-    await run([
-      "create",
-      "report.html",
-      "--favicon",
-      "📊",
-      "--scope",
-      "scope B",
-      "--watch",
-      "src/main.ts",
-    ]);
-
-    await run(["auto-update", "auto-a", "on"]);
-    // Simulate auto-b being a legacy entry created before this feature
-    // shipped, i.e. the autoUpdate key is entirely absent, not just false.
-    const m = manifest();
-    const entryB = m.artifacts.find((a) => a.id === "auto-b") as {
-      autoUpdate?: boolean;
-    };
-    delete entryB.autoUpdate;
-    writeFileSync(
-      join(projectDir, ".artifacts/manifest.json"),
-      `${JSON.stringify(m, null, 2)}\n`,
-    );
-
-    writeFileSync(join(projectDir, "src/main.ts"), "export const x = 999;\n");
-
-    const hook = await run(["status", "--hook"]);
-    expect(hook.code).toBe(0);
-    const parsed = JSON.parse(hook.stdout) as {
-      hookSpecificOutput: { additionalContext: string };
-    };
-    expect(parsed.hookSpecificOutput.additionalContext).toContain("auto-a");
-    expect(parsed.hookSpecificOutput.additionalContext).not.toContain("auto-b");
-
-    const plain = await run(["status"], { expectFailure: true });
-    expect(plain.code).toBe(1);
-    expect(plain.stdout).toContain("stale: auto-a");
-    expect(plain.stdout).toContain("stale: auto-b");
-    expect(plain.stdout).toContain("auto-update: on");
-    expect(plain.stdout).toContain("auto-update: off");
-  });
-
-  it("hook stays completely silent when stale artifacts exist but none have auto-update on", async () => {
-    await run([
-      "create",
-      "report.html",
-      "--favicon",
-      "📊",
-      "--scope",
-      "s",
-      "--watch",
-      "src/main.ts",
-    ]);
-    writeFileSync(join(projectDir, "src/main.ts"), "export const x = 999;\n");
-
-    const hook = await run(["status", "--hook"]);
-    expect(hook.code).toBe(0);
-    expect(hook.stdout.trim()).toBe("");
-
-    const plain = await run(["status"], { expectFailure: true });
-    expect(plain.code).toBe(1); // human path is unaffected by the filter
-    expect(plain.stdout).toContain("stale: testid123456");
-    expect(plain.stdout).toContain("auto-update: off");
-  });
-});
-
-describe("channel binding", () => {
-  it("first create with --channel sends the channel and stores a ch_ token", async () => {
-    const result = await run([
-      "create",
-      "report.html",
-      "--favicon",
-      "📊",
-      "--channel",
-      "app-interactions",
-    ]);
-    expect(result.code).toBe(0);
-    expect(requests[0].body.channel).toMatch(/^ch_/);
-
-    const credentials = JSON.parse(
-      readFileSync(join(projectDir, ".artifacts/credentials.json"), "utf8"),
-    );
-    expect(credentials.channels["app-interactions"]).toMatch(/^ch_/);
-    // The channel token never appears in the committed manifest.
-    expect(JSON.stringify(manifest())).not.toContain("ch_");
-  });
-
-  it("reusing the same channel slug posts the same channel token", async () => {
-    await run([
-      "create",
-      "report.html",
-      "--favicon",
-      "📊",
-      "--channel",
-      "topic",
-    ]);
-    const firstToken = requests[0].body.channel;
-    writeFileSync(join(projectDir, "report.html"), "<h1>v2</h1>");
-    await run([
-      "create",
-      "report.html",
-      "--favicon",
-      "📊",
-      "--channel",
-      "topic",
-    ]);
-    expect(requests[1].body.channel).toBe(firstToken);
-  });
-
-  it("manifest holds one entry per channel slug (replaced, not duplicated)", async () => {
-    await run(["create", "report.html", "--favicon", "📊", "--channel", "one"]);
-    await run(["create", "report.html", "--favicon", "📊", "--channel", "one"]);
-    const entries = manifest().artifacts.filter((a) => a.channel === "one");
-    expect(entries).toHaveLength(1);
-  });
-
-  it("different channel slugs get different tokens and entries", async () => {
-    await run(["create", "report.html", "--favicon", "📊", "--channel", "a"]);
-    await run(["create", "report.html", "--favicon", "📊", "--channel", "b"]);
-    expect(requests[0].body.channel).not.toBe(requests[1].body.channel);
-    expect(manifest().artifacts).toHaveLength(2);
-  });
-
-  it("channel re-create preserves a prior auto-update opt-in (no silent reset)", async () => {
-    // First create binds the channel; opt it into auto-update.
-    await run(["create", "report.html", "--favicon", "📊", "--channel", "x"]);
-    await run(["auto-update", "testid123456", "on"]);
-    expect(manifest().artifacts[0].autoUpdate).toBe(true);
-    // A channel-driven re-create replaces the entry. The previous autoUpdate
-    // opt-in must survive — otherwise a re-publish silently turns auto-update
-    // off (Devin round-5 finding).
-    writeFileSync(join(projectDir, "report.html"), "<h1>v2</h1>");
-    await run(["create", "report.html", "--favicon", "📊", "--channel", "x"]);
-    expect(manifest().artifacts).toHaveLength(1);
-    expect(manifest().artifacts[0].autoUpdate).toBe(true);
-  });
-
-  it("channel re-create does not invent autoUpdate when it was never set", async () => {
-    await run(["create", "report.html", "--favicon", "📊", "--channel", "y"]);
-    expect(manifest().artifacts[0].autoUpdate).toBeFalsy();
-    writeFileSync(join(projectDir, "report.html"), "<h1>v2</h1>");
-    await run(["create", "report.html", "--favicon", "📊", "--channel", "y"]);
-    expect(manifest().artifacts[0].autoUpdate).toBeFalsy();
-  });
-
-  it("--local re-create of a channel in shared preserves the prior autoUpdate opt-in across migration", async () => {
-    // Entry starts in the shared manifest with autoUpdate on.
-    await run(["create", "report.html", "--favicon", "📊", "--channel", "m"]);
-    await run(["auto-update", "testid123456", "on"]);
-    expect(manifest().artifacts[0].autoUpdate).toBe(true);
-    // Re-create with --local migrates shared -> local. The autoUpdate opt-in
-    // must survive the cross-file migration (Devin round-5 amplification).
-    writeFileSync(join(projectDir, "report.html"), "<h1>v2</h1>");
-    await run([
-      "create",
-      "report.html",
-      "--favicon",
-      "📊",
-      "--channel",
-      "m",
-      "--local",
-    ]);
-    expect(manifest().artifacts).toHaveLength(0); // migrated out of shared
-    const local = manifestAt(".artifacts/manifest.local.json");
-    expect(local.artifacts).toHaveLength(1);
-    expect(local.artifacts[0].autoUpdate).toBe(true);
-  });
-});
-
-describe("production level", () => {
-  it("--level records the level in the manifest and is not sent to the server", async () => {
-    await run(["create", "report.html", "--favicon", "📊", "--level", "3"]);
-    expect(manifest().artifacts[0].level).toBe(3);
-    expect(requests[0].body.level).toBeUndefined();
-  });
-
-  it("aliases --simple / --interactive / --rich map to 1 / 2 / 3", async () => {
-    await run(["create", "report.html", "--favicon", "📊", "--simple"]);
-    expect(manifest().artifacts[0].level).toBe(1);
-    await run(["create", "report.html", "--favicon", "📊", "--interactive"]);
-    expect(manifest().artifacts[1].level).toBe(2);
-    await run(["create", "report.html", "--favicon", "📊", "--rich"]);
-    expect(manifest().artifacts[2].level).toBe(3);
-  });
-
-  it("omitting level records null (agent decides from the brief)", async () => {
-    await run(["create", "report.html", "--favicon", "📊"]);
-    expect(manifest().artifacts[0].level).toBeNull();
-  });
-
-  it("rejects an invalid --level", async () => {
-    const result = await run(
-      ["create", "report.html", "--favicon", "📊", "--level", "4"],
-      { expectFailure: true },
-    );
-    expect(result.code).not.toBe(0);
-    expect(result.stderr).toMatch(/level/i);
-  });
-});
-
-describe("canvas mode", () => {
-  it("--canvas records canvas:true and is not sent to the server", async () => {
-    await run(["create", "report.html", "--favicon", "📊", "--canvas"]);
-    expect(manifest().artifacts[0].canvas).toBe(true);
-    expect(requests[0].body.canvas).toBeUndefined();
-  });
-
-  it("canvas composes with a production level", async () => {
-    await run([
-      "create",
-      "report.html",
-      "--favicon",
-      "📊",
-      "--level",
-      "2",
-      "--canvas",
-    ]);
-    expect(manifest().artifacts[0].level).toBe(2);
-    expect(manifest().artifacts[0].canvas).toBe(true);
-  });
-
-  it("omitting --canvas records canvas:false", async () => {
-    await run(["create", "report.html", "--favicon", "📊"]);
-    expect(manifest().artifacts[0].canvas).toBe(false);
-  });
-
-  it("still rejects an invalid --level alongside --canvas", async () => {
-    const result = await run(
-      ["create", "report.html", "--favicon", "📊", "--level", "4", "--canvas"],
-      { expectFailure: true },
-    );
-    expect(result.code).not.toBe(0);
-    expect(result.stderr).toMatch(/level/i);
-  });
-
-  it("channel re-create without --canvas resets a prior canvas:true", async () => {
-    await run([
-      "create",
-      "report.html",
-      "--favicon",
-      "📊",
-      "--channel",
-      "c",
-      "--canvas",
-    ]);
-    expect(manifest().artifacts[0].canvas).toBe(true);
-    writeFileSync(join(projectDir, "report.html"), "<h1>v2</h1>");
-    await run(["create", "report.html", "--favicon", "📊", "--channel", "c"]);
-    expect(manifest().artifacts).toHaveLength(1);
-    expect(manifest().artifacts[0].canvas).toBe(false);
-  });
-});
-
-describe("local mode (--local)", () => {
-  it("writes the entry to manifest.local.json and gitignores it", async () => {
-    await run([
-      "create",
-      "report.html",
-      "--favicon",
-      "📊",
-      "--scope",
-      "report",
-      "--local",
-    ]);
-    // shared manifest untouched; local manifest holds the entry
-    expect(manifest().artifacts).toHaveLength(0);
-    const local = manifestAt(".artifacts/manifest.local.json");
-    expect(local.artifacts).toHaveLength(1);
-    expect(local.artifacts[0].id).toBe("testid123456");
-    // credentials still single-file, holds the token
-    const creds = JSON.parse(
-      readFileSync(join(projectDir, ".artifacts/credentials.json"), "utf8"),
-    );
-    expect(creds.tokens.testid123456).toBeTruthy();
-    // gitignore covers the local files, not credentials.local
-    expect(gitignore()).toContain(".artifacts/manifest.local.json");
-    expect(gitignore()).not.toContain("credentials.local");
-  });
-
-  it("create --local on a channel already in shared migrates it (no ghost)", async () => {
-    // First create writes to the shared manifest (no --local).
-    await run(["create", "report.html", "--favicon", "📊", "--channel", "x"]);
-    expect(manifest().artifacts).toHaveLength(1);
-    expect(manifestAt(".artifacts/manifest.local.json").artifacts).toHaveLength(
-      0,
-    );
-    // Second create with --local on the same channel: server reuses the id,
-    // CLI migrates the entry from shared to local so delete/update can reach it.
-    await run([
-      "create",
-      "report.html",
-      "--favicon",
-      "📊",
-      "--channel",
-      "x",
-      "--local",
-    ]);
-    expect(manifest().artifacts).toHaveLength(0);
-    const local = manifestAt(".artifacts/manifest.local.json");
-    expect(local.artifacts).toHaveLength(1);
-    expect(local.artifacts[0].id).toBe("testid123456");
-    // delete reaches the entry (lives in local) and clears it fully
-    await run(["delete", "testid123456"]);
-    expect(manifestAt(".artifacts/manifest.local.json").artifacts).toHaveLength(
-      0,
-    );
-    expect(manifest().artifacts).toHaveLength(0);
-  });
-
-  it("create without --local on a channel already in local migrates it back (no ghost)", async () => {
-    // First create writes to the local manifest (--local).
-    await run([
-      "create",
-      "report.html",
-      "--favicon",
-      "📊",
-      "--channel",
-      "x",
-      "--local",
-    ]);
-    expect(manifestAt(".artifacts/manifest.local.json").artifacts).toHaveLength(
-      1,
-    );
-    expect(manifest().artifacts).toHaveLength(0);
-    // Second create WITHOUT --local on the same channel: server reuses the id,
-    // CLI migrates the entry from local back to shared so delete/update reach
-    // the shared entry instead of shadowing it with an unreachable local ghost.
-    await run(["create", "report.html", "--favicon", "📊", "--channel", "x"]);
-    expect(manifestAt(".artifacts/manifest.local.json").artifacts).toHaveLength(
-      0,
-    );
-    expect(manifest().artifacts).toHaveLength(1);
-    expect(manifest().artifacts[0].id).toBe("testid123456");
-    // delete reaches the entry (now lives in shared) and clears it fully
-    await run(["delete", "testid123456"]);
-    expect(manifest().artifacts).toHaveLength(0);
-    expect(manifestAt(".artifacts/manifest.local.json").artifacts).toHaveLength(
-      0,
-    );
-  });
-
-  it("list reads the merged view (local + shared)", async () => {
-    mkdirSync(join(projectDir, ".artifacts"), { recursive: true });
-    writeFileSync(
-      join(projectDir, ".artifacts/manifest.json"),
-      JSON.stringify({
-        artifacts: [
-          { id: "sharedAAA", url: "u", title: "Shared", favicon: "📊" },
-        ],
-      }),
-    );
-    writeFileSync(
-      join(projectDir, ".artifacts/manifest.local.json"),
-      JSON.stringify({
-        artifacts: [
-          { id: "localBBB", url: "u", title: "Local", favicon: "📊" },
-        ],
-      }),
-    );
-    const result = await run(["list"]);
-    expect(result.stdout).toContain("sharedAAA");
-    expect(result.stdout).toContain("localBBB");
-  });
-
-  it("local entry overrides shared entry with the same id", async () => {
-    mkdirSync(join(projectDir, ".artifacts"), { recursive: true });
-    const entry = (title: string) => ({
-      id: "sameID",
-      url: "u",
-      title,
-      favicon: "📊",
-      watch: [],
-      snapshot: {},
+  it("keeps encrypted Recipes private and resolves a named password", async () => {
+    const { recipePath } = writeRecipe("secret", {
+      local: true,
+      encrypted: true,
     });
-    writeFileSync(
-      join(projectDir, ".artifacts/manifest.json"),
-      JSON.stringify({ artifacts: [entry("SharedTitle")] }),
-    );
-    writeFileSync(
-      join(projectDir, ".artifacts/manifest.local.json"),
-      JSON.stringify({ artifacts: [entry("LocalTitle")] }),
-    );
-    const result = await run(["list"]);
-    expect(result.stdout).toContain("LocalTitle");
-    expect(result.stdout).not.toContain("SharedTitle");
-  });
 
-  it("status reports staleness across both files", async () => {
-    mkdirSync(join(projectDir, ".artifacts"), { recursive: true });
-    const watch = ["src/**/*.ts"];
-    const stale = (id: string) => ({
-      id,
-      url: "u",
-      title: id,
-      favicon: "📊",
-      watch,
-      snapshot: { "src/main.ts": "deadbeef" },
+    await run(["create", recipePath], {
+      env: { OPEN_ARTIFACTS_PASSWORD_REPORT_PASSWORD: "correct horse" },
     });
-    writeFileSync(
-      join(projectDir, ".artifacts/manifest.json"),
-      JSON.stringify({ artifacts: [stale("sharedStale")] }),
-    );
-    writeFileSync(
-      join(projectDir, ".artifacts/manifest.local.json"),
-      JSON.stringify({ artifacts: [stale("localStale")] }),
-    );
-    const result = await run(["status"], { expectFailure: true });
-    expect(result.stdout).toContain("sharedStale");
-    expect(result.stdout).toContain("localStale");
-  });
-});
 
-describe("show", () => {
-  it("prints the raw text/plain body for a non-encrypted artifact", async () => {
-    await run(["create", "report.html", "--favicon", "📊"]);
-    const result = await run(["show", "testid123456"]);
-    // Regression: /raw returns text/plain, not JSON — the body must be printed
-    // verbatim, never stringified into "[object Object]".
-    expect(result.stdout).toBe(
-      "<!-- design direction: LOCKED -->\n<h1>Published</h1>",
+    expect(requests).toHaveLength(1);
+    expect(requests[0].body.encrypted).toMatchObject({
+      iterations: 600_000,
+    });
+    expect(requests[0].body.content).not.toContain("Recipe report");
+    expect(manifest(true).manifestVersion).toBe(2);
+    expect(manifest().artifacts).toHaveLength(0);
+    expect(credentials().namedPasswords?.["report-password"]).toBe(
+      "correct horse",
     );
-    expect(result.stdout).not.toContain("[object Object]");
+    const ignore = readFileSync(join(projectDir, ".gitignore"), "utf8");
+    expect(ignore).toContain(".artifacts/recipes.local/");
+    expect(ignore).toContain(".artifacts/fragments.local/");
+    expect(readFileSync(recipePath, "utf8")).not.toContain("correct horse");
   });
 
-  it("decrypts an encrypted artifact using the stored password", async () => {
-    await run([
-      "create",
-      "report.html",
-      "--favicon",
-      "🔒",
-      "--password",
-      "hunter2",
-    ]);
-    nextRaw = {
-      contentType: "application/json",
-      body: JSON.stringify(await encryptEnvelope("<h1>Secret</h1>", "hunter2")),
+  it("rejects encrypted Recipes outside private source directories", async () => {
+    const built = writeRecipe("misplaced");
+    const recipe = readJson<TestRecipe>(built.recipePath);
+    recipe.security = {
+      encrypted: true,
+      passwordCredential: "report-password",
     };
-    const result = await run(["show", "testid123456"]);
-    expect(result.stdout).toBe("<h1>Secret</h1>");
-  });
+    writeJson(built.recipePath, recipe);
 
-  it("prints a historical unencrypted version even when the current version is encrypted", async () => {
-    // v2 (current) is encrypted, but --v 1 fetches a pre-rotation text/plain
-    // body. The CLI must NOT try to decrypt text/plain (would crash on
-    // fromBase64(undefined)); it prints the body verbatim.
-    mkdirSync(join(projectDir, ".artifacts"), { recursive: true });
-    writeFileSync(
-      join(projectDir, ".artifacts/manifest.json"),
-      JSON.stringify({
-        artifacts: [
-          {
-            id: "testid123456",
-            url: "u",
-            title: "Rotated",
-            favicon: "🔒",
-            encrypted: true,
-          },
-        ],
-      }),
-    );
-    writeFileSync(
-      join(projectDir, ".artifacts/credentials.json"),
-      JSON.stringify({
-        tokens: { testid123456: `wt_${"x".repeat(43)}` },
-        passwords: { testid123456: "hunter2" },
-      }),
-    );
-    nextRaw = {
-      contentType: "text/plain; charset=utf-8",
-      body: "<!-- v1 plaintext -->\n<h1>Before encryption</h1>",
-    };
-    const result = await run(["show", "testid123456", "--v", "1"]);
-    expect(result.stdout).toBe(
-      "<!-- v1 plaintext -->\n<h1>Before encryption</h1>",
-    );
-    expect(result.stdout).not.toContain("[object Object]");
-  });
-
-  it("decrypts a historical encrypted version even when the current version is unencrypted", async () => {
-    // v2 (current) is unencrypted, but --v 1 fetches a pre-rotation ciphertext
-    // envelope. The CLI must detect encryption from the response and decrypt,
-    // not print raw ciphertext JSON.
-    mkdirSync(join(projectDir, ".artifacts"), { recursive: true });
-    writeFileSync(
-      join(projectDir, ".artifacts/manifest.json"),
-      JSON.stringify({
-        artifacts: [
-          {
-            id: "testid123456",
-            url: "u",
-            title: "Rotated",
-            favicon: "📊",
-            encrypted: false,
-          },
-        ],
-      }),
-    );
-    writeFileSync(
-      join(projectDir, ".artifacts/credentials.json"),
-      JSON.stringify({
-        tokens: { testid123456: `wt_${"x".repeat(43)}` },
-        passwords: { testid123456: "hunter2" },
-      }),
-    );
-    nextRaw = {
-      contentType: "application/json",
-      body: JSON.stringify(
-        await encryptEnvelope("<h1>Old secret</h1>", "hunter2"),
-      ),
-    };
-    const result = await run(["show", "testid123456", "--v", "1"]);
-    expect(result.stdout).toBe("<h1>Old secret</h1>");
-    expect(result.stdout).not.toContain("ciphertext");
-  });
-
-  it("missing-artifact error names both manifest files (shared + local)", async () => {
-    // findEntry is called with the merged manifest (shared + local). Naming
-    // only the shared file misleads --local users whose entry should live in
-    // manifest.local.json. `ack` reaches findEntry without a server round-trip.
-    const result = await run(["ack", `nope${"x".repeat(8)}`], {
+    const result = await run(["create", built.recipePath, "--password", "x"], {
       expectFailure: true,
     });
-    expect(result.stderr).toContain(".artifacts/manifest.json");
-    expect(result.stderr).toContain(".artifacts/manifest.local.json");
-  });
-});
 
-// Build the {alg, kdf, iterations, salt, iv, ciphertext} envelope the Worker
-// serves from GET /raw for an encrypted artifact, mirroring the CLI's
-// encryptContent so `show` can decrypt it with the stored password.
-async function encryptEnvelope(plaintext: string, password: string) {
-  const salt = webcrypto.getRandomValues(new Uint8Array(16));
-  const iv = webcrypto.getRandomValues(new Uint8Array(12));
-  const iterations = 600000;
-  const baseKey = await webcrypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(password),
-    "PBKDF2",
-    false,
-    ["deriveKey"],
-  );
-  const key = await webcrypto.subtle.deriveKey(
-    { name: "PBKDF2", hash: "SHA-256", salt, iterations },
-    baseKey,
-    { name: "AES-GCM", length: 256 },
-    false,
-    ["encrypt"],
-  );
-  const ciphertext = await webcrypto.subtle.encrypt(
-    { name: "AES-GCM", iv },
-    key,
-    new TextEncoder().encode(plaintext),
-  );
-  const b64 = (bytes: Uint8Array) => Buffer.from(bytes).toString("base64");
-  return {
-    alg: "AES-GCM",
-    kdf: "PBKDF2-SHA256",
-    iterations,
-    salt: b64(salt),
-    iv: b64(iv),
-    ciphertext: b64(new Uint8Array(ciphertext)),
-  };
-}
+    expect(result.stderr).toContain("recipes.local");
+    expect(requests).toHaveLength(0);
 
-describe("delete", () => {
-  it("removes the artifact from the server, manifest, and credentials", async () => {
-    await run(["create", "report.html", "--favicon", "📊"]);
-    await run(["delete", "testid123456"]);
-    expect(requests[1].method).toBe("DELETE");
-    expect(requests[1].auth).toContain("wt_");
-    expect(manifest().artifacts).toHaveLength(0);
-  });
-});
-
-describe("install-hook", () => {
-  it("writes the Stop hook into $CLAUDE_PROJECT_DIR/.claude/settings.json, not cwd", async () => {
-    const sub = join(projectDir, "subdir");
-    mkdirSync(sub, { recursive: true });
-    const { code } = await runEnv(["install-hook"], sub, {
-      CLAUDE_PROJECT_DIR: projectDir,
+    const privateShared = writeRecipe("private-shared", { local: true });
+    const privateRecipe = readJson<TestRecipe>(privateShared.recipePath);
+    privateRecipe.artifact.local = false;
+    writeJson(privateShared.recipePath, privateRecipe);
+    const privateResult = await run(["validate", privateShared.recipePath], {
+      expectFailure: true,
     });
-    expect(code).toBe(0);
-    const settingsPath = join(projectDir, ".claude/settings.json");
-    expect(existsSync(settingsPath)).toBe(true);
-    expect(existsSync(join(sub, ".claude/settings.json"))).toBe(false);
-    const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
-    const stop = settings.hooks?.Stop?.[0]?.hooks?.[0];
-    expect(stop?.type).toBe("command");
-    expect(stop?.command).toContain("artifact.mjs");
-    expect(stop?.command).toContain("status --hook");
-  });
-
-  it("is idempotent", async () => {
-    await runEnv(["install-hook"], projectDir, {
-      CLAUDE_PROJECT_DIR: projectDir,
-    });
-    const second = await runEnv(["install-hook"], projectDir, {
-      CLAUDE_PROJECT_DIR: projectDir,
-    });
-    expect(second.code).toBe(0);
-    expect(second.stderr).toContain("already installed");
-    const settings = JSON.parse(
-      readFileSync(join(projectDir, ".claude/settings.json"), "utf8"),
+    expect(privateResult.stderr).toContain(
+      "shared Recipes cannot live under .artifacts/recipes.local",
     );
-    expect(settings.hooks.Stop).toHaveLength(1);
-  });
-});
-
-describe("create leaves hook installation to the user", () => {
-  it("does not write settings.json on create in a session, but hints", async () => {
-    const { code, stderr } = await runEnv(
-      ["create", "report.html", "--favicon", "📊", "--watch", "src/**/*.ts"],
-      projectDir,
-      { OPEN_ARTIFACTS_URL: apiUrl, CLAUDE_PROJECT_DIR: projectDir },
-    );
-    expect(code).toBe(0);
-    expect(existsSync(join(projectDir, ".claude/settings.json"))).toBe(false);
-    expect(stderr).toContain("install-hook");
   });
 
-  it("does not hint once the hook is already installed", async () => {
-    await runEnv(["install-hook"], projectDir, {
-      CLAUDE_PROJECT_DIR: projectDir,
-    });
-    const { stderr } = await runEnv(
-      ["create", "report.html", "--favicon", "📊", "--watch", "src/**/*.ts"],
-      projectDir,
-      { OPEN_ARTIFACTS_URL: apiUrl, CLAUDE_PROJECT_DIR: projectDir },
-    );
-    expect(stderr).not.toContain("install-hook");
-  });
-
-  it("neither installs nor hints outside a Claude Code session", async () => {
-    const { stderr } = await run([
-      "create",
-      "report.html",
-      "--favicon",
-      "📊",
-      "--watch",
-      "src/**/*.ts",
-    ]);
-    expect(existsSync(join(projectDir, ".claude/settings.json"))).toBe(false);
-    expect(stderr).not.toContain("install-hook");
-  });
-});
-
-describe("ack", () => {
-  it("advances the snapshot baseline offline without republishing", async () => {
-    await run([
-      "create",
-      "report.html",
-      "--favicon",
-      "📊",
-      "--scope",
-      "app interactions",
-      "--watch",
-      "src/**/*.ts",
-    ]);
-    const before = manifest().artifacts[0].snapshot["src/main.ts"];
-    writeFileSync(join(projectDir, "src/main.ts"), "export const x = 42;\n");
+  it("reads Recipe watch metadata for status and ack", async () => {
+    const built = writeRecipe("watched", { watch: ["src/**"] });
+    await run(["create", built.recipePath]);
+    writeFileSync(join(projectDir, "src/main.ts"), "export const x = 2;\n");
 
     const stale = await run(["status"], { expectFailure: true });
-    expect(stale.code).toBe(1);
+    expect(stale.stdout).toContain("stale: testid123456 Recipe report");
+    expect(stale.stdout).toContain("src/main.ts");
 
-    const requestsBefore = requests.length;
-    const ack = await run(["ack", "testid123456"]);
-    expect(ack.code).toBe(0);
-    // ack is purely local: it must not hit the server.
-    expect(requests.length).toBe(requestsBefore);
-
-    const after = manifest().artifacts[0].snapshot["src/main.ts"];
-    expect(after).not.toBe(before);
-
+    await run(["ack", "testid123456"]);
     const clean = await run(["status"]);
-    expect(clean.code).toBe(0);
+    expect(clean.stderr).toContain("all artifacts are up to date");
   });
 
-  it("fails on an unknown id", async () => {
-    await run(["create", "report.html", "--favicon", "📊"]);
-    const result = await run(["ack", "nope"], { expectFailure: true });
-    expect(result.code).not.toBe(0);
-    expect(result.stderr).toContain("not found");
+  it("reads Manifest v1 without mutating it", async () => {
+    seedLegacyManifest();
+    const path = join(projectDir, ".artifacts/manifest.json");
+    const before = readFileSync(path, "utf8");
+
+    const result = await run(["list"]);
+
+    expect(result.stdout).toContain("Published");
+    expect(readFileSync(path, "utf8")).toBe(before);
   });
 
-  it("requires an id", async () => {
-    const result = await run(["ack"], { expectFailure: true });
-    expect(result.code).not.toBe(0);
-  });
-});
+  it("migrates a legacy entry on first update and publishes once", async () => {
+    seedLegacyManifest();
 
-describe("auto-update", () => {
-  it("toggles on for one artifact without affecting another (isolation)", async () => {
-    nextResponse = {
-      status: 201,
-      body: {
-        id: "artifact-a",
-        url: "http://example.invalid/a/artifact-a",
-        writeToken: `wt_${"a".repeat(43)}`,
-        version: 1,
-      },
-    };
-    await run(["create", "report.html", "--favicon", "📊"]);
-    nextResponse = {
-      status: 201,
-      body: {
-        id: "artifact-b",
-        url: "http://example.invalid/a/artifact-b",
-        writeToken: `wt_${"b".repeat(43)}`,
-        version: 1,
-      },
-    };
-    await run(["create", "report.html", "--favicon", "📊"]);
+    await run(["update", "testid123456"]);
 
-    await run(["auto-update", "artifact-a", "on"]);
-
-    const entries = manifest().artifacts;
-    expect(entries.find((a) => a.id === "artifact-a")?.autoUpdate).toBe(true);
-    expect(entries.find((a) => a.id === "artifact-b")?.autoUpdate).toBeFalsy();
-  });
-
-  it("installs the Stop hook when turned on inside a session", async () => {
-    await run(["create", "report.html", "--favicon", "📊"]);
-    const id = manifest().artifacts[0].id;
-
-    const { code, stderr } = await runEnv(
-      ["auto-update", id, "on"],
-      projectDir,
-      { CLAUDE_PROJECT_DIR: projectDir },
+    expect(requests.map((request) => request.method)).toEqual(["GET", "PUT"]);
+    const state = manifest();
+    expect(state.manifestVersion).toBe(2);
+    expect(state.artifacts[0].recipe).toMatch(
+      /^\.artifacts\/recipes\/published-/,
     );
-    expect(code).toBe(0);
-    expect(stderr).toContain("auto-update enabled");
-    expect(stderr).toContain("installed Stop hook");
-
-    const settings = JSON.parse(
-      readFileSync(join(projectDir, ".claude/settings.json"), "utf8"),
+    expect(state.artifacts[0].migrationPending).toBeUndefined();
+    expect(existsSync(join(projectDir, state.artifacts[0].recipe ?? ""))).toBe(
+      true,
     );
-    expect(settings.hooks?.Stop?.[0]?.hooks?.[0]?.command).toContain(
-      "status --hook",
+    expect(requests[1].body.content).toContain("Published");
+  });
+
+  it("migrates nested legacy Canvas controls without duplicating the runtime", async () => {
+    seedLegacyManifest({ canvas: true, level: 2 });
+    nextRaw = {
+      contentType: "text/plain; charset=utf-8",
+      body: `<title>Legacy Canvas</title>
+<style>
+:root{--accent:blue}:root[data-theme="dark"]{--accent:cyan}
+/* Viewport. Sized to the visible area below the service header. */
+.oa-canvas{overflow:hidden}
+</style>
+${validCanvasBody()}
+<div class="oa-zoom">
+  <div class="oa-tour"><button id="tour-next">Legacy next</button></div>
+  <button id="zoom-out">Legacy zoom</button>
+</div>
+<script>
+const authored = 1;
+(function () {
+  const canvas = document.getElementById("canvas");
+  canvas.dataset.legacy = "true";
+})();
+</script>`,
+    };
+
+    await run(["update", "testid123456"]);
+
+    expect(requests.map((request) => request.method)).toEqual(["GET", "PUT"]);
+    const content = String(requests[1].body.content);
+    expect(content.match(/class="oa-zoom"/g)).toHaveLength(1);
+    expect(content).toContain("open-artifacts:canvas-js:start");
+    expect(content).toContain("const authored = 1");
+    expect(content).not.toContain("Legacy zoom");
+    expect(content).not.toContain("dataset.legacy");
+  });
+
+  it("updates Recipe autoUpdate metadata with the operational toggle", async () => {
+    const built = writeRecipe();
+    await run(["create", built.recipePath]);
+
+    await run(["auto-update", "testid123456", "on"], {
+      env: { CLAUDE_PROJECT_DIR: projectDir },
+    });
+
+    expect(readJson<TestRecipe>(built.recipePath).artifact.autoUpdate).toBe(
+      true,
     );
     expect(manifest().artifacts[0].autoUpdate).toBe(true);
-  });
-
-  it("does not reinstall the hook if already installed (idempotent)", async () => {
-    await run(["create", "report.html", "--favicon", "📊"]);
-    const id = manifest().artifacts[0].id;
-    await runEnv(["install-hook"], projectDir, {
-      CLAUDE_PROJECT_DIR: projectDir,
-    });
-
-    const { stderr } = await runEnv(["auto-update", id, "on"], projectDir, {
-      CLAUDE_PROJECT_DIR: projectDir,
-    });
-    expect(stderr).toContain("already installed");
-    const settings = JSON.parse(
-      readFileSync(join(projectDir, ".claude/settings.json"), "utf8"),
-    );
-    expect(settings.hooks.Stop).toHaveLength(1);
-  });
-
-  it("turning off does not uninstall an already-installed hook", async () => {
-    await run(["create", "report.html", "--favicon", "📊"]);
-    const id = manifest().artifacts[0].id;
-    await runEnv(["auto-update", id, "on"], projectDir, {
-      CLAUDE_PROJECT_DIR: projectDir,
-    });
-
-    const { code, stderr } = await run(["auto-update", id, "off"]);
-    expect(code).toBe(0);
-    expect(stderr).toContain("auto-update disabled");
-    expect(manifest().artifacts[0].autoUpdate).toBe(false);
-    const settings = JSON.parse(
-      readFileSync(join(projectDir, ".claude/settings.json"), "utf8"),
-    );
-    expect(settings.hooks.Stop).toHaveLength(1);
-  });
-
-  it("fails to turn on without a write token for that artifact", async () => {
-    await run(["create", "report.html", "--favicon", "📊"]);
-    const id = manifest().artifacts[0].id;
-    // Simulate a teammate who cloned the repo: manifest.json is committed,
-    // credentials.json (gitignored) is not.
-    writeFileSync(
-      join(projectDir, ".artifacts/credentials.json"),
-      JSON.stringify({ tokens: {} }),
-    );
-    const result = await run(["auto-update", id, "on"], {
-      expectFailure: true,
-    });
-    expect(result.code).not.toBe(0);
-    expect(result.stderr).toContain("no write token");
-    expect(manifest().artifacts[0].autoUpdate).toBeFalsy();
-  });
-
-  it("fails on an unknown id", async () => {
-    await run(["create", "report.html", "--favicon", "📊"]);
-    const result = await run(["auto-update", "nope", "on"], {
-      expectFailure: true,
-    });
-    expect(result.code).not.toBe(0);
-    expect(result.stderr).toContain("not found");
-  });
-
-  it("fails on an invalid mode argument", async () => {
-    await run(["create", "report.html", "--favicon", "📊"]);
-    const id = manifest().artifacts[0].id;
-    const result = await run(["auto-update", id, "maybe"], {
-      expectFailure: true,
-    });
-    expect(result.code).not.toBe(0);
-    expect(result.stderr).toContain('"on" or "off"');
-  });
-
-  it("requires an id and a mode", async () => {
-    const noId = await run(["auto-update"], { expectFailure: true });
-    expect(noId.code).not.toBe(0);
-
-    await run(["create", "report.html", "--favicon", "📊"]);
-    const id = manifest().artifacts[0].id;
-    const noMode = await run(["auto-update", id], { expectFailure: true });
-    expect(noMode.code).not.toBe(0);
+    expect(existsSync(join(projectDir, ".claude/settings.json"))).toBe(true);
   });
 });

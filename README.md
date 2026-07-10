@@ -50,8 +50,8 @@ verify), an explicit anti-AI-slop list, modern CSS power moves, and a
 5-direction library (Editorial / Modern minimal / Human / Tech utility /
 Brutalist) with ready-to-paste OKLch palettes and font stacks for when no
 brand is specified. `references/tokens.css` is the shared token contract the
-agent pastes into every page before overriding identity tokens per
-direction. Adapted from
+Recipe builder injects into every HTML artifact before its theme fragment.
+Adapted from
 [open-design](https://github.com/nexu-io/open-design),
 Claude's `artifact-design` skill,
 [impeccable](https://github.com/pbakaus/impeccable) by Paul Bakaus
@@ -63,14 +63,16 @@ Retargeted to this project's strict no-external-requests CSP.
 Ask your agent to "publish this as an artifact" — it runs the bundled CLI:
 
 ```sh
-node .claude/skills/using-open-artifacts/scripts/artifact.mjs create page.html \
-  --favicon 📊 --scope "app interaction flows" \
-  --channel app-interactions --watch "src/views/**"
+node .claude/skills/using-open-artifacts/scripts/artifact.mjs validate \
+  artifacts/app-interactions.recipe.json
+node .claude/skills/using-open-artifacts/scripts/artifact.mjs create \
+  artifacts/app-interactions.recipe.json
 ```
 
-`--channel <slug>` binds the artifact to a stable URL: reusing the same slug
-on a later `create` updates the same link (new version, no new URL), so "the
-app-interactions page" always lives at one link across sessions and machines.
+Every artifact is generated from a versioned JSON Recipe plus ordered
+fragments. The Recipe owns title, favicon, format, scope, watch globs, channel,
+level, Canvas mode, locality, and encryption policy. `create` and `update`
+compose and validate in memory, then send exactly one final publish request.
 
 ## Deploy your own instance
 
@@ -97,14 +99,15 @@ Local development: `pnpm dev` (state persists in `.wrangler/state`).
 | Concern | Design |
 | --- | --- |
 | Identity | No accounts. Artifact ids are 12-char crypto-random (unguessable, unlisted). Creation returns a one-time `writeToken`; only its SHA-256 is stored. |
-| Channels | A `--channel <slug>` binds an artifact to a stable URL. The CLI keeps a per-channel token (`ch_`) in `.artifacts/credentials.json`; presenting it on a later `create` updates the bound artifact (new version, same link) instead of minting a new one. Only the channel hash is stored server-side. |
-| Local mode | `--local` writes the manifest entry to `.artifacts/manifest.local.json` (gitignored, machine-local) instead of the committed `manifest.json`; reads merge the two (local overrides), mirroring Claude Code's `settings.local.json`. The skill asks on first publish and recommends local. The server remains the source of truth for content — no local page copy is kept, so `update <id> <file>` regenerates from the server's current version. |
+| Deterministic sources | A strict Recipe plus ordered fragments generates every Artifact. The builder injects tokens and, for Canvas, the vendored runtime and controls. Manifest v2 records Recipe/input/output hashes; direct HTML/Markdown CLI publishing is rejected. |
+| Channels | `artifact.channel` binds an artifact to a stable URL. The CLI keeps a per-channel token (`ch_`) in `.artifacts/credentials.json`; presenting it on a later `create` updates the bound artifact (new version, same link) instead of minting a new one. Only the channel hash is stored server-side. |
+| Local mode | `artifact.local: true` places private sources under gitignored `.artifacts/recipes.local/` and `.artifacts/fragments.local/`, with state in `manifest.local.json`. Shared Recipes/fragments may be committed. Encrypted Recipes are always private. |
 | Storage | D1 for metadata/tokens/version index, R2 for content bodies (`content/<id>/<version>`). Both strongly consistent — updates are visible immediately. |
 | Versions | Every publish is an immutable version with an optional label and its own title, description, favicon, format, and encryption state, so history reflects what each version actually looked like. `?v=N` views history; `PUT` accepts `baseVersion` and returns 409 on conflicts (override with `force`). |
 | Serving | The Worker wraps stored content in a skeleton (CSS reset, emoji favicon, viewport, light/dark theme with a `data-theme` toggle) and serves it with `Content-Security-Policy: sandbox allow-scripts ...; default-src 'none'` — artifact scripts run in an opaque origin and cannot make any external request. |
 | Link previews | Every page emits OpenGraph + Twitter tags (title, description, image). `GET /og/:id` returns a 1200x630 PNG card rasterized on the edge with `@resvg/resvg-wasm` from an embedded Inter subset — a real raster crawlers render (they ignore SVG), self-contained with no external requests. |
 | Passwords | The CLI encrypts locally: PBKDF2-HMAC-SHA256 (600k iterations) + AES-256-GCM. The server stores only `{salt, iv, ciphertext}`. The viewer serves an unlock shell that decrypts in the browser and renders the result inside a sandboxed iframe. The password never leaves the client. |
-| Auto-update | The skill records each artifact's `scope` (what it covers), `watch` globs, and content hashes in `.artifacts/manifest.json`, plus a per-artifact auto-update flag (opt-in, off by default). `artifact.mjs status` reports every stale watched artifact; `status --hook` (run by the optional Stop hook — `artifact.mjs install-hook`, or auto-installed by `artifact.mjs auto-update <id> on`) only surfaces artifacts with auto-update on, so the hands-off loop only ever acts on artifacts the user opted in. Either way, agents regenerate or `ack` a stale artifact the same way once it's flagged. |
+| Auto-update | The Recipe records `scope`, `watch`, and `autoUpdate`; Manifest v2 keeps the publication snapshot. `artifact.mjs status` reports stale watched artifacts, while the optional Stop-hook path only surfaces opted-in entries. Agents update Recipe fragments or `ack` reviewed drift. |
 | Markdown | Rendered client-side (vendored `marked`, inlined — no CDN), so encrypted Markdown works without the server ever seeing plaintext. |
 
 ## API
