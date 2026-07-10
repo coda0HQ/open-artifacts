@@ -1,0 +1,15 @@
+.report {
+  width: min(46rem, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: var(--space-8) 0;
+}
+
+.report header {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: var(--space-5);
+}
+
+.report h1 {
+  font-size: var(--text-display);
+  letter-spacing: var(--tracking-tight);
+}

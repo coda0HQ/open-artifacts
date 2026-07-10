@@ -1,28 +1,30 @@
-# Canvas mode (--canvas)
+# Canvas mode
 
 > Sources: Apple WWDC 2018 *Designing Fluid Interfaces* (gesture physics).
 > See root README credits.
 
-Read this only when building with `--canvas`. The canvas shell is **fluid**:
+Read this only when the Recipe uses `artifact.canvas: true`. The canvas shell
+is **fluid**:
 momentum scrolling, pinch-to-zoom, rubber-band edge resistance, an optional
 guided tour, connector-aware spotlight highlighting, and `#frame-id` deep
-links. Canvas is **orthogonal to `--level`**: `--level` still sets fidelity
-and motion budget; `--canvas` swaps the *shell* — an infinite spatial plane
+links. Canvas is **orthogonal to level**: `artifact.level` still sets fidelity
+and motion budget; Canvas swaps the *shell* for an infinite spatial plane
 of pan/zoom **frames** instead of a scrolling document. The two compose:
 
-- `--level 1 --canvas` — spatial notes / a board. Few frames, typographic,
+- Level 1 Canvas — spatial notes / a board. Few frames, typographic,
   the focus zoom is the only motion.
-- `--level 2 --canvas` — the default. A multi-frame prototype or flow; frames
+- Level 2 Canvas — the default. A multi-frame prototype or flow; frames
   are real, operable screens once focused; connectors show flow.
-- `--level 3 --canvas` — canvas-as-showcase. The composition is the hero and the
+- Level 3 Canvas — canvas-as-showcase. The composition is the hero and the
   overview → focus zoom is the one orchestrated moment. Keep per-frame motion
   quiet (see the canvas budget note in `motion.md`).
 
-The runtime below is **vendored**: paste the CSS into a leading `<style>` (after
-the token contract from `references/tokens.css` and your direction overrides) and
-the JS into a trailing `<script>`. Native browser APIs only — no libraries, no
-external requests (the strict CSP blocks them anyway). All viewer state lives in
-memory; the sandbox is opaque-origin, so `localStorage`/`sessionStorage` throw.
+The runtime below is **vendored and builder-owned**. The Recipe builder extracts
+the CSS and JS fenced sections, injects them after tokens/authored styles and
+scripts, and adds zoom plus optional tour controls. Do not copy the runtime or
+controls into fragments. Author only `#canvas`, `#plane`, frames, notes,
+connectors, and content. Native browser APIs only; all viewer state lives in
+memory.
 
 ## Tunable constants
 
@@ -143,6 +145,15 @@ Override any constant for a specific composition, but name why.
   left: calc(var(--x) * 1px);
   top: calc(var(--y) * 1px);
   box-sizing: border-box;
+  /* `width: max-content` is load-bearing. The note is absolutely positioned, so
+     without an explicit width it shrink-to-fits. When its text holds an inline
+     `.fr-mono` span whose run is full of hyphens (`--level 2 --canvas`), the
+     available-width solver can pick the *minimum* preferred width and let
+     `overflow-wrap: anywhere` stack every glyph one per line — the note turns
+     into a tall thin strip. max-content forces the natural single-line width,
+     capped by `max-width: 28ch`. The collapsed-chip rule below overrides this
+     with `width: 32px`. */
+  width: max-content;
   max-width: 28ch;
   margin: 0;
   padding: var(--space-3) var(--space-4);
@@ -174,8 +185,12 @@ Override any constant for a specific composition, but name why.
 }
 /* Pinned open while collapsed-by-zoom: a floating popover over the plane.
    Solid surface (the translucent accent tint reads muddy over frames),
-   raised shadow, above neighboring chips. */
+   raised shadow, above neighboring chips. Width is `max-content` (from the
+   base rule) so the popover keeps its rectangular shape, not the 32px chip;
+   cap height against the viewport and scroll if a note is unusually long. */
 .oa-note[data-collapsed="true"][data-open="true"] {
+  max-height: calc(80dvh - var(--oa-header-h, 2.5rem));
+  overflow-y: auto;
   background: var(--surface);
   box-shadow: var(--elev-ring), var(--elev-raised);
   z-index: 2;
@@ -1095,20 +1110,11 @@ are unitless pixel numbers describing the **body**.
     <p class="oa-note" style="--x:150;--y:920">Cold-start empty state still open.</p>
   </div>
 </div>
-<!-- Tour controls: include only when at least one frame has data-tour. -->
-<div class="oa-zoom" role="group" aria-label="Zoom and tour controls">
-  <div class="oa-tour" role="group" aria-label="Guided tour">
-    <button id="tour-prev" type="button" aria-label="Previous step">Prev</button>
-    <output id="tour-status" aria-label="Tour progress">1 / 2</output>
-    <button id="tour-next" type="button" aria-label="Next step">Next</button>
-    <div class="oa-tour-sep" aria-hidden="true"></div>
-  </div>
-  <button id="zoom-out" type="button" aria-label="Zoom out">&minus;</button>
-  <output id="zoom-pct" aria-label="Current zoom">100%</output>
-  <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
-  <button id="zoom-fit" type="button" aria-label="Fit all to view">⤢</button>
-</div>
 ```
+
+The builder appends the zoom cluster. When at least one frame has `data-tour`,
+it also appends the tour controls. Authored controls with these classes or IDs
+fail validation.
 
 ## The frame contract
 

@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-artifacts.dev/recipe/v1",
+  "title": "Open Artifacts Recipe v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "artifact", "document", "security", "build"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "const": 1 },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "favicon",
+        "format",
+        "canvas",
+        "channel",
+        "scope",
+        "watch",
+        "local",
+        "autoUpdate"
+      ],
+      "properties": {
+        "title": { "type": ["string", "null"], "minLength": 1 },
+        "description": { "type": ["string", "null"] },
+        "favicon": { "type": "string", "minLength": 1 },
+        "format": { "enum": ["html", "markdown"] },
+        "level": { "type": ["integer", "null"], "enum": [1, 2, 3, null] },
+        "canvas": { "type": "boolean" },
+        "channel": {
+          "type": ["string", "null"],
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+        },
+        "scope": { "type": ["string", "null"] },
+        "watch": { "type": "array", "items": { "type": "string" } },
+        "local": { "type": "boolean" },
+        "autoUpdate": { "type": "boolean" }
+      }
+    },
+    "document": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["language", "theme", "fragments"],
+      "properties": {
+        "language": { "type": "string", "minLength": 1 },
+        "theme": { "type": "string", "minLength": 1 },
+        "fragments": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["body"],
+          "properties": {
+            "theme": { "$ref": "#/$defs/paths" },
+            "styles": { "$ref": "#/$defs/paths" },
+            "body": { "$ref": "#/$defs/paths", "minItems": 1 },
+            "scripts": { "$ref": "#/$defs/paths" }
+          }
+        }
+      }
+    },
+    "security": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["encrypted", "passwordCredential"],
+      "properties": {
+        "encrypted": { "type": "boolean" },
+        "passwordCredential": { "type": ["string", "null"] }
+      }
+    },
+    "build": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["strategy"],
+      "properties": {
+        "strategy": { "const": "auto" }
+      }
+    }
+  },
+  "$defs": {
+    "paths": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    }
+  }
+}

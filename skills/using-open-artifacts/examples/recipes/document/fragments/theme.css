@@ -1,0 +1,15 @@
+:root {
+  --bg: oklch(0.97 0.012 95);
+  --fg: oklch(0.22 0.02 80);
+  --muted: oklch(0.48 0.025 80);
+  --accent: oklch(0.55 0.16 145);
+  --accent-on: white;
+}
+
+:root[data-theme="dark"] {
+  --bg: oklch(0.18 0.018 80);
+  --fg: oklch(0.93 0.012 95);
+  --muted: oklch(0.72 0.025 85);
+  --accent: oklch(0.72 0.16 145);
+  --accent-on: oklch(0.15 0.02 145);
+}

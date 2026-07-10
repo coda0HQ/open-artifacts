@@ -1,0 +1,34 @@
+{
+  "$schema": "../../../references/recipe.schema.json",
+  "version": 1,
+  "artifact": {
+    "title": "Sign-in Flow",
+    "description": "A deterministic Canvas Recipe example",
+    "favicon": "🗺️",
+    "format": "html",
+    "level": 2,
+    "canvas": true,
+    "channel": null,
+    "scope": "Recipe builder Canvas example",
+    "watch": [],
+    "local": false,
+    "autoUpdate": false
+  },
+  "document": {
+    "language": "en",
+    "theme": "product-flow",
+    "fragments": {
+      "theme": ["fragments/theme.css"],
+      "styles": [],
+      "body": ["fragments/body.html"],
+      "scripts": []
+    }
+  },
+  "security": {
+    "encrypted": false,
+    "passwordCredential": null
+  },
+  "build": {
+    "strategy": "auto"
+  }
+}

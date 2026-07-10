@@ -10,7 +10,7 @@ default-src 'none'`) blocks all external requests, so every animation is
 inline CSS + vanilla JS. This is the project's differentiator: library-free
 motion that feels designed, not templated.
 
-Read this only when building at `--level 3`. Respect `prefers-reduced-motion`
+Read this only when the Recipe uses `artifact.level: 3`. Respect `prefers-reduced-motion`
 at every level — wrap motion in a `@media (prefers-reduced-motion: no-preference)`
 guard so reduced-motion users get the static version.
 
@@ -391,7 +391,7 @@ When auditing motion problems, fix in this order (highest damage first):
 
 A Level 3 page should have **one orchestrated moment** (the load sequence or
 a scroll-driven hero) and **quiet everything else**. Spend your boldness in
-one place; ornament elsewhere reads as AI-slop. On a `--canvas` page
+one place; ornament elsewhere reads as AI-slop. On a Canvas page
 (references/canvas.md) that moment is the overview → focus zoom — don't also
 stack scroll-reveal theatre inside frames, and there is no page scroll to drive
 `animation-timeline: scroll()`. One orchestrated camera move, quiet frames.

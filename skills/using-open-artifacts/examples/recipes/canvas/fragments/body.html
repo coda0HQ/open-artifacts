@@ -1,0 +1,22 @@
+<section class="oa-canvas" id="canvas" aria-label="Sign-in flow canvas">
+  <div class="oa-plane" id="plane">
+    <svg class="oa-connectors" aria-hidden="true">
+      <path d="M 390 422 C 450 422 450 422 510 422" data-from="sign-in" data-to="account"/>
+    </svg>
+    <section class="oa-frame" id="sign-in" data-tour="1" style="--x:0;--y:0;--w:390;--h:844">
+      <button class="oa-frame-label" type="button">Sign in</button>
+      <div class="oa-frame-body" inert>
+        <h2>Welcome back</h2>
+        <label>Email <input type="email" autocomplete="email"></label>
+        <button type="button">Continue</button>
+      </div>
+    </section>
+    <section class="oa-frame" id="account" data-tour="2" style="--x:510;--y:0;--w:390;--h:844">
+      <button class="oa-frame-label" type="button">Account</button>
+      <div class="oa-frame-body" inert>
+        <h2>Account ready</h2>
+        <p>The builder injected runtime and controls around these authored frames.</p>
+      </div>
+    </section>
+  </div>
+</section>

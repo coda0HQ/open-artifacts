@@ -3,20 +3,23 @@
 // Used by the "artifacts" agent skill; also usable by humans.
 
 import { createHash, webcrypto } from "node:crypto";
-import {
-  existsSync,
-  globSync,
-  mkdirSync,
-  readFileSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join, relative } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+import {
+  buildArtifactRecipe,
+  recipeBuildSummary,
+  writeArtifactPreview,
+} from "./build-artifact.mjs";
+import { CANVAS_MARKERS, loadCanvasRuntime } from "./lib/compose.mjs";
+import { loadRecipe, resolveWatchFiles } from "./lib/recipe.mjs";
+import { MAX_CONTENT_BYTES } from "./lib/validate.mjs";
 
 const PBKDF2_ITERATIONS = 600_000;
+const PROJECT_ROOT = process.cwd();
+const SKILL_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const ARTIFACTS_DIR = ".artifacts";
 // *.local.* siblings mirror Claude Code's .claude/settings.local.json +
 // CLAUDE.local.md convention: machine-local, gitignored, merged over the
@@ -85,18 +88,40 @@ function mergeArtifacts(shared, local) {
   return [...byId.values()];
 }
 
+function normalizeManifest(value) {
+  return {
+    manifestVersion: value.manifestVersion ?? 1,
+    artifacts: Array.isArray(value.artifacts) ? value.artifacts : [],
+  };
+}
+
 function loadManifest() {
-  const shared = readJson(MANIFEST.shared, { artifacts: [] });
-  const local = readJson(MANIFEST.local, { artifacts: [] });
-  return { artifacts: mergeArtifacts(shared.artifacts, local.artifacts) };
+  const shared = normalizeManifest(
+    readJson(MANIFEST.shared, { artifacts: [] }),
+  );
+  const local = normalizeManifest(readJson(MANIFEST.local, { artifacts: [] }));
+  return {
+    manifestVersion: Math.max(shared.manifestVersion, local.manifestVersion),
+    artifacts: mergeArtifacts(shared.artifacts, local.artifacts),
+  };
 }
 
 function saveManifest(manifest, local) {
-  writeJson(local ? MANIFEST.local : MANIFEST.shared, manifest);
+  writeJson(local ? MANIFEST.local : MANIFEST.shared, {
+    manifestVersion: 2,
+    artifacts: manifest.artifacts,
+  });
 }
 
 function loadCredentials() {
-  return readJson(CREDENTIALS_PATH, { tokens: {} });
+  const value = readJson(CREDENTIALS_PATH, {});
+  return {
+    ...value,
+    tokens: value.tokens ?? {},
+    channels: value.channels ?? {},
+    passwords: value.passwords ?? {},
+    namedPasswords: value.namedPasswords ?? {},
+  };
 }
 
 function saveCredentials(credentials) {
@@ -109,18 +134,18 @@ function saveCredentials(credentials) {
 // without persisting an origin tag on the entry.
 function manifestFileForId(id) {
   if (
-    readJson(MANIFEST.local, { artifacts: [] }).artifacts.some(
-      (a) => a.id === id,
-    )
+    normalizeManifest(
+      readJson(MANIFEST.local, { artifacts: [] }),
+    ).artifacts.some((a) => a.id === id)
   ) {
     return {
       local: true,
-      manifest: readJson(MANIFEST.local, { artifacts: [] }),
+      manifest: normalizeManifest(readJson(MANIFEST.local, { artifacts: [] })),
     };
   }
   return {
     local: false,
-    manifest: readJson(MANIFEST.shared, { artifacts: [] }),
+    manifest: normalizeManifest(readJson(MANIFEST.shared, { artifacts: [] })),
   };
 }
 
@@ -132,6 +157,15 @@ function ensureGitignored() {
   const lines = [".artifacts/credentials.json"];
   if (existsSync(MANIFEST.local)) lines.push(".artifacts/manifest.local.json");
   if (existsSync(CONFIG.local)) lines.push(".artifacts/config.local.json");
+  if (existsSync(join(ARTIFACTS_DIR, "recipes.local"))) {
+    lines.push(".artifacts/recipes.local/");
+  }
+  if (existsSync(join(ARTIFACTS_DIR, "fragments.local"))) {
+    lines.push(".artifacts/fragments.local/");
+  }
+  if (existsSync(join(ARTIFACTS_DIR, "previews"))) {
+    lines.push(".artifacts/previews/");
+  }
   const current = existsSync(".gitignore")
     ? readFileSync(".gitignore", "utf8")
     : "";
@@ -215,26 +249,20 @@ async function decryptContent(payload, password) {
   return new TextDecoder().decode(plaintext);
 }
 
-function inferFormat(file, explicit) {
-  if (explicit) return explicit;
-  return /\.(md|markdown)$/i.test(file) ? "markdown" : "html";
-}
-
 function sha256(data) {
   return createHash("sha256").update(data).digest("hex");
 }
 
 function snapshotWatch(globs) {
+  return snapshotResolvedFiles(resolveWatchFiles(globs, PROJECT_ROOT));
+}
+
+function snapshotResolvedFiles(files) {
   const snapshot = {};
-  for (const pattern of globs) {
-    const matches = globSync(pattern, {
-      exclude: (p) =>
-        p.includes("node_modules") || p.split("/").includes(".git"),
-    });
-    for (const path of matches.sort()) {
-      if (!statSync(path).isFile()) continue;
-      snapshot[path] = sha256(readFileSync(path));
-    }
+  for (const file of files.sort((a, b) =>
+    a.projectPath.localeCompare(b.projectPath),
+  )) {
+    snapshot[file.projectPath] = sha256(readFileSync(file.real));
   }
   return snapshot;
 }
@@ -276,35 +304,87 @@ async function request(method, url, body, token) {
   return { status: response.status, json, text };
 }
 
-function parseWatch(flag) {
-  if (!flag) return [];
-  return flag
-    .split(",")
-    .map((g) => g.trim())
-    .filter(Boolean);
+function requireRecipePath(path) {
+  if (!path) fail("a Recipe JSON path is required");
+  if (!/\.json$/i.test(path)) {
+    fail(
+      `direct HTML/Markdown publishing is no longer supported; pass a Recipe JSON file (see references/recipe.md): ${path}`,
+    );
+  }
+  return path;
 }
 
-async function preparePayload(file, flags) {
-  if (!existsSync(file)) fail(`file not found: ${file}`);
-  const source = readFileSync(file, "utf8");
-  const format = inferFormat(file, flags.format);
-  const payload = { format };
-  if (flags.title) payload.title = flags.title;
-  if (flags.description) payload.description = flags.description;
-  if (flags.favicon) payload.favicon = flags.favicon;
-  if (flags.label) payload.label = flags.label;
-  if (flags.password) {
-    const { content, encrypted } = await encryptContent(source, flags.password);
-    payload.content = content;
-    payload.encrypted = encrypted;
-    if (!payload.title) {
-      const extracted = extractTitle(source, format);
-      if (extracted) payload.title = extracted;
-    }
-  } else {
-    payload.content = source;
+function credentialEnvName(name) {
+  return `OPEN_ARTIFACTS_PASSWORD_${name
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")}`;
+}
+
+function resolveRecipePassword(build, flags, artifactId = null) {
+  if (!build.loaded.recipe.security.encrypted) return null;
+  const name = build.loaded.recipe.security.passwordCredential;
+  const credentials = loadCredentials();
+  const password =
+    flags.password ??
+    process.env[credentialEnvName(name)] ??
+    credentials.namedPasswords[name] ??
+    (artifactId ? credentials.passwords[artifactId] : null);
+  if (!password) {
+    fail(
+      `encrypted Recipe requires --password, ${credentialEnvName(name)}, or credentials.namedPasswords.${name}`,
+    );
   }
-  return payload;
+  return password;
+}
+
+async function prepareRecipePayload(recipePath, flags, artifactId = null) {
+  const build = buildArtifactRecipe(
+    resolve(PROJECT_ROOT, requireRecipePath(recipePath)),
+    { projectRoot: PROJECT_ROOT },
+  );
+  const artifact = build.loaded.recipe.artifact;
+  const password = resolveRecipePassword(build, flags, artifactId);
+  const payload = {
+    content: build.publishContent,
+    format: artifact.format,
+    title: build.validation.title,
+    description: artifact.description,
+    favicon: artifact.favicon,
+  };
+  if (flags.label) payload.label = flags.label;
+  if (password) {
+    const encryptedPayload = await encryptContent(
+      build.publishContent,
+      password,
+    );
+    if (Buffer.byteLength(encryptedPayload.content) > MAX_CONTENT_BYTES) {
+      fail(
+        `encrypted output exceeds the ${MAX_CONTENT_BYTES} byte service limit`,
+      );
+    }
+    payload.content = encryptedPayload.content;
+    payload.encrypted = encryptedPayload.encrypted;
+  }
+  return { build, artifact, password, payload };
+}
+
+function recipeMetadataForEntry(entry) {
+  if (!entry.recipe) return entry;
+  try {
+    const { artifact, security } = loadRecipe(
+      resolve(PROJECT_ROOT, entry.recipe),
+      {
+        projectRoot: PROJECT_ROOT,
+      },
+    ).recipe;
+    return { ...artifact, encrypted: security.encrypted };
+  } catch {
+    return entry;
+  }
+}
+
+function recipeSnapshot(build) {
+  return snapshotResolvedFiles(build.loaded.watchFiles);
 }
 
 function extractTitle(content, format) {
@@ -326,42 +406,20 @@ function generateChannelToken() {
 
 // Resolve the production level: --level 1|2|3 wins, then the boolean aliases
 // --simple / --interactive / --rich, then null (agent decides from the brief).
-function resolveLevel(flags) {
-  if (flags.level) {
-    const n = Number.parseInt(flags.level, 10);
-    if (n !== 1 && n !== 2 && n !== 3) {
-      fail(
-        "--level must be 1, 2, or 3 (aliases: --simple / --interactive / --rich)",
-      );
-    }
-    return n;
-  }
-  if (flags.simple) return 1;
-  if (flags.interactive) return 2;
-  if (flags.rich) return 3;
-  return null;
-}
-
-async function commandCreate(file, flags) {
-  if (!flags.favicon)
-    fail("--favicon is required (one or two emoji, e.g. --favicon 📊)");
+async function commandCreate(recipePath, flags) {
+  if (!recipePath) fail("usage: artifact.mjs create <recipe.json> [options]");
   const config = loadConfig(flags);
-  const payload = await preparePayload(file, flags);
+  const prepared = await prepareRecipePayload(recipePath, flags);
+  const { artifact, build, password, payload } = prepared;
+  const channel = artifact.channel;
 
-  // Channel binding: --channel <slug> makes every create with the same slug
-  // land on the same URL (the server creates a new version, not a new
-  // artifact). The slug maps to a ch_ token stored in credentials; the
-  // server only ever sees the token's hash, so it can't forge it.
-  let channelToken = null;
-  if (flags.channel) {
+  if (channel) {
     const credentials = loadCredentials();
-    credentials.channels ??= {};
-    if (!credentials.channels[flags.channel]) {
-      credentials.channels[flags.channel] = generateChannelToken();
+    if (!credentials.channels[channel]) {
+      credentials.channels[channel] = generateChannelToken();
       saveCredentials(credentials);
     }
-    channelToken = credentials.channels[flags.channel];
-    payload.channel = channelToken;
+    payload.channel = credentials.channels[channel];
   }
 
   const { status, json } = await request(
@@ -370,106 +428,56 @@ async function commandCreate(file, flags) {
     payload,
     config.createToken,
   );
-  // 201 = newly created (first use of the channel); 200 = channel already
-  // existed, server created a new version at the same URL.
-  if (status !== 201 && status !== 200)
+  if (status !== 201 && status !== 200) {
     fail(`create failed (${status}): ${json.error ?? "unknown error"}`);
+  }
 
-  const watch = parseWatch(flags.watch);
-  // The manifest we write to is selected by --local. An entry has exactly one
-  // home file: writing --local on an id/channel that already lives in the
-  // shared manifest MIGRATES it (delete from shared, write to local), and the
-  // reverse — a non-local create on an id/channel in the local manifest —
-  // migrates it back to shared. Without both directions, a shared + local
-  // entry with the same id would leave delete/update (which use
-  // manifestFileForId → local-first) clearing only the local copy and the
-  // shared entry would be unreachable from the CLI.
-  const targetFile = flags.local ? MANIFEST.local : MANIFEST.shared;
-  const manifest = readJson(targetFile, { artifacts: [] });
-  const source = readFileSync(file, "utf8");
-  // Migrate the entry out of the *other* manifest file so the new home is the
-  // single source. Match by id (a re-publish on the same channel reuses the
-  // server-side id) and by channel slug (the user may have rebound it).
-  const otherFile = flags.local ? MANIFEST.shared : MANIFEST.local;
-  const other = readJson(otherFile, { artifacts: [] });
-  // Capture the entry being migrated out of the other file BEFORE filtering,
-  // so a cross-file re-create can preserve its autoUpdate opt-in (Devin
-  // round-5: a --local re-create on a channel whose entry lives in the shared
-  // manifest must not silently reset autoUpdate).
-  const migrating = other.artifacts.find(
-    (a) => a.id === json.id || (flags.channel && a.channel === flags.channel),
-  );
-  const before = other.artifacts.length;
-  other.artifacts = other.artifacts.filter(
-    (a) => a.id !== json.id && (!flags.channel || a.channel !== flags.channel),
-  );
-  if (other.artifacts.length !== before) saveManifest(other, !flags.local);
-  // If this channel was already in this manifest file, replace the entry
-  // instead of appending a duplicate.
-  const existingIdx = flags.channel
-    ? manifest.artifacts.findIndex((a) => a.channel === flags.channel)
-    : -1;
-  // Preserve a prior auto-update opt-in across the replace. Same-file
-  // re-create reads it from the target file; cross-file re-create (the entry
-  // just migrated out of `other`) reads it from `migrating` captured above.
-  const previous =
-    existingIdx >= 0 ? manifest.artifacts[existingIdx] : migrating;
+  const targetFile = artifact.local ? MANIFEST.local : MANIFEST.shared;
+  const manifest = normalizeManifest(readJson(targetFile, { artifacts: [] }));
+  const otherFile = artifact.local ? MANIFEST.shared : MANIFEST.local;
+  const other = normalizeManifest(readJson(otherFile, { artifacts: [] }));
+  const matchEntry = (entry) =>
+    entry.id === json.id ||
+    (channel && recipeMetadataForEntry(entry).channel === channel);
+  const otherBefore = other.artifacts.length;
+  other.artifacts = other.artifacts.filter((entry) => !matchEntry(entry));
+  if (other.artifacts.length !== otherBefore) {
+    saveManifest(other, !artifact.local);
+  }
+  const existingIndex = manifest.artifacts.findIndex(matchEntry);
   const entry = {
     id: json.id,
     url: json.url,
-    title: payload.title ?? extractTitle(source, payload.format) ?? null,
-    favicon: flags.favicon,
-    format: payload.format,
-    encrypted: Boolean(flags.password),
-    scope: flags.scope ?? null,
-    // A channel re-create replaces the entry; preserve a prior auto-update
-    // opt-in instead of silently resetting it to false. (A fresh create, or
-    // an explicit `auto-update <id> on|off`, still sets it as expected —
-    // previous is null for a new channel, and auto-update owns the flag
-    // otherwise.)
-    autoUpdate: previous?.autoUpdate === true,
-    channel: flags.channel ?? null,
-    level: resolveLevel(flags),
-    // Canvas selects the page shell (spatial plane vs scrolling document).
-    // Like `level`, it is a create-flag-owned property of the authored page —
-    // recomputed from this invocation's flags, NOT preserved from `previous`
-    // the way autoUpdate is. A re-create without --canvas resets it.
-    canvas: flags.canvas === true,
-    watch,
-    snapshot: snapshotWatch(watch),
     version: json.version,
+    recipe: build.loaded.projectPath,
+    recipeHash: `sha256:${build.loaded.recipeHash}`,
+    inputHash: `sha256:${build.inputHash}`,
+    outputHash: `sha256:${build.outputHash}`,
+    strategy: build.plan.strategy,
+    autoUpdate: artifact.autoUpdate,
+    snapshot: recipeSnapshot(build),
     updatedAt: new Date().toISOString(),
   };
-  if (existingIdx >= 0) {
-    manifest.artifacts[existingIdx] = entry;
-  } else {
-    manifest.artifacts.push(entry);
-  }
-  saveManifest(manifest, flags.local);
-  if (flags.local) ensureGitignored();
+  if (existingIndex >= 0) manifest.artifacts[existingIndex] = entry;
+  else manifest.artifacts.push(entry);
+  saveManifest(manifest, artifact.local);
+  if (artifact.local || password) ensureGitignored();
 
-  // First creation returns a one-time write token; a channel-driven update
-  // (status 200) does not. Only persist the wt_ when present.
-  if (json.writeToken || flags.password) {
+  if (json.writeToken || password) {
     const credentials = loadCredentials();
     if (json.writeToken) credentials.tokens[json.id] = json.writeToken;
-    // The password for an encrypted artifact is stored in credentials.json
-    // (gitignored, machine-local) so a later `update` or `show` can decrypt
-    // the /raw ciphertext without re-prompting the user. The server only ever
-    // holds ciphertext; the password never leaves this machine.
-    if (flags.password) {
-      credentials.passwords ??= {};
-      credentials.passwords[json.id] = flags.password;
+    if (password) {
+      credentials.passwords[json.id] = password;
+      credentials.namedPasswords[
+        build.loaded.recipe.security.passwordCredential
+      ] = password;
     }
     saveCredentials(credentials);
   }
 
-  // Installing the staleness hook is the user's choice, so create never writes
-  // to their settings — it only hints how to enable end-of-turn drift checks
-  // when this artifact tracks files and no hook is installed yet.
   if (
     process.env.CLAUDE_PROJECT_DIR &&
-    watch.length > 0 &&
+    artifact.watch.length > 0 &&
     !hookInstalled(process.env.CLAUDE_PROJECT_DIR)
   ) {
     console.error(
@@ -479,11 +487,12 @@ async function commandCreate(file, flags) {
 
   console.log(json.url);
   const verb = status === 200 ? "updated" : "published";
-  console.error(`${verb} artifact ${json.id} (version ${json.version})`);
-  if (flags.channel) {
-    console.error(`channel "${flags.channel}" → stable URL across updates`);
-  }
-  if (flags.password) {
+  console.error(
+    `${verb} artifact ${json.id} (version ${json.version}, ${build.plan.strategy} Recipe build)`,
+  );
+  if (channel)
+    console.error(`channel "${channel}" → stable URL across updates`);
+  if (password) {
     console.error("password protected: share the URL and password separately");
   }
 }
@@ -498,34 +507,20 @@ function findEntry(manifest, id) {
   return entry;
 }
 
-async function commandUpdate(id, file, flags) {
-  if (!file)
-    fail(
-      "update requires a file argument: regenerate the page (fetch the current version from the server as a reference, read the project files in the artifact's scope) and pass the new file path",
-    );
+async function commandUpdate(id, recipePath, flags) {
   const config = loadConfig(flags);
   const merged = loadManifest();
   const entry = findEntry(merged, id);
   const credentials = loadCredentials();
   const token = credentials.tokens[id];
   if (!token) fail(`no write token for ${id} in ${CREDENTIALS_PATH}`);
-
-  if (entry.encrypted && !flags.password) {
-    // Reuse the password stored at create time (gitignored, machine-local)
-    // so updating a password-protected artifact doesn't re-prompt the user.
-    const stored = credentials.passwords?.[id];
-    if (!stored) {
-      fail(
-        "this artifact is password protected; pass --password (or re-create it with --password to store it for future updates)",
-      );
-    }
-    flags = { ...flags, password: stored };
+  const sourceRecipe = recipePath ?? entry.recipe;
+  if (!sourceRecipe) {
+    const migratedRecipe = await commandMigrate(id, flags);
+    return commandUpdate(id, migratedRecipe, flags);
   }
-  const payload = await preparePayload(file, {
-    ...flags,
-    format: flags.format ?? entry.format,
-    favicon: flags.favicon ?? undefined,
-  });
+  const prepared = await prepareRecipePayload(sourceRecipe, flags, id);
+  const { artifact, build, password, payload } = prepared;
   if (!flags.force) payload.baseVersion = entry.version;
   if (flags.force) payload.force = true;
 
@@ -544,26 +539,52 @@ async function commandUpdate(id, file, flags) {
   if (status !== 200)
     fail(`update failed (${status}): ${json.error ?? "unknown error"}`);
 
-  // Write back to whichever file (shared vs local) the entry lives in. The
-  // merged read above found it; --local is ignored here because an entry's
-  // home file is a property of where it was created, not of this update.
-  const { local, manifest } = manifestFileForId(id);
-  const target = manifest.artifacts.find((a) => a.id === id);
-  target.version = json.version;
-  target.updatedAt = new Date().toISOString();
-  target.snapshot = snapshotWatch(target.watch ?? []);
-  if (flags.title) target.title = flags.title;
-  if (flags.favicon) target.favicon = flags.favicon;
-  saveManifest(manifest, local);
-  // Refresh the stored password if a new one was given for this update.
-  if (flags.password) {
-    credentials.passwords ??= {};
-    credentials.passwords[id] = flags.password;
+  const previousHome = manifestFileForId(id);
+  previousHome.manifest.artifacts = previousHome.manifest.artifacts.filter(
+    (candidate) => candidate.id !== id,
+  );
+  const nextEntry = {
+    id,
+    url: json.url ?? entry.url,
+    version: json.version,
+    recipe: build.loaded.projectPath,
+    recipeHash: `sha256:${build.loaded.recipeHash}`,
+    inputHash: `sha256:${build.inputHash}`,
+    outputHash: `sha256:${build.outputHash}`,
+    strategy: build.plan.strategy,
+    autoUpdate: artifact.autoUpdate,
+    snapshot: recipeSnapshot(build),
+    updatedAt: new Date().toISOString(),
+  };
+  if (previousHome.local === artifact.local) {
+    previousHome.manifest.artifacts.push(nextEntry);
+    saveManifest(previousHome.manifest, artifact.local);
+  } else {
+    saveManifest(previousHome.manifest, previousHome.local);
+    const nextManifest = normalizeManifest(
+      readJson(artifact.local ? MANIFEST.local : MANIFEST.shared, {
+        artifacts: [],
+      }),
+    );
+    nextManifest.artifacts = nextManifest.artifacts.filter(
+      (candidate) => candidate.id !== id,
+    );
+    nextManifest.artifacts.push(nextEntry);
+    saveManifest(nextManifest, artifact.local);
+  }
+  if (password) {
+    credentials.passwords[id] = password;
+    credentials.namedPasswords[
+      build.loaded.recipe.security.passwordCredential
+    ] = password;
     saveCredentials(credentials);
   }
+  if (artifact.local || password) ensureGitignored();
 
-  console.log(json.url ?? target.url);
-  console.error(`updated artifact ${id} to version ${json.version}`);
+  console.log(json.url ?? entry.url);
+  console.error(
+    `updated artifact ${id} to version ${json.version} (${build.plan.strategy} Recipe build)`,
+  );
 }
 
 async function commandDelete(id, flags) {
@@ -598,7 +619,7 @@ function staleArtifacts() {
   const manifest = loadManifest();
   const stale = [];
   for (const entry of manifest.artifacts) {
-    const watch = entry.watch ?? [];
+    const watch = recipeMetadataForEntry(entry).watch ?? entry.watch ?? [];
     if (watch.length === 0) continue;
     const changed = diffSnapshot(entry.snapshot ?? {}, snapshotWatch(watch));
     if (changed.length > 0) stale.push({ entry, changed });
@@ -664,11 +685,12 @@ async function commandStatus(flags) {
     if (hookStale.length === 0) return;
     const scriptPath = fileURLToPath(import.meta.url);
     const lines = hookStale.map(({ entry, changed }) => {
-      const scope = entry.scope ? ` It covers: ${entry.scope}.` : "";
+      const metadata = recipeMetadataForEntry(entry);
+      const scope = metadata.scope ? ` It covers: ${metadata.scope}.` : "";
       return (
-        `Artifact "${entry.title ?? entry.id}" (${entry.url}, id ${entry.id}) was published from sources that have since changed.${scope} ` +
+        `Artifact "${metadata.title ?? entry.title ?? entry.id}" (${entry.url}, id ${entry.id}) was published from sources that have since changed.${scope} ` +
         `Changed files: ${changed.slice(0, 20).join(", ")}${changed.length > 20 ? ", ..." : ""}. ` +
-        `If these changes affect the artifact's content, regenerate it and run: node "${scriptPath}" update ${entry.id} <file>`
+        `If these changes affect the artifact's content, update its Recipe fragments and run: node "${scriptPath}" update ${entry.id}`
       );
     });
     console.log(
@@ -683,8 +705,11 @@ async function commandStatus(flags) {
   }
 
   for (const { entry, changed } of stale) {
-    console.log(`stale: ${entry.id} ${entry.title ?? ""} (${entry.url})`);
-    if (entry.scope) console.log(`  scope: ${entry.scope}`);
+    const metadata = recipeMetadataForEntry(entry);
+    console.log(
+      `stale: ${entry.id} ${metadata.title ?? entry.title ?? ""} (${entry.url})`,
+    );
+    if (metadata.scope) console.log(`  scope: ${metadata.scope}`);
     console.log(`  auto-update: ${entry.autoUpdate === true ? "on" : "off"}`);
     console.log(`  changed: ${changed.join(", ")}`);
   }
@@ -701,12 +726,30 @@ function commandAck(id) {
   findEntry(merged, id);
   const { local, manifest } = manifestFileForId(id);
   const entry = manifest.artifacts.find((a) => a.id === id);
-  entry.snapshot = snapshotWatch(entry.watch ?? []);
+  const watch = recipeMetadataForEntry(entry).watch ?? entry.watch ?? [];
+  entry.snapshot = snapshotWatch(watch);
   entry.reviewedAt = new Date().toISOString();
   saveManifest(manifest, local);
   console.error(
     `acknowledged ${id}: snapshot baseline advanced without republishing`,
   );
+}
+
+function updateRecipeAutoUpdate(entry, enabled) {
+  if (!entry.recipe) return;
+  const recipePath = resolve(PROJECT_ROOT, entry.recipe);
+  const recipe = readJson(recipePath, null);
+  if (!recipe?.artifact) {
+    fail(`cannot update Recipe metadata: ${entry.recipe}`);
+  }
+  recipe.artifact.autoUpdate = enabled;
+  writeJson(recipePath, recipe);
+  const build = buildArtifactRecipe(recipePath, {
+    projectRoot: PROJECT_ROOT,
+  });
+  entry.recipeHash = `sha256:${build.loaded.recipeHash}`;
+  entry.inputHash = `sha256:${build.inputHash}`;
+  entry.outputHash = `sha256:${build.outputHash}`;
 }
 
 // Toggle whether an artifact is surfaced by the Stop-hook-driven automatic
@@ -730,6 +773,7 @@ function commandAutoUpdate(id, mode) {
   const entry = manifest.artifacts.find((a) => a.id === id);
 
   if (mode === "off") {
+    updateRecipeAutoUpdate(entry, false);
     entry.autoUpdate = false;
     saveManifest(manifest, local);
     console.error(`auto-update disabled for ${id}`);
@@ -744,6 +788,7 @@ function commandAutoUpdate(id, mode) {
     );
   }
 
+  updateRecipeAutoUpdate(entry, true);
   entry.autoUpdate = true;
   saveManifest(manifest, local);
 
@@ -764,8 +809,9 @@ function commandList() {
     return;
   }
   for (const entry of manifest.artifacts) {
+    const metadata = recipeMetadataForEntry(entry);
     console.log(
-      `${entry.id}  v${entry.version}  ${entry.encrypted ? "[protected] " : ""}${entry.autoUpdate === true ? "[auto-update] " : ""}${entry.title ?? ""}  ${entry.url}`,
+      `${entry.id}  v${entry.version}  ${metadata.encrypted ? "[protected] " : ""}${entry.autoUpdate === true ? "[auto-update] " : ""}${metadata.title ?? entry.title ?? ""}  ${entry.url}`,
     );
   }
 }
@@ -798,7 +844,26 @@ async function commandShow(id, flags) {
     process.stdout.write(text);
     return;
   }
-  const password = flags.password ?? credentials.passwords?.[id];
+  const entry = loadManifest().artifacts.find(
+    (candidate) => candidate.id === id,
+  );
+  let credentialName = null;
+  if (entry?.recipe) {
+    try {
+      credentialName = loadRecipe(resolve(PROJECT_ROOT, entry.recipe), {
+        projectRoot: PROJECT_ROOT,
+      }).recipe.security.passwordCredential;
+    } catch {
+      credentialName = null;
+    }
+  }
+  const password =
+    flags.password ??
+    (credentialName
+      ? process.env[credentialEnvName(credentialName)]
+      : undefined) ??
+    (credentialName ? credentials.namedPasswords[credentialName] : undefined) ??
+    credentials.passwords?.[id];
   if (!password) {
     fail(
       "this artifact is encrypted; pass --password or have stored it at create time (credentials.json, gitignored)",
@@ -849,13 +914,305 @@ function commandInstallHook() {
   );
 }
 
+function commandValidate(recipePath) {
+  const result = buildArtifactRecipe(
+    resolve(PROJECT_ROOT, requireRecipePath(recipePath)),
+    { projectRoot: PROJECT_ROOT },
+  );
+  console.log(JSON.stringify(recipeBuildSummary(result), null, 2));
+}
+
+function commandBuild(recipePath, flags) {
+  if (!flags.output) fail("build requires --output <path>");
+  const result = buildArtifactRecipe(
+    resolve(PROJECT_ROOT, requireRecipePath(recipePath)),
+    {
+      projectRoot: PROJECT_ROOT,
+      standalone: flags.standalone === true,
+    },
+  );
+  const output = writeArtifactPreview(result, flags.output);
+  const previewRelative = relative(join(ARTIFACTS_DIR, "previews"), output);
+  if (
+    previewRelative !== ".." &&
+    !previewRelative.startsWith("../") &&
+    !previewRelative.startsWith(`..\\`)
+  ) {
+    ensureGitignored();
+  }
+  console.log(output);
+  console.error(
+    `built ${Buffer.byteLength(result.content)} bytes (${result.plan.strategy})`,
+  );
+}
+
+function migrationSlug(id, title) {
+  const base = (title ?? "artifact")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 40);
+  return `${base || "artifact"}-${id.slice(0, 8)}`;
+}
+
+function stripMarkedBlock(content, startMarker, endMarker) {
+  let result = content;
+  let start = result.indexOf(startMarker);
+  while (start !== -1) {
+    const end = result.indexOf(endMarker, start + startMarker.length);
+    if (end === -1) return result.slice(0, start).trim();
+    result = result.slice(0, start) + result.slice(end + endMarker.length);
+    start = result.indexOf(startMarker);
+  }
+  return result.trim();
+}
+
+function stripLegacyCanvasControls(content) {
+  let result = stripMarkedBlock(
+    content,
+    CANVAS_MARKERS.controlsStart,
+    CANVAS_MARKERS.controlsEnd,
+  );
+  const match = [
+    ...result.matchAll(/<div\b[^>]*class=["']([^"']+)["'][^>]*>/gi),
+  ].find((candidate) => candidate[1].split(/\s+/).includes("oa-zoom"));
+  if (match?.index !== undefined) {
+    result = result.slice(0, match.index);
+  }
+  return result.trim();
+}
+
+function stripLegacyCanvasCss(content, runtime) {
+  let result = stripMarkedBlock(
+    content,
+    CANVAS_MARKERS.cssStart,
+    CANVAS_MARKERS.cssEnd,
+  );
+  result = result.replace(runtime.css, "");
+  const signature = result.indexOf(
+    "/* Viewport. Sized to the visible area below the service header.",
+  );
+  if (signature !== -1) result = result.slice(0, signature);
+  return result.trim();
+}
+
+function stripLegacyCanvasJs(content, runtime) {
+  let result = stripMarkedBlock(
+    content,
+    CANVAS_MARKERS.jsStart,
+    CANVAS_MARKERS.jsEnd,
+  );
+  result = result.replace(runtime.js, "");
+  const signature = result.search(
+    /\(function\s*\(\)\s*\{\s*const canvas = document\.getElementById\(["']canvas["']\)/,
+  );
+  if (signature !== -1) result = result.slice(0, signature);
+  return result.trim();
+}
+
+function migrateHtmlSource(source, canvas) {
+  const styles = [...source.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)]
+    .map((match) => match[1])
+    .join("\n");
+  const scripts = [...source.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)]
+    .map((match) => match[1])
+    .join("\n");
+  let body = source.match(/<body\b[^>]*>([\s\S]*?)<\/body>/i)?.[1] ?? source;
+  body = body
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, "")
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
+    .replace(/<!doctype[^>]*>/gi, "")
+    .replace(/<\/?(?:html|head|body)\b[^>]*>/gi, "")
+    .replace(/<title\b[^>]*>[\s\S]*?<\/title>/gi, "");
+  if (canvas) body = stripLegacyCanvasControls(body);
+  const runtime = canvas ? loadCanvasRuntime() : { css: "", js: "" };
+  const tokens = readFileSync(
+    join(SKILL_ROOT, "references/tokens.css"),
+    "utf8",
+  ).trim();
+  return {
+    body: body.trim(),
+    theme:
+      (canvas ? stripLegacyCanvasCss(styles, runtime) : styles)
+        .replace(tokens, "")
+        .trim() || "/* Migrated theme fragment. */",
+    scripts: canvas ? stripLegacyCanvasJs(scripts, runtime) : scripts.trim(),
+  };
+}
+
+async function commandMigrate(id, flags) {
+  const config = loadConfig(flags);
+  const merged = loadManifest();
+  const entry = findEntry(merged, id);
+  if (entry.recipe && !flags.force) {
+    console.log(entry.recipe);
+    console.error("artifact already uses a Recipe");
+    return entry.recipe;
+  }
+  const credentials = loadCredentials();
+  const token = credentials.tokens[id];
+  const { status, json, text } = await request(
+    "GET",
+    `${config.apiUrl}/api/artifacts/${id}/raw`,
+    undefined,
+    token,
+  );
+  if (status !== 200) {
+    fail(
+      `migration fetch failed (${status}): ${json.error ?? "unknown error"}`,
+    );
+  }
+  const encrypted = json.alg === "AES-GCM" && json.ciphertext !== undefined;
+  let source = text;
+  let password = null;
+  if (encrypted) {
+    password = flags.password ?? credentials.passwords[id];
+    if (!password) {
+      fail("encrypted legacy artifact requires --password for migration");
+    }
+    source = await decryptContent(json, password);
+  }
+  const format = entry.format ?? (/^\s*</.test(source) ? "html" : "markdown");
+  const title = entry.title ?? extractTitle(source, format) ?? `Artifact ${id}`;
+  const canvas = format === "html" && entry.canvas === true;
+  const slug = migrationSlug(id, title);
+  const home = manifestFileForId(id);
+  const local = home.local || encrypted;
+  const recipeDirectory = join(
+    ARTIFACTS_DIR,
+    local ? "recipes.local" : "recipes",
+  );
+  const fragmentDirectory = join(
+    ARTIFACTS_DIR,
+    local ? "fragments.local" : "fragments",
+    slug,
+  );
+  const recipePath = join(recipeDirectory, `${slug}.recipe.json`);
+  if (existsSync(recipePath) || existsSync(fragmentDirectory)) {
+    fail(
+      `migration target already exists; refusing to overwrite project files: ${recipePath}`,
+    );
+  }
+  mkdirSync(fragmentDirectory, { recursive: true });
+  mkdirSync(recipeDirectory, { recursive: true });
+  const relativeFragmentDirectory = relative(
+    recipeDirectory,
+    fragmentDirectory,
+  );
+  const fragments = { theme: [], styles: [], body: [], scripts: [] };
+  if (format === "markdown") {
+    const bodyPath = join(fragmentDirectory, "body.md");
+    writeFileSync(bodyPath, source.endsWith("\n") ? source : `${source}\n`);
+    fragments.body.push(
+      join(relativeFragmentDirectory, "body.md").replaceAll("\\", "/"),
+    );
+  } else {
+    const migrated = migrateHtmlSource(source, canvas);
+    const bodyPath = join(fragmentDirectory, "body.html");
+    const themePath = join(fragmentDirectory, "theme.css");
+    writeFileSync(bodyPath, `${migrated.body}\n`);
+    writeFileSync(themePath, `${migrated.theme}\n`);
+    fragments.body.push(
+      join(relativeFragmentDirectory, "body.html").replaceAll("\\", "/"),
+    );
+    fragments.theme.push(
+      join(relativeFragmentDirectory, "theme.css").replaceAll("\\", "/"),
+    );
+    if (migrated.scripts) {
+      const scriptsPath = join(fragmentDirectory, "behavior.js");
+      writeFileSync(scriptsPath, `${migrated.scripts}\n`);
+      fragments.scripts.push(
+        join(relativeFragmentDirectory, "behavior.js").replaceAll("\\", "/"),
+      );
+    }
+  }
+  const recipe = {
+    $schema: relative(
+      recipeDirectory,
+      join(SKILL_ROOT, "references/recipe.schema.json"),
+    ).replaceAll("\\", "/"),
+    version: 1,
+    artifact: {
+      title,
+      description: entry.description ?? "",
+      favicon: entry.favicon ?? "📄",
+      format,
+      level: entry.level ?? null,
+      canvas,
+      channel: entry.channel ?? null,
+      scope: entry.scope ?? null,
+      watch: entry.watch ?? [],
+      local,
+      autoUpdate: entry.autoUpdate === true,
+    },
+    document: {
+      language: "en",
+      theme: "migrated",
+      fragments,
+    },
+    security: {
+      encrypted,
+      passwordCredential: encrypted ? `artifact-${id}` : null,
+    },
+    build: { strategy: "auto" },
+  };
+  writeJson(recipePath, recipe);
+  const build = buildArtifactRecipe(recipePath, {
+    projectRoot: PROJECT_ROOT,
+  });
+  const nextEntry = {
+    id,
+    url: entry.url,
+    version: entry.version,
+    recipe: build.loaded.projectPath,
+    recipeHash: `sha256:${build.loaded.recipeHash}`,
+    inputHash: `sha256:${build.inputHash}`,
+    outputHash: `sha256:${build.outputHash}`,
+    strategy: build.plan.strategy,
+    autoUpdate: entry.autoUpdate === true,
+    snapshot: recipeSnapshot(build),
+    migrationPending: true,
+    updatedAt: new Date().toISOString(),
+  };
+  home.manifest.artifacts = home.manifest.artifacts.filter(
+    (candidate) => candidate.id !== id,
+  );
+  if (home.local === local) {
+    home.manifest.artifacts.push(nextEntry);
+    saveManifest(home.manifest, local);
+  } else {
+    saveManifest(home.manifest, home.local);
+    const target = normalizeManifest(
+      readJson(local ? MANIFEST.local : MANIFEST.shared, { artifacts: [] }),
+    );
+    target.artifacts = target.artifacts.filter(
+      (candidate) => candidate.id !== id,
+    );
+    target.artifacts.push(nextEntry);
+    saveManifest(target, local);
+  }
+  if (password) {
+    credentials.namedPasswords[`artifact-${id}`] = password;
+    saveCredentials(credentials);
+  }
+  if (local) ensureGitignored();
+  console.log(build.loaded.projectPath);
+  console.error(
+    "migrated legacy source to Recipe; run update to publish the deterministic build",
+  );
+  return build.loaded.projectPath;
+}
+
 const HELP = `usage: artifact.mjs <command> [options]
 
 commands:
-  create <file>        publish a new artifact
-  update <id> <file>   redeploy an artifact at the same URL (file required:
-                       regenerate from the server's current version + project
-                       files, then pass the new file)
+  validate <recipe>    validate and compose a Recipe without writing output
+  build <recipe>       write an explicit preview/export (requires --output)
+  create <recipe>      build in memory and publish exactly once
+  update <id> [recipe] build in memory and redeploy at the same URL; defaults
+                       to the Recipe recorded in Manifest v2
+  migrate <id>         create a Recipe and fragments for a legacy artifact;
+                       does not publish until update is run
   status               report artifacts whose watched files changed (exit 1 if stale)
   ack <id>             mark drift reviewed: advance the snapshot baseline without
                        republishing (offline; use when changes don't affect it)
@@ -870,25 +1227,10 @@ commands:
   install-hook         add a Claude Code Stop hook that runs status --hook
 
 options:
-  --title <t>          page title (default: extracted from <title> tag / # heading)
-  --description <d>    gallery-style subtitle
-  --favicon <emoji>    one or two emoji (required for create)
-  --format <f>         html | markdown (default: by file extension)
-  --label <l>          version label (max 60 chars)
+  --output <path>      (build) explicit preview/export output path
+  --standalone         (build) wrap HTML for direct file:// preview
+  --label <l>          (create/update) version label (max 60 chars)
   --password <p>       encrypt client-side; server only stores ciphertext
-  --scope <text>       what this artifact covers (drives auto-update decisions)
-  --watch <globs>      comma-separated globs of source files to watch
-  --channel <slug>     bind this artifact to a stable URL; reusing the slug on
-                       a later create updates the same link (no new URL)
-  --level <1|2|3>      production level: 1=simple doc, 2=interactive UI,
-                       3=rich motion. Aliases: --simple / --interactive / --rich.
-                       Omit to let the agent pick from the brief.
-  --canvas             build the page as an infinite pan/zoom canvas of frames
-                       instead of a scrolling document. Composes with --level.
-  --local              write the manifest entry to .artifacts/manifest.local.json
-                       (gitignored, machine-local) instead of the committed
-                       manifest. Reads merge the two (local overrides). Credentials
-                       always go to the single .artifacts/credentials.json.
   --api <url>          instance URL (default: OPEN_ARTIFACTS_URL or config)
   --force              overwrite on version conflict
   --v <n>              (show) view a specific version's content
@@ -900,24 +1242,13 @@ async function main() {
     args: process.argv.slice(2),
     allowPositionals: true,
     options: {
-      title: { type: "string" },
-      description: { type: "string" },
-      favicon: { type: "string" },
-      format: { type: "string" },
+      output: { type: "string", short: "o" },
+      standalone: { type: "boolean" },
       label: { type: "string" },
       password: { type: "string" },
-      scope: { type: "string" },
-      watch: { type: "string" },
-      channel: { type: "string" },
-      level: { type: "string" },
-      simple: { type: "boolean" },
-      interactive: { type: "boolean" },
-      rich: { type: "boolean" },
-      canvas: { type: "boolean" },
       api: { type: "string" },
       force: { type: "boolean" },
       hook: { type: "boolean" },
-      local: { type: "boolean" },
       v: { type: "string" },
       help: { type: "boolean" },
     },
@@ -928,18 +1259,27 @@ async function main() {
     console.log(HELP);
     return;
   }
-  if (flags.format && flags.format !== "html" && flags.format !== "markdown") {
-    fail('--format must be "html" or "markdown"');
-  }
 
   switch (command) {
+    case "validate":
+      if (!rest[0]) fail("validate requires a Recipe JSON path");
+      commandValidate(rest[0]);
+      break;
+    case "build":
+      if (!rest[0]) fail("build requires a Recipe JSON path");
+      commandBuild(rest[0], flags);
+      break;
     case "create":
-      if (!rest[0]) fail("create requires a file argument");
+      if (!rest[0]) fail("create requires a Recipe JSON path");
       await commandCreate(rest[0], flags);
       break;
     case "update":
       if (!rest[0]) fail("update requires an artifact id");
       await commandUpdate(rest[0], rest[1], flags);
+      break;
+    case "migrate":
+      if (!rest[0]) fail("migrate requires an artifact id");
+      await commandMigrate(rest[0], flags);
       break;
     case "delete":
       if (!rest[0]) fail("delete requires an artifact id");

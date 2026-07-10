@@ -23,24 +23,23 @@ Don't default to "a web page" treatment for everything.
 
 ## Choose a production level
 
-Every artifact is built at one of three levels. Pick implicitly from the
-brief, or override with `--level 1|2|3` (aliases `--simple` / `--interactive`
-/ `--rich`). The level sets the component contract, the interaction budget,
-and the motion budget — not just "how much animation."
+Every artifact is built at one of three levels. Pick from the brief and record
+it as `artifact.level` in the Recipe. The level sets the component contract,
+interaction budget, and motion budget, not just "how much animation."
 
-| Brief | Implicit level | `--level` |
-| --- | --- | --- |
-| Report, article, API reference, notes, anything read once | **1 simple** | `--level 1` / `--simple` |
-| Dashboard, docs site, interactive demo, app prototype, anything explored | **2 interactive** | `--level 2` / `--interactive` |
-| Landing page, marketing page, product showcase, anything that must wow | **3 rich** | `--level 3` / `--rich` |
+| Brief | Recipe level |
+| --- | --- |
+| Report, article, API reference, notes, anything read once | **1 simple** |
+| Dashboard, docs site, interactive demo, app prototype, anything explored | **2 interactive** |
+| Landing page, marketing page, product showcase, anything that must wow | **3 rich** |
 
 When unsure, default to **2**. Don't gold-plate a doc as L3; don't ship a
 landing page as L1.
 
-**Canvas is orthogonal to level.** `--canvas` selects an infinite spatial shell
-(pan/zoom frames) instead of a scrolling document; it composes with any level
-(`--level 2 --canvas` is the common case: a multi-frame prototype). It does not
-replace a level — you still pick 1/2/3 for fidelity and motion budget. When a
+**Canvas is orthogonal to level.** `artifact.canvas: true` selects an infinite
+spatial shell (pan/zoom frames) instead of a scrolling document; it composes
+with any level (level 2 Canvas is the common multi-frame prototype). It does
+not replace a level. When a
 brief is a flow, a set of screens/variants, or a board, reach for it and read
 `${CLAUDE_SKILL_DIR}/references/canvas.md`.
 
@@ -151,12 +150,12 @@ Orthogonal to level, decide the register — it changes what "good" means:
      it isn't concrete enough yet.
    - **The system**: 4–6 named palette values, the type roles, and a
      one-sentence layout concept.
-4. **Build.** Write body-only HTML (the server wraps it in a skeleton). Show
-   something concrete early. Paste the token contract from
-   `${CLAUDE_SKILL_DIR}/references/tokens.css` into your `<style>` first,
-   then add the chosen direction's `:root` overrides beneath it, then write
-   components against the tokens (`var(--accent)`, `var(--space-4)`,
-   `var(--radius-md)`) rather than hardcoded values.
+4. **Build.** Write a Recipe plus body, theme, style, and script fragments.
+   Show something concrete early. The builder injects
+   `${CLAUDE_SKILL_DIR}/references/tokens.css`; put the direction's unlayered
+   `:root` overrides in the theme fragment, then write components against the
+   tokens (`var(--accent)`, `var(--space-4)`, `var(--radius-md)`) rather than
+   hardcoded values.
 5. **Run the ship gate — once, at the end.** The structural check, the P0
    checklist, and the five-dimension critique below. Fix what fails, re-score
    once, publish. Do not loop on renders.
@@ -177,8 +176,8 @@ var(--accent-on); padding: var(--space-2) var(--space-4); border-radius:
 var(--radius-md)` — the direction decides what those resolve to, not the
 component. Switching direction or theme is a `:root` override, not a rewrite.
 
-The contract lives in `@layer oa-tokens`; your direction override goes
-BELOW the pasted block, **unlayered**, and therefore always wins — including
+The contract lives in `@layer oa-tokens`; the builder places your direction
+override after it, **unlayered**, so it always wins, including
 over the contract's explicit light block, whose higher specificity would
 otherwise silently revert your light theme. A direction override always
 defines both of these, and only identity tokens:
@@ -718,9 +717,9 @@ not loop on renders, and do not publish with a failing P0.
   URLs (`src`/`href` of scripts, styles, images, fonts). Outbound
   `<a href>` links to citations and sources are fine — the CSP allows
   navigation, not subresources.
-- Your own unlayered `:root { … }` and `:root[data-theme="dark"] { … }`
-  overrides exist below the pasted contract (the contract's internal blocks
-  don't count as yours).
+- The theme fragment contains unlayered `:root { … }` and
+  `:root[data-theme="dark"] { … }` overrides (the injected contract's internal
+  blocks do not count).
 
 **2. P0 checklist** (all must pass):
 - [ ] Contrast: body ≥ 4.5:1 in BOTH themes — check `--muted` on `--surface`
@@ -738,7 +737,7 @@ not loop on renders, and do not publish with a failing P0.
       visible without JS (no opacity-0 that only JS clears).
 - [ ] Copy self-audit done: no lorem, no invented stats/names/logos, no
       filler verbs, quotes ≤ 3 lines.
-- [ ] A `<title>` exists and names the artifact.
+- [ ] `artifact.title` exists and names the artifact.
 
 **3. Five-dimension critique** — score yourself 1–5, silently:
 1. **Philosophy** — does the visual posture match the read you declared
@@ -763,13 +762,14 @@ Two passes is normal. Then publish.
 - **No localStorage / sessionStorage / cookies** — the sandbox blocks them.
   Keep state in memory (JS variables/objects) for the session.
 - **Both themes must work**: the viewer stamps `data-theme` on `<html>` and
-  it must win over `prefers-color-scheme` in both directions. The pasted
+  it must win over `prefers-color-scheme` in both directions. The injected
   contract handles the mechanics (`@layer` + an OS-dark tier); your job is
   to supply unlayered `:root` and `:root[data-theme="dark"]` overrides
-  below it.
+  in the theme fragment.
 - **Responsive, no horizontal body scroll** — wide content gets its own
   `overflow-x: auto` container.
-- **A `<title>` tag names the artifact** (or pass `--title`). For Markdown,
-  a leading `# Heading` does the same.
-- **Write body content only** — the server wraps it in doctype/head/body with
-  a minimal reset and the theme toggle. A leading `<style>` block is fine.
+- **`artifact.title` names the artifact.** For Markdown, a leading
+  `# Heading` is also accepted.
+- **Write fragments, not a document wrapper.** Body fragments cannot contain
+  doctype/head/body, `<style>`, or `<script>` elements. Put CSS and JavaScript
+  in their Recipe slots; the builder composes the final payload.

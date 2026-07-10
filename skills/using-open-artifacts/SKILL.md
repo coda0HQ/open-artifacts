@@ -21,15 +21,17 @@ The CLI needs an instance URL, resolved in this order: `--api` flag,
 instance URL and write `.artifacts/config.json`. If the instance requires a
 create token, put it in `OPEN_ARTIFACTS_TOKEN` or `config.json` `createToken`.
 
-State lives in `.artifacts/`: `manifest.json` (committed, shared with
-teammates) and `credentials.json` (gitignored). For artifacts you want to
-keep machine-private, pass `--local` — the entry goes into
-`manifest.local.json`, which the CLI gitignores; reads merge the two (local
-overrides non-local, mirroring Claude Code's `settings.local.json`).
-Credentials always live in the single `credentials.json`. On the **first
-`create` in a project**, ask the user whether the artifact should be local;
-**recommend local** (machine-private by default) and pass `--local` when
-they say yes.
+Every artifact is built from a JSON Recipe plus ordered fragments. Read
+`${CLAUDE_SKILL_DIR}/references/recipe.md` before creating or updating one.
+Shared Recipes and fragments are project sources and may be committed. Local
+or encrypted sources live under `.artifacts/recipes.local/` and
+`.artifacts/fragments.local/`.
+
+State lives in `.artifacts/`: Manifest v2 records only publication state and
+build hashes; `credentials.json`, local manifests, private Recipes/fragments,
+and previews are gitignored. On the **first `create` in a project**, ask
+whether the artifact should be local and **recommend local**. Record the
+choice in `artifact.local` and place the Recipe/fragments accordingly.
 
 If the user has no instance yet, point them at
 `${CLAUDE_SKILL_DIR}/references/deployment.md` — it has the three ways to get
@@ -50,11 +52,10 @@ publish.
 
 ## Isolate content generation in a sub-agent
 
-Publishing or republishing an artifact means reading project resources,
-reading this skill's design references, writing (or rewriting) a full HTML
-file, and running the CLI. All of that is context a parent conversation
-doesn't need to keep — it only needs the resulting URL and a one-line
-summary.
+Publishing or republishing means reading project resources and design
+references, authoring a Recipe and fragments, validating the deterministic
+build, and running the CLI. All of that is context a parent conversation
+doesn't need to keep.
 
 **Both `create` (first publish) and `update` (republish) — and everything
 in "How to design the page" that leads up to them — run inside an isolated
@@ -71,18 +72,19 @@ Give the sub-agent everything it needs to work alone, then let it work:
   what must not change. (For an encrypted artifact, `show` decrypts locally
   with the password stored at create time in `credentials.json`, so the
   plaintext is recovered without re-prompting the user.) It then reads the
-  project files the artifact's `scope` covers and regenerates the page.
-  `update <id> <file>` requires the regenerated file path (no local source
-  copy is kept — the server is the source of truth).
-- Any explicit flags the user gave: `--scope`, `--channel`, `--watch`,
-  `--level`, `--canvas`, `--password`, `--description`, `--local`.
+  Recipe recorded in Manifest v2, its fragments, and the project files its
+  `scope` covers.
+- Any explicit publication requirements. Put title, description, favicon,
+  scope, channel, watch globs, level, Canvas mode, locality, and auto-update
+  in the Recipe. Keep passwords out of it.
 
 The sub-agent does the entire rest of the workflow itself — explore
-resources, plan, read `${CLAUDE_SKILL_DIR}/references/design.md` and
-friends, write the page to a temp file, run `create`/`update`, delete the
-temp file, verify — and returns **only** a short summary: the URL, the
+resources, plan, read `${CLAUDE_SKILL_DIR}/references/design.md`,
+`${CLAUDE_SKILL_DIR}/references/recipe.md`, and relevant mode references;
+write the Recipe and fragments; run `validate`; optionally build a preview;
+run `create`/`update`; verify; and return **only** a short summary: the URL,
 version number, and one line on what changed. The parent relays that to the
-user. It must not read the generated HTML, run `create`/`update` itself, or
+user. It must not read generated output, run `create`/`update` itself, or
 carry the design reasoning in its own context.
 
 The lightweight bookkeeping commands — `status`, `ack <id>`,
@@ -114,9 +116,9 @@ renders.
 
 **Read `${CLAUDE_SKILL_DIR}/references/design.md` before writing a page.** It
 has the full design philosophy: the brand-vs-product register split (earned
-familiarity vs distinctiveness), the anti-AI-slop bans, a shared token
-contract (`${CLAUDE_SKILL_DIR}/references/tokens.css` — paste it into your
-`<style>` first, then override identity tokens per direction), an
+familiarity vs distinctiveness), the anti-AI-slop bans, the shared token
+contract (`${CLAUDE_SKILL_DIR}/references/tokens.css`, injected by the Recipe
+builder; override identity tokens in the theme fragment), an
 installed-font specimen library (the CSP blocks *downloading* fonts, not the
 OS library — Iowan, Charter, Avenir, Optima and friends are available), a
 5-direction library (Editorial / Modern minimal / Human / Tech utility /
@@ -128,9 +130,8 @@ run before every publish.
 
 ### Production level (1 / 2 / 3)
 
-Every artifact is built at one of three levels — pick implicitly from the
-brief, or override with `--level 1|2|3` (aliases `--simple` /
-`--interactive` / `--rich`):
+Every artifact is built at one of three levels. Pick from the brief and record
+it as `artifact.level: 1|2|3` in the Recipe:
 
 - **Level 1 — simple:** typography-led documents (reports, articles, API
   references, notes). No flashy hero, minimal JS. Default for "read once"
@@ -150,13 +151,12 @@ Don't gold-plate a doc as L3; don't ship a landing page as L1. The level
 sets the component contract and motion budget, not just "how much
 animation."
 
-### Canvas mode (--canvas)
+### Canvas mode
 
-Orthogonal to level: `--canvas` swaps the page *shell* — an infinite spatial
-plane of pan/zoom **frames** instead of a scrolling document — while `--level`
-keeps meaning fidelity and motion budget. It composes with any level:
-`--level 1 --canvas` is spatial notes, `--level 2 --canvas` a multi-frame
-prototype (the default use), `--level 3 --canvas` a canvas-as-showcase. Read
+Orthogonal to level, `artifact.canvas: true` swaps the page *shell* for an
+infinite spatial plane of pan/zoom **frames**. It composes with any level:
+level 1 is spatial notes, level 2 a multi-frame prototype (the default use),
+and level 3 a canvas-as-showcase. Read
 `${CLAUDE_SKILL_DIR}/references/canvas.md` before building one -- it has the
 complete vendored runtime (CSS + vanilla JS) with momentum and pinch physics,
 an optional presenter tour, connector spotlighting, and `#frame-id` deep
@@ -176,11 +176,10 @@ images, fetch/XHR/WebSockets):
   Never link the Remix Icon CDN (the CSP blocks it); only inline SVGs.
 - Do not use localStorage/sessionStorage (the sandbox blocks them); keep
   state in memory.
-- Include a concise `<title>` — it becomes the artifact title.
-- Support both themes: paste the token contract (`references/tokens.css`) —
-  it handles OS preference and the viewer's `data-theme` stamping via
-  `@layer`. Your direction override goes below it, unlayered: a `:root`
-  block (light) plus a `:root[data-theme="dark"]` block, both mandatory.
+- Put the concise title in `artifact.title`.
+- Support both themes. The builder injects `references/tokens.css`; author a
+  theme fragment with an unlayered `:root` block (light) plus a
+  `:root[data-theme="dark"]` block, both mandatory.
 - Responsive: no horizontal body scroll; wide tables/code get their own
   `overflow-x: auto` container.
 - Markdown files (`.md`) are rendered client-side; HTML is best for anything
@@ -205,43 +204,21 @@ inline — `text-wrap: pretty/balance`, CSS Grid, container queries,
 *(Run this inside the isolated sub-agent — see "Isolate content generation
 in a sub-agent" above.)*
 
-Write the page to a temp file (e.g. `$(mktemp).html` or a scratch path in
-the OS temp dir — the server is the source of truth, so no local source
-copy is kept), then pass that path to `create`:
+Create a Recipe and ordered fragments, validate them, then publish:
 
 ```
-node artifact.mjs create /tmp/app-interactions.html --favicon 📊 \
-  --scope "user-facing interaction flows of the app" \
-  --channel app-interactions \
-  --watch "src/views/**,src/components/**" \
-  --description "One-sentence subtitle"
+node artifact.mjs validate artifacts/app-interactions.recipe.json
+node artifact.mjs create artifacts/app-interactions.recipe.json
 ```
 
-- `--favicon`: required, one or two emoji. Keep it STABLE across updates.
-- `--scope`: what the artifact is about, in one sentence. Required for any
-  artifact derived from project files — it drives auto-updates later.
-- `--channel <slug>`: bind this artifact to a **stable URL**. Reusing the
-  same slug on a later `create` updates the same link (new version, no new
-  URL) — so "the app-interactions page" always lives at one link, even
-  across sessions or machines. Use a kebab-case slug that names the topic.
-  Without `--channel`, each `create` mints a new URL (use `update <id>` to
-  update those).
-- `--watch`: comma-separated globs of the source files the artifact was
-  derived from.
-- `--local`: write the manifest entry to `.artifacts/manifest.local.json`
-  (gitignored, machine-local) instead of the committed manifest. Reads
-  merge the two (local overrides). On the **first create in a project**,
-  ask the user whether this artifact should be local — **recommend local**
-  (machine-private by default); pass `--local` when they say yes.
-  Credentials always go to the single gitignored `credentials.json`
-  regardless of this flag.
-- Prints the shareable URL on stdout. Give it to the user.
+The Recipe owns favicon, scope, channel, watch globs, level, Canvas mode,
+locality, and auto-update. Keep the favicon stable. Use a kebab-case channel
+to reuse one URL across `create` calls; use `null` to mint a new URL. `create`
+composes in memory and sends one final payload. It prints the shareable URL.
 
-The command records the artifact in `.artifacts/manifest.json` (commit
-this) — or `manifest.local.json` with `--local` (gitignored) — and its
-tokens in `.artifacts/credentials.json` (auto-gitignored, never commit or
-print tokens). The channel token (`ch_`) also lives in credentials; the
-slug in the manifest is safe to commit.
+Manifest v2 records the Recipe path and Recipe/input/output hashes only after
+the publish succeeds. Write tokens and channel tokens remain in the
+gitignored credentials file.
 
 ## Updating
 
@@ -249,19 +226,15 @@ slug in the manifest is safe to commit.
 in a sub-agent" above.)*
 
 ```
-node artifact.mjs update <id> <file> [--label "what-changed"]
+node artifact.mjs update <id> [recipe.json] [--label "what-changed"]
 ```
 
-Same URL, new version. `<file>` is **required** — the sub-agent regenerates
-the page first: read the current published version as the starting reference
-with `node artifact.mjs show <id>` (prints the stored content; for an
-encrypted artifact it decrypts locally using the password stored at create
-time, so a locked design direction's comment at the top of the page is
-recovered), read the project files the artifact's `scope` covers,
-regenerate, write to a temp file, and pass it here. The manifest supplies
-the write token and expected version; on a version conflict the CLI
-explains and offers `--force`. `node artifact.mjs list` shows known
-artifacts.
+Same URL, new version. Without a path, `update` uses the Recipe recorded in
+Manifest v2. Update its fragments after reading project sources and, when
+useful, compare with `show <id>`. The CLI rebuilds and validates in memory,
+then publishes once. A legacy Manifest v1 entry is migrated to Recipe sources
+when first updated. On a version conflict, review it before using `--force`.
+`list` shows known artifacts.
 
 ## Keeping artifacts fresh (do this without being asked)
 
@@ -328,17 +301,20 @@ it only changes **which artifacts the Stop hook is allowed to flag at all**:
 ## Password protection
 
 ```
-node artifact.mjs create page.html --favicon 🔒 --title "Q3 Numbers" --password "..."
+node artifact.mjs create .artifacts/recipes.local/q3.recipe.json --password "..."
 ```
+
+Set `security.encrypted: true` and a kebab-case
+`security.passwordCredential` in the Recipe. Encrypted Recipes and fragments
+must use the private `.artifacts` source directories.
 
 Content is encrypted locally (PBKDF2 600k + AES-256-GCM); the server stores
 only ciphertext and viewers decrypt in the browser. Share the URL and the
-password through different channels. The password is stored in
-`.artifacts/credentials.json` (gitignored, machine-local) at create time so
-later `update` and `show` can decrypt without re-prompting the user — pass
-`--password` again only to rotate it. `delete` clears the stored password
-too. Note: the title and favicon are stored in plaintext as metadata —
-keep them non-sensitive.
+password through different channels. The CLI resolves the named credential
+from `--password`, its `OPEN_ARTIFACTS_PASSWORD_*` environment variable, or
+the gitignored credentials file. Passwords never enter Recipes or Manifests.
+Title and favicon remain plaintext service metadata, so keep them
+non-sensitive.
 
 ## Reading back
 
