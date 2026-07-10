@@ -51,9 +51,14 @@ verify), an explicit anti-AI-slop list, modern CSS power moves, and a
 Brutalist) with ready-to-paste OKLch palettes and font stacks for when no
 brand is specified. `references/tokens.css` is the shared token contract the
 agent pastes into every page before overriding identity tokens per
-direction. Adapted from [open-design](https://github.com/nexu-io/open-design)
-and Claude's `artifact-design` skill, retargeted to this project's strict
-no-external-requests CSP.
+direction. Adapted from
+[open-design](https://github.com/nexu-io/open-design),
+Claude's `artifact-design` skill,
+[impeccable](https://github.com/pbakaus/impeccable) by Paul Bakaus
+(Apache-2.0, interaction-state and anti-pattern rules),
+Emil Kowalski (easing, frequency, and duration rules), and
+Apple WWDC 2018 *Designing Fluid Interfaces* (canvas gesture physics).
+Retargeted to this project's strict no-external-requests CSP.
 
 Ask your agent to "publish this as an artifact" — it runs the bundled CLI:
 
