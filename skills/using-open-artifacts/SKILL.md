@@ -137,12 +137,14 @@ brief, or override with `--level 1|2|3` (aliases `--simple` /
   content.
 - **Level 2 — interactive:** dashboards, docs sites, demos, prototypes.
   Stateful in-memory JS, navigation, copy buttons, expandable sections,
-  subtle transitions. Default when unsure.
+  subtle transitions. Default when unsure. Before building L2+, read
+  `${CLAUDE_SKILL_DIR}/references/interaction.md` for the eight-state
+  contract, focus visibility, hit targets, form patterns, and waiting states.
 - **Level 3 — rich:** landing/marketing pages, product showcases. Orchestrated
   motion — load sequences, scroll reveals, view transitions — **all native
   browser APIs, no external libraries** (the strict CSP blocks CDNs). Read
   `${CLAUDE_SKILL_DIR}/references/motion.md` for the native motion pattern
-  library before building L3.
+  library before building L3 (`interaction.md` applies here too).
 
 Don't gold-plate a doc as L3; don't ship a landing page as L1. The level
 sets the component contract and motion budget, not just "how much
@@ -155,9 +157,10 @@ plane of pan/zoom **frames** instead of a scrolling document — while `--level`
 keeps meaning fidelity and motion budget. It composes with any level:
 `--level 1 --canvas` is spatial notes, `--level 2 --canvas` a multi-frame
 prototype (the default use), `--level 3 --canvas` a canvas-as-showcase. Read
-`${CLAUDE_SKILL_DIR}/references/canvas.md` before building one — it has the
-complete vendored pan/zoom/focus runtime (CSS + vanilla JS), the frame and
-freeform contracts, and a canvas ship-gate.
+`${CLAUDE_SKILL_DIR}/references/canvas.md` before building one -- it has the
+complete vendored runtime (CSS + vanilla JS) with momentum and pinch physics,
+an optional presenter tour, connector spotlighting, and `#frame-id` deep
+links, plus the frame and freeform contracts and a canvas ship-gate.
 
 ## Authoring content — hard constraints
 
@@ -185,10 +188,12 @@ images, fetch/XHR/WebSockets):
 
 **Avoid AI-slop tropes** (`design.md` has the full match-and-refuse list):
 side-stripe accent borders, gradient text (`background-clip: text`), decorative
-glassmorphism, identical card grids, the hero-metric template, an uppercase
-eyebrow or `01 / 02 / 03` marker above every section, headings that overflow
-at mobile width, and invented content — no fake metrics, testimonials, or
-"Acme Corp"; an honest placeholder beats a fake stat. Verify contrast (body
+glassmorphism, identical card grids, the hero-metric template, icon-tile stacks
+(rounded-corner icon tiles floating above every card heading), an uppercase
+eyebrow or `01 / 02 / 03` marker above every section, colored glow shadows on
+dark backgrounds, italic-serif display heroes, aphoristic copy cadence ("Not X.
+Y."), headings that overflow at mobile width, and invented content -- no fake
+metrics, testimonials, or "Acme Corp"; an honest placeholder beats a fake stat. Verify contrast (body
 ≥ 4.5:1 in both themes) and never ship muted gray on a tinted near-white.
 Full-viewport sections use `min-height: calc(100dvh - var(--oa-header-h,
 2.5rem))` — the viewer adds a sticky header. Modern CSS is fully available

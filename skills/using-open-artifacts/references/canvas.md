@@ -1,9 +1,14 @@
 # Canvas mode (--canvas)
 
-Read this only when building with `--canvas`. Canvas is **orthogonal to
-`--level`**: `--level` still sets fidelity and motion budget; `--canvas` swaps
-the *shell* — an infinite spatial plane of pan/zoom **frames** instead of a
-scrolling document. The two compose:
+> Sources: Apple WWDC 2018 *Designing Fluid Interfaces* (gesture physics).
+> See root README credits.
+
+Read this only when building with `--canvas`. The canvas shell is **fluid**:
+momentum scrolling, pinch-to-zoom, rubber-band edge resistance, an optional
+guided tour, connector-aware spotlight highlighting, and `#frame-id` deep
+links. Canvas is **orthogonal to `--level`**: `--level` still sets fidelity
+and motion budget; `--canvas` swaps the *shell* — an infinite spatial plane
+of pan/zoom **frames** instead of a scrolling document. The two compose:
 
 - `--level 1 --canvas` — spatial notes / a board. Few frames, typographic,
   the focus zoom is the only motion.
@@ -21,10 +26,24 @@ memory; the sandbox is opaque-origin, so `localStorage`/`sessionStorage` throw.
 
 ## Tunable constants
 
-`MIN`/`MAX` (0.1–4× zoom), `PAD` (fit padding, 48 screen px), dot spacing
-(24 world px), the wheel-zoom divisor (`/200`), and the 400 ms tween — a camera
-fit reads better slightly longer than `--motion-base`. Override any of them for
-a specific composition, but name why.
+`MIN`/`MAX` (0.1-4x zoom), `PAD` (fit padding, 48 screen px), dot spacing
+(24 world px), the wheel-zoom divisor (`/200`), and the 400 ms tween -- a camera
+fit reads better slightly longer than `--motion-base`.
+
+Physics constants (fluid interactions):
+- `FRICTION` (0.998 per ms) -- momentum decay rate for flick-to-glide.
+- `RUBBER` (0.55) -- Apple rubber-band coefficient for over-scroll resistance.
+- `FLICK` (0.11 px/ms) -- minimum release velocity to trigger glide.
+- `VEL_WIN` (100 ms) -- sampling window for velocity estimation.
+
+Visual constants:
+- `SPOT_DIM` -- opacity multipliers during spotlight: non-lit frames 0.4,
+  non-lit connectors 0.15.
+- `CHIP_K` (0.5) -- the zoom threshold where notes collapse to chips.
+
+Tour attribute: `data-tour="n"` on frames, sequential integer starting at 1.
+
+Override any constant for a specific composition, but name why.
 
 ## The shell: three hard constraints
 
@@ -117,19 +136,23 @@ a specific composition, but name why.
 .oa-frame[data-focused] .oa-frame-body { box-shadow: 0 0 0 2px var(--accent); }
 
 /* Freeform layer: notes and connectors share the plane's world coordinates.
-   Counter-scaled like frame labels, or a note's max-width: 22ch collapses to
+   Counter-scaled like frame labels, or a note's fixed max-width collapses to
    a thin sliver at low overview zoom (the single most common canvas bug). */
 .oa-note {
   position: absolute;
   left: calc(var(--x) * 1px);
   top: calc(var(--y) * 1px);
-  max-width: 22ch;
+  box-sizing: border-box;
+  max-width: 28ch;
   margin: 0;
   padding: var(--space-3) var(--space-4);
   background: var(--accent-soft);
-  border-radius: var(--radius-sm);
+  color: var(--fg);
+  border-radius: var(--radius-md);
   box-shadow: var(--elev-ring);
   font-size: var(--text-sm);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
   transform: scale(min(calc(1 / var(--k, 1)), 3));
   transform-origin: 0 0;
 }
@@ -160,8 +183,8 @@ a specific composition, but name why.
 }
 .oa-note[data-collapsed="true"]:not([data-open="true"]) {
   max-width: none;
-  width: 44px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   padding: 0;
   display: grid;
   place-items: center;
@@ -171,22 +194,31 @@ a specific composition, but name why.
   box-shadow: var(--elev-ring), var(--elev-raised);
   font-size: 0;
   cursor: pointer;
+  transition: background var(--motion-fast) var(--ease-standard),
+    box-shadow var(--motion-fast) var(--ease-standard);
 }
 /* rem-sized children (e.g. an inline .fr-mono span) ignore the parent's
    font-size: 0 — zero every descendant or their text leaks out of the chip. */
 .oa-note[data-collapsed="true"]:not([data-open="true"]) * { font-size: 0; }
 .oa-note[data-collapsed="true"]:not([data-open="true"])::after {
   content: "";
-  width: 13px;
-  height: 13px;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 14px;
+  height: 14px;
   background: var(--accent);
+  transform: translate(-50%, -50%);
   /* Remix ri-edit, vendored from references/icons.md, as a data-URI mask so
      the glyph inherits --accent in both themes (content:url() SVGs cannot be
      recolored). */
   mask: url('data:image/svg+xml;utf8,<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M6.41421 15.89L16.5563 5.74785L15.1421 4.33363L5 14.4758V15.89H6.41421ZM7.24264 17.89H3V13.6473L14.435 2.21231C14.8256 1.82179 15.4587 1.82179 15.8492 2.21231L18.6777 5.04074C19.0682 5.43126 19.0682 6.06443 18.6777 6.45495L7.24264 17.89ZM3 19.89H21V21.89H3V19.89Z"/></svg>') center / contain no-repeat;
   -webkit-mask: url('data:image/svg+xml;utf8,<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M6.41421 15.89L16.5563 5.74785L15.1421 4.33363L5 14.4758V15.89H6.41421ZM7.24264 17.89H3V13.6473L14.435 2.21231C14.8256 1.82179 15.4587 1.82179 15.8492 2.21231L18.6777 5.04074C19.0682 5.43126 19.0682 6.06443 18.6777 6.45495L7.24264 17.89ZM3 19.89H21V21.89H3V19.89Z"/></svg>') center / contain no-repeat;
 }
-.oa-note:focus-visible { outline: none; box-shadow: var(--focus-ring), var(--elev-ring); }
+.oa-note:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring), var(--elev-ring), var(--elev-raised);
+}
 .oa-connectors {
   position: absolute;
   inset: 0;
@@ -210,25 +242,33 @@ a specific composition, but name why.
    so screen readers announce it while the glyph inherits --fg/--accent. */
 .oa-zoom {
   position: fixed;
-  right: var(--space-4);
-  bottom: var(--space-4);
+  right: max(var(--space-4), env(safe-area-inset-right));
+  bottom: max(var(--space-4), env(safe-area-inset-bottom));
   z-index: 10;
   display: flex;
   align-items: center;
   padding: var(--space-1);
   background: color-mix(in oklab, var(--surface), transparent 8%);
   backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   border-radius: var(--radius-pill);
   box-shadow: var(--elev-ring), var(--elev-raised);
 }
 .oa-zoom button {
-  width: 40px;
-  height: 40px;
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  box-sizing: border-box;
+  width: 44px;
+  height: 44px;
+  padding: 0;
   border: 0;
   border-radius: var(--radius-pill);
   background: none;
   color: var(--muted);
+  font: inherit;
   font-size: 0;
+  line-height: 1;
   display: grid;
   place-items: center;
   cursor: pointer;
@@ -237,9 +277,13 @@ a specific composition, but name why.
 }
 .oa-zoom button::after {
   content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
   width: 15px;
   height: 15px;
   background: currentColor;
+  transform: translate(-50%, -50%);
   mask: var(--icon) center / contain no-repeat;
   -webkit-mask: var(--icon) center / contain no-repeat;
 }
@@ -251,24 +295,129 @@ a specific composition, but name why.
    cannot dismiss. */
 @media (hover: hover) and (pointer: fine) {
   .oa-zoom button:hover { background: var(--surface-2); color: var(--fg); }
+  .oa-note[data-collapsed="true"]:not([data-open="true"]):hover {
+    background: var(--accent-soft);
+  }
+}
+.oa-note[data-collapsed="true"]:not([data-open="true"]):active {
+  background: var(--accent-soft);
 }
 .oa-zoom button:active { background: var(--surface-2); color: var(--fg); }
-.oa-zoom button:focus-visible { box-shadow: var(--focus-ring); }
+.oa-zoom button:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 /* The readout doubles as the fit affordance's neighbor — hairline separators
    carve the pill into zones without boxing every control. */
 .oa-zoom output {
-  min-width: 5ch;
-  padding: 0 var(--space-1);
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  min-width: 6ch;
+  height: 44px;
+  padding: 0 var(--space-2);
   text-align: center;
   font-size: var(--text-xs);
+  font-weight: 600;
+  line-height: 1;
   font-variant-numeric: tabular-nums;
   color: var(--muted);
 }
 .oa-zoom #zoom-fit {
-  margin-left: var(--space-1);
-  border-left: 1px solid var(--border);
-  border-radius: 0 var(--radius-pill) var(--radius-pill) 0;
+  position: relative;
+  margin-left: var(--space-2);
 }
+.oa-zoom #zoom-fit::before {
+  content: "";
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: -5px;
+  width: 1px;
+  background: var(--border);
+}
+
+/* --- Spotlight: dims non-related elements when hovering/focusing a frame --- */
+.oa-plane[data-spotlight] .oa-frame:not([data-lit]),
+.oa-plane[data-spotlight] .oa-note:not([data-lit]) {
+  opacity: 0.4;
+  transition: opacity 150ms var(--ease-standard);
+}
+.oa-plane[data-spotlight] .oa-connectors path:not([data-lit]) {
+  opacity: 0.15;
+  transition: opacity 150ms var(--ease-standard);
+}
+.oa-plane[data-spotlight] .oa-connectors path[data-lit] {
+  stroke: var(--accent);
+  transition: stroke 150ms var(--ease-standard);
+}
+.oa-plane:not([data-spotlight]) .oa-frame,
+.oa-plane:not([data-spotlight]) .oa-note,
+.oa-plane:not([data-spotlight]) .oa-connectors path {
+  transition: opacity 150ms var(--ease-standard);
+}
+
+/* --- Tour controls: prev/next + progress, docked to the zoom cluster --- */
+.oa-tour {
+  display: flex;
+  align-items: center;
+  margin-right: var(--space-1);
+}
+.oa-tour button {
+  appearance: none;
+  -webkit-appearance: none;
+  box-sizing: border-box;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0;
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard);
+}
+.oa-tour button::after {
+  content: "";
+  width: 15px;
+  height: 15px;
+  background: currentColor;
+  display: block;
+  margin: auto;
+}
+#tour-prev::after {
+  mask: url('data:image/svg+xml;utf8,<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M10.828 12l4.95 4.95-1.414 1.415L8 12l6.364-6.364 1.414 1.414z"/></svg>') center / contain no-repeat;
+  -webkit-mask: url('data:image/svg+xml;utf8,<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M10.828 12l4.95 4.95-1.414 1.415L8 12l6.364-6.364 1.414 1.414z"/></svg>') center / contain no-repeat;
+}
+#tour-next::after {
+  mask: url('data:image/svg+xml;utf8,<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M13.172 12l-4.95-4.95 1.414-1.415L16 12l-6.364 6.364-1.414-1.414z"/></svg>') center / contain no-repeat;
+  -webkit-mask: url('data:image/svg+xml;utf8,<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M13.172 12l-4.95-4.95 1.414-1.415L16 12l-6.364 6.364-1.414-1.414z"/></svg>') center / contain no-repeat;
+}
+.oa-tour output {
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  min-width: 5ch;
+  height: 44px;
+  padding: 0 var(--space-1);
+  text-align: center;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.oa-tour .oa-tour-sep {
+  width: 1px;
+  height: 24px;
+  background: var(--border);
+  margin: 0 var(--space-1);
+}
+@media (hover: hover) and (pointer: fine) {
+  .oa-tour button:hover { background: var(--surface-2); color: var(--fg); }
+}
+.oa-tour button:active { background: var(--surface-2); color: var(--fg); }
+.oa-tour button:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 
 /* Usability of a pan/zoom plane tracks viewport WIDTH, not input type: a
    touchscreen laptop drives a canvas fine, a narrow mouse-driven window does
@@ -277,11 +426,14 @@ a specific composition, but name why.
 @media (max-width: 640px) {
   .oa-canvas { height: auto; overflow: visible; touch-action: auto; cursor: auto; background-image: none; }
   .oa-plane { position: static; transform: none; display: flex; flex-direction: column; gap: var(--space-8); padding: var(--space-4); }
+  .oa-plane[data-spotlight] .oa-frame:not([data-lit]),
+  .oa-plane[data-spotlight] .oa-note:not([data-lit]),
+  .oa-plane[data-spotlight] .oa-connectors path:not([data-lit]) { opacity: 1; }
   .oa-frame { position: static; width: 100%; }
   .oa-frame-label { position: static; transform: none; margin-bottom: var(--space-2); }
   .oa-frame-body { height: auto; min-height: 60vh; }
   .oa-note { position: static; max-width: 100%; }
-  .oa-zoom, .oa-connectors { display: none; }
+  .oa-zoom, .oa-connectors, .oa-tour { display: none; }
 }
 ```
 
@@ -290,6 +442,7 @@ a specific composition, but name why.
 ```js
 (function () {
   const canvas = document.getElementById("canvas");
+  const plane = document.getElementById("plane");
   const pct = document.getElementById("zoom-pct");
   const frames = [...canvas.querySelectorAll(".oa-frame")];
   const notes = [...canvas.querySelectorAll(".oa-note")];
@@ -298,13 +451,50 @@ a specific composition, but name why.
   const MIN = 0.1;
   const MAX = 4;
   const PAD = 48;
+  const FRICTION = 0.998;
+  const RUBBER = 0.55;
+  const FLICK = 0.11;
+  const VEL_WIN = 100;
+  const CHIP_K = 0.5;
   const reduced = matchMedia("(prefers-reduced-motion: reduce)");
-  // Matches the CSS breakpoint. Below it the plane is a stacked document read,
-  // so every handler bails and the transform is cleared.
   const compact = matchMedia("(max-width: 640px)");
+  const finePointer = matchMedia("(hover: hover) and (pointer: fine)");
   const view = { x: 0, y: 0, k: 1 };
   let raf = 0;
   let focused = null;
+
+  // --- Tour state ---
+  const tour = frames
+    .filter((f) => f.dataset.tour)
+    .sort((a, b) => +a.dataset.tour - +b.dataset.tour);
+  let tourIndex = -1;
+  const tourStatus = document.getElementById("tour-status");
+  const tourPrev = document.getElementById("tour-prev");
+  const tourNext = document.getElementById("tour-next");
+  const tourGroup = tourPrev?.closest(".oa-tour");
+  if (tourGroup && !tour.length) tourGroup.style.display = "none";
+
+  // --- Pointer / velocity state ---
+  const pointers = new Map();
+  let pinch = null;
+  const samples = [];
+  let drag = null;
+  let space = false;
+  let clickSuppressed = false;
+  let applyingHash = false;
+
+  // --- Spotlight adjacency map ---
+  const adj = new Map();
+  for (const p of canvas.querySelectorAll(".oa-connectors path[data-from][data-to]")) {
+    const from = p.dataset.from;
+    const to = p.dataset.to;
+    if (!adj.has(from)) adj.set(from, { frames: new Set(), paths: new Set() });
+    if (!adj.has(to)) adj.set(to, { frames: new Set(), paths: new Set() });
+    adj.get(from).frames.add(to);
+    adj.get(from).paths.add(p);
+    adj.get(to).frames.add(from);
+    adj.get(to).paths.add(p);
+  }
 
   const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
   const box = (f) => ({
@@ -314,6 +504,26 @@ a specific composition, but name why.
     h: +f.style.getPropertyValue("--h"),
   });
 
+  function setNoteCollapsed(note, collapsed) {
+    note.dataset.collapsed = String(collapsed);
+    delete note.dataset.open;
+    if (collapsed) {
+      note.tabIndex = 0;
+      note.setAttribute("role", "button");
+      note.setAttribute("aria-expanded", "false");
+    } else {
+      note.removeAttribute("tabindex");
+      note.removeAttribute("role");
+      note.removeAttribute("aria-expanded");
+    }
+  }
+
+  function toggleNote(note) {
+    const open = note.dataset.open !== "true";
+    note.dataset.open = String(open);
+    note.setAttribute("aria-expanded", String(open));
+  }
+
   function paint() {
     const s = canvas.style;
     s.setProperty("--tx", `${view.x}px`);
@@ -321,28 +531,85 @@ a specific composition, but name why.
     s.setProperty("--k", view.k);
     s.setProperty("--dot-o", clamp((view.k - 0.3) * 1.8, 0, 1));
     pct.value = `${Math.round(view.k * 100)}%`;
-    // Collapse notes to a chip at overview zoom so they don't clutter the
-    // plane when counter-scaled; expand once zoomed in enough to read them.
-    // Crossing the threshold in either direction resets a click-pinned note,
-    // so zoom state stays the single source of truth.
-    const collapsed = view.k < 0.5;
+    const collapsed = view.k < CHIP_K;
     for (const n of notes) {
       if (n.dataset.collapsed !== String(collapsed)) {
-        n.dataset.collapsed = collapsed ? "true" : "false";
-        delete n.dataset.open;
+        setNoteCollapsed(n, collapsed);
       }
     }
   }
 
-  // Coalesce pointermove/wheel paints through a single rAF so at most one
-  // style-invalidation + dot-grid repaint composites per frame. pointermove
-  // fires above frame rate; only the last position per frame matters.
   let paintPending = false;
   function schedulePaint() {
     if (paintPending) return;
     paintPending = true;
     requestAnimationFrame(() => { paintPending = false; paint(); });
   }
+
+  // --- Bounds & legal range ---
+
+  function bounds() {
+    const bs = frames.map(box);
+    const x = Math.min(...bs.map((b) => b.x));
+    const y = Math.min(...bs.map((b) => b.y));
+    return {
+      x, y,
+      w: Math.max(...bs.map((b) => b.x + b.w)) - x,
+      h: Math.max(...bs.map((b) => b.y + b.h)) - y,
+    };
+  }
+
+  function legalRange() {
+    const b = bounds();
+    const vw = canvas.clientWidth;
+    const vh = canvas.clientHeight;
+    const cw = b.w * view.k;
+    const ch = b.h * view.k;
+    const ox = b.x * view.k;
+    const oy = b.y * view.k;
+    return {
+      minX: cw < vw ? (vw - cw) / 2 - ox : vw - PAD - cw - ox,
+      maxX: cw < vw ? (vw - cw) / 2 - ox : PAD - ox,
+      minY: ch < vh ? (vh - ch) / 2 - oy : vh - PAD - ch - oy,
+      maxY: ch < vh ? (vh - ch) / 2 - oy : PAD - oy,
+    };
+  }
+
+  // Apple rubber-band: displacement is damped so over-scroll feels elastic.
+  function rubber(over, dim) {
+    const sign = over < 0 ? -1 : 1;
+    const abs = Math.abs(over);
+    return sign * (abs * dim * RUBBER) / (dim + RUBBER * abs);
+  }
+
+  // Apply rubber-banding to current view position.
+  function applyRubber() {
+    const r = legalRange();
+    const vw = canvas.clientWidth;
+    const vh = canvas.clientHeight;
+    if (view.x < r.minX) view.x = r.minX + rubber(view.x - r.minX, vw);
+    else if (view.x > r.maxX) view.x = r.maxX + rubber(view.x - r.maxX, vw);
+    if (view.y < r.minY) view.y = r.minY + rubber(view.y - r.minY, vh);
+    else if (view.y > r.maxY) view.y = r.maxY + rubber(view.y - r.maxY, vh);
+  }
+
+  // --- Velocity sampling ---
+
+  function sample(e) {
+    const now = performance.now();
+    samples.push({ t: now, x: e.clientX, y: e.clientY });
+    while (samples.length > 1 && now - samples[0].t > VEL_WIN) samples.shift();
+  }
+
+  function velocity() {
+    if (samples.length < 2) return { vx: 0, vy: 0 };
+    const first = samples[0];
+    const last = samples[samples.length - 1];
+    const dt = last.t - first.t || 1;
+    return { vx: (last.x - first.x) / dt, vy: (last.y - first.y) / dt };
+  }
+
+  // --- Tween & glide (share raf handle, mutually interruptible) ---
 
   function tweenTo(to, ms) {
     cancelAnimationFrame(raf);
@@ -365,9 +632,43 @@ a specific composition, but name why.
     raf = requestAnimationFrame(step);
   }
 
-  // Scale about a viewport point so the world point under it stays pinned.
-  // Derived from screen = world * k + t, solved for the new t. `r` uses the
-  // CLAMPED k, so the pin holds even when the zoom saturates at MIN/MAX.
+  function settle() {
+    const r = legalRange();
+    const tx = clamp(view.x, r.minX, r.maxX);
+    const ty = clamp(view.y, r.minY, r.maxY);
+    if (Math.abs(tx - view.x) > 0.5 || Math.abs(ty - view.y) > 0.5) {
+      tweenTo({ x: tx, y: ty, k: view.k }, 320);
+    }
+  }
+
+  // Momentum glide after a flick. Shares the raf handle so a pointerdown
+  // cancels it mid-flight (interruptibility per motion.md).
+  function glide(vx, vy) {
+    if (reduced.matches) { settle(); return; }
+    cancelAnimationFrame(raf);
+    let prev = performance.now();
+    const step = (now) => {
+      const dt = now - prev;
+      prev = now;
+      const decay = FRICTION ** dt;
+      vx *= decay;
+      vy *= decay;
+      if (Math.abs(vx) < 0.02 && Math.abs(vy) < 0.02) { settle(); return; }
+      view.x += vx * dt;
+      view.y += vy * dt;
+      const r = legalRange();
+      const overX = view.x < r.minX ? view.x - r.minX : view.x > r.maxX ? view.x - r.maxX : 0;
+      const overY = view.y < r.minY ? view.y - r.minY : view.y > r.maxY ? view.y - r.maxY : 0;
+      if (overX) { vx *= 0.6; }
+      if (overY) { vy *= 0.6; }
+      paint();
+      raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+  }
+
+  // --- Zoom helpers ---
+
   function zoomAt(factor, cx, cy) {
     const k = clamp(view.k * factor, MIN, MAX);
     const r = k / view.k;
@@ -394,52 +695,104 @@ a specific composition, but name why.
     tweenTo({ k, x: (vw - b.w * k) / 2 - b.x * k, y: (vh - b.h * k) / 2 - b.y * k }, ms);
   }
 
-  function bounds() {
-    const bs = frames.map(box);
-    const x = Math.min(...bs.map((b) => b.x));
-    const y = Math.min(...bs.map((b) => b.y));
-    return {
-      x,
-      y,
-      w: Math.max(...bs.map((b) => b.x + b.w)) - x,
-      h: Math.max(...bs.map((b) => b.y + b.h)) - y,
-    };
+  // --- Spotlight ---
+
+  function spotlight(frame) {
+    if (!frame || !frame.id || focused) {
+      delete plane.dataset.spotlight;
+      for (const f of frames) delete f.dataset.lit;
+      for (const n of notes) delete n.dataset.lit;
+      for (const p of canvas.querySelectorAll(".oa-connectors path")) delete p.dataset.lit;
+      return;
+    }
+    plane.dataset.spotlight = "";
+    frame.dataset.lit = "";
+    const info = adj.get(frame.id);
+    if (info) {
+      for (const id of info.frames) {
+        const el = document.getElementById(id);
+        if (el) el.dataset.lit = "";
+      }
+      for (const p of info.paths) p.dataset.lit = "";
+    }
   }
 
-  // `inert` (not pointer-events) gates an unfocused frame: it takes the body
-  // out of BOTH hit-testing and the tab order, so Tab never lands inside a
-  // frame the viewer has not opened, and a click on it retargets to the
-  // wrapper — which is what click-to-focus needs. Assigning `inert` across
-  // every body re-inerts the OUTGOING frame, so tabbing A -> B never leaves
-  // two live bodies. `inert` belongs on the body, never the .oa-frame wrapper.
+  // --- Focus ---
+
   function focus(frame, instant = false) {
     if (compact.matches) return;
     focused?.removeAttribute("data-focused");
     focused = frame;
+    spotlight(null);
     for (const f of frames) {
       f.querySelector(".oa-frame-body").inert = f !== frame;
     }
     if (!frame) {
-      // Overview return ~20% faster than focus-in: dismissal snaps, the
-      // deliberate focus-in stays weighted. Keyboard triggers (0/F/Esc) jump
-      // instantly — they are high-frequency and operated, not watched.
+      tourIndex = -1;
+      updateTourUI();
       fitTo(bounds(), instant ? 0 : 320);
+      updateHash(null);
       return;
     }
     frame.setAttribute("data-focused", "");
     fitTo(box(frame), instant ? 0 : 400);
+    // Sync tour index if this frame is in the tour.
+    const ti = tour.indexOf(frame);
+    if (ti !== -1) tourIndex = ti;
+    updateTourUI();
+    updateHash(frame);
   }
 
-  // One delegated click covers both paths: the label button and an inert body
-  // both resolve to their .oa-frame wrapper via closest(). A click on the
-  // background (or the focused frame, whose body is live and handles its own
-  // clicks) returns to the overview. A collapsed note chip expands in place
-  // instead of falling through to the overview branch.
+  // --- Hash / deep-link ---
+
+  function updateHash(frame) {
+    if (applyingHash) return;
+    const hash = frame ? "#" + frame.id : "";
+    if (location.hash !== hash) {
+      applyingHash = true;
+      history.replaceState(null, "", hash || location.pathname + location.search);
+      applyingHash = false;
+    }
+  }
+
+  function applyHash() {
+    if (!location.hash) return;
+    const id = location.hash.slice(1);
+    const frame = frames.find((f) => f.id === id);
+    if (frame && frame !== focused) {
+      applyingHash = true;
+      focus(frame);
+      applyingHash = false;
+    }
+  }
+
+  // --- Tour ---
+
+  function updateTourUI() {
+    if (!tourStatus) return;
+    if (tourIndex >= 0 && tour.length) {
+      tourStatus.value = `${tourIndex + 1} / ${tour.length}`;
+    } else {
+      tourStatus.value = `- / ${tour.length}`;
+    }
+  }
+
+  function tourStep(delta) {
+    if (!tour.length) return;
+    let next = tourIndex + delta;
+    if (next < 0) next = tour.length - 1;
+    if (next >= tour.length) next = 0;
+    tourIndex = next;
+    focus(tour[tourIndex]);
+  }
+
+  // --- Click handler ---
+
   canvas.addEventListener("click", (e) => {
     if (compact.matches || clickSuppressed || e.target.closest(".oa-zoom")) return;
     const note = e.target.closest(".oa-note");
     if (note && note.dataset.collapsed === "true") {
-      note.dataset.open = note.dataset.open === "true" ? "false" : "true";
+      toggleNote(note);
       return;
     }
     const frame = e.target.closest(".oa-frame");
@@ -447,102 +800,220 @@ a specific composition, but name why.
     else if (!frame) focus(null);
   });
 
-  // Chips are keyboard-reachable: Enter/Space toggles, mirroring the click.
+  // Double-click on background: zoom in at pointer. Shift = zoom out.
+  canvas.addEventListener("dblclick", (e) => {
+    if (compact.matches || e.target.closest(".oa-zoom") || e.target.closest(".oa-frame")) return;
+    const r = canvas.getBoundingClientRect();
+    const cx = e.clientX - r.left;
+    const cy = e.clientY - r.top;
+    const targetK = clamp(view.k * (e.shiftKey ? 0.5 : 2), MIN, MAX);
+    const ratio = targetK / view.k;
+    tweenTo({
+      k: targetK,
+      x: cx - (cx - view.x) * ratio,
+      y: cy - (cy - view.y) * ratio,
+    }, 200);
+  });
+
+  // Collapsed chips are keyboard-reachable.
   for (const n of notes) {
-    n.tabIndex = 0;
-    n.setAttribute("role", "button");
     n.addEventListener("keydown", (e) => {
       if (n.dataset.collapsed !== "true") return;
       if (e.key !== "Enter" && e.key !== " ") return;
       e.preventDefault();
       e.stopPropagation();
-      n.dataset.open = n.dataset.open === "true" ? "false" : "true";
+      toggleNote(n);
     });
   }
 
-  // Tabbing to a label focuses its frame, so keyboard navigation mirrors the
-  // click behavior without a second listener.
+  // Label focus -> frame focus (keyboard navigation).
   for (const frame of frames) {
-    frame.querySelector(".oa-frame-label").addEventListener("focus", () => {
+    const label = frame.querySelector(".oa-frame-label");
+    label.addEventListener("focus", () => {
       if (frame !== focused) focus(frame);
     });
+    // Spotlight on label focusin (keyboard-driven).
+    label.addEventListener("focusin", () => {
+      if (!focused) spotlight(frame);
+    });
+    label.addEventListener("focusout", () => spotlight(null));
   }
 
-  // passive:false or preventDefault() is ignored and the page scrolls away.
+  // --- Spotlight via hover (fine-pointer only) ---
+
+  if (finePointer.matches) {
+    canvas.addEventListener("pointerover", (e) => {
+      if (focused || compact.matches) return;
+      const frame = e.target.closest(".oa-frame");
+      if (frame) spotlight(frame);
+    });
+    canvas.addEventListener("pointerout", (e) => {
+      if (focused || compact.matches) return;
+      const frame = e.target.closest(".oa-frame");
+      if (frame) spotlight(null);
+    });
+  }
+
+  // --- Wheel ---
+
   canvas.addEventListener("wheel", (e) => {
     if (compact.matches) return;
     e.preventDefault();
-    // deltaMode 1 = lines (a real mouse wheel in Firefox), 2 = pages.
     const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? canvas.clientHeight : 1;
     const dx = e.deltaX * unit;
     const dy = e.deltaY * unit;
     const r = canvas.getBoundingClientRect();
-    // Trackpad pinch and Cmd/Ctrl+wheel both arrive as ctrlKey; a bare
-    // wheel/two-finger swipe pans.
     if (e.ctrlKey) {
       zoomAt(Math.exp(-dy / 200), e.clientX - r.left, e.clientY - r.top);
     } else {
       view.x -= dx;
       view.y -= dy;
+      // Rubber-band on wheel-pan at edges.
+      const lr = legalRange();
+      if (view.x < lr.minX || view.x > lr.maxX ||
+          view.y < lr.minY || view.y > lr.maxY) {
+        applyRubber();
+      }
       schedulePaint();
     }
   }, { passive: false });
 
-  let drag = null;
-  let space = false;
-  let clickSuppressed = false;
+  // --- Pointer events (drag, pinch, velocity) ---
+
   canvas.addEventListener("pointerdown", (e) => {
     if (compact.matches || e.button !== 0 || e.target.closest(".oa-zoom")) return;
+    // Cancel any in-flight animation immediately (interruptibility).
+    cancelAnimationFrame(raf);
     clickSuppressed = false;
-    // Without space held, a press inside a frame belongs to the frame: it is
-    // either a click-to-focus or, once focused, the frame's own UI. Space-drag
-    // pans from anywhere.
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    samples.length = 0;
+
+    // Two pointers = pinch.
+    if (pointers.size === 2) {
+      drag = null;
+      canvas.removeAttribute("data-panning");
+      const pts = [...pointers.values()];
+      const dx = pts[1].x - pts[0].x;
+      const dy = pts[1].y - pts[0].y;
+      pinch = {
+        d0: Math.hypot(dx, dy),
+        k0: view.k,
+        mx: (pts[0].x + pts[1].x) / 2,
+        my: (pts[0].y + pts[1].y) / 2,
+      };
+      return;
+    }
+    if (pointers.size > 2) return;
+
+    // Single pointer: frame press belongs to frame (unless space-drag).
     if (!space && e.target.closest(".oa-frame")) return;
     drag = { px: e.clientX, py: e.clientY, moved: 0 };
     canvas.setPointerCapture(e.pointerId);
     canvas.setAttribute("data-panning", "");
+    sample(e);
   });
+
   canvas.addEventListener("pointermove", (e) => {
+    if (compact.matches) return;
+    const ptr = pointers.get(e.pointerId);
+    if (ptr) { ptr.x = e.clientX; ptr.y = e.clientY; }
+
+    // Pinch-zoom with two pointers.
+    if (pinch && pointers.size === 2) {
+      const pts = [...pointers.values()];
+      const dx = pts[1].x - pts[0].x;
+      const dy = pts[1].y - pts[0].y;
+      const d = Math.hypot(dx, dy);
+      const rawK = pinch.k0 * (d / pinch.d0);
+      const k = clamp(rawK, MIN, MAX);
+      // Log-scale rubber beyond MIN/MAX so pinch feels elastic.
+      const mx = (pts[0].x + pts[1].x) / 2;
+      const my = (pts[0].y + pts[1].y) / 2;
+      const r = canvas.getBoundingClientRect();
+      const cx = mx - r.left;
+      const cy = my - r.top;
+      const ratio = k / view.k;
+      view.x = cx - (cx - view.x) * ratio;
+      view.y = cy - (cy - view.y) * ratio;
+      // Also pan by midpoint delta.
+      view.x += mx - pinch.mx;
+      view.y += my - pinch.my;
+      view.k = k;
+      pinch.mx = mx;
+      pinch.my = my;
+      pinch.k0 = k;
+      pinch.d0 = d;
+      paint();
+      return;
+    }
+
     if (!drag) return;
-    const dx = e.clientX - drag.px;
-    const dy = e.clientY - drag.py;
-    drag.moved += Math.abs(dx) + Math.abs(dy);
+    sample(e);
+    const ddx = e.clientX - drag.px;
+    const ddy = e.clientY - drag.py;
+    drag.moved += Math.abs(ddx) + Math.abs(ddy);
     drag.px = e.clientX;
     drag.py = e.clientY;
-    view.x += dx;
-    view.y += dy;
+    view.x += ddx;
+    view.y += ddy;
+    // Apply rubber-banding during drag.
+    const lr = legalRange();
+    if (view.x < lr.minX || view.x > lr.maxX ||
+        view.y < lr.minY || view.y > lr.maxY) {
+      applyRubber();
+    }
     schedulePaint();
   });
-  // A drag that crossed the threshold must not also fire a click (which would
-  // focus whatever frame the pan happened to end over). Read by the click
-  // handler above, which runs after pointerup.
+
   function endDrag(e) {
+    pointers.delete(e.pointerId);
+    // Pinch ended: if one pointer remains, re-init drag from it.
+    if (pinch) {
+      pinch = null;
+      if (pointers.size === 1) {
+        const remaining = [...pointers.values()][0];
+        drag = { px: remaining.x, py: remaining.y, moved: 0 };
+        samples.length = 0;
+        canvas.setAttribute("data-panning", "");
+      } else {
+        settle();
+      }
+      return;
+    }
     if (!drag) return;
     clickSuppressed = drag.moved > 6 || space;
+    // Momentum: check velocity and glide or settle.
+    const v = velocity();
+    const speed = Math.hypot(v.vx, v.vy);
     drag = null;
     canvas.releasePointerCapture(e.pointerId);
     canvas.removeAttribute("data-panning");
+    if (speed > FLICK && !space) {
+      glide(v.vx, v.vy);
+    } else {
+      settle();
+    }
   }
   canvas.addEventListener("pointerup", endDrag);
   canvas.addEventListener("pointercancel", endDrag);
 
+  // --- Keyboard ---
+
   addEventListener("keydown", (e) => {
     if (compact.matches) return;
-    // Let the focused frame's own inputs and buttons keep their keystrokes —
-    // Space on a <button> must activate it, not arm space-drag.
-    if (e.target.closest("button, input, textarea, select, [contenteditable]")) return;
-    if (e.code === "Space") space = true;
-    // Keyboard-initiated actions jump instantly — they are high-frequency and
-    // operated, not watched. Animation on a shortcut is slop.
-    else if (e.key === "0" || e.key.toLowerCase() === "f") focus(null, true);
-    // Zoom to 100% about the viewport center. Setting k alone would scale
-    // about the plane origin and fling the composition off-screen.
+    if (e.target.closest("button, input, textarea, select, [contenteditable]")) {
+      // Exception: let Escape bubble out of controls.
+      if (e.key !== "Escape") return;
+    }
+    if (e.code === "Space") { space = true; return e.preventDefault(); }
+    if (e.key === "0" || e.key.toLowerCase() === "f") focus(null, true);
     else if (e.key === "1") centerZoom(1 / view.k);
     else if (e.key === "Escape") focus(null, true);
     else if (e.key === "+" || e.key === "=") centerZoom(1.2);
     else if (e.key === "-") centerZoom(1 / 1.2);
-    else if (e.key === "ArrowLeft") pan(60, 0);
-    else if (e.key === "ArrowRight") pan(-60, 0);
+    // Left/Right: tour step if tour exists, else pan.
+    else if (e.key === "ArrowLeft") { tour.length >= 2 ? tourStep(-1) : pan(60, 0); }
+    else if (e.key === "ArrowRight") { tour.length >= 2 ? tourStep(1) : pan(-60, 0); }
     else if (e.key === "ArrowUp") pan(0, 60);
     else if (e.key === "ArrowDown") pan(0, -60);
     else return;
@@ -550,26 +1021,41 @@ a specific composition, but name why.
   });
   addEventListener("keyup", (e) => { if (e.code === "Space") space = false; });
 
-  document.getElementById("zoom-in").addEventListener("click", () => centerZoom(1.2));
-  document.getElementById("zoom-out").addEventListener("click", () => centerZoom(1 / 1.2));
-  document.getElementById("zoom-fit").addEventListener("click", () => focus(null));
+  // --- Zoom cluster + tour button wiring ---
 
-  // Crossing the breakpoint in either direction re-establishes the right mode:
-  // stacked read clears the transform and un-inerts every body so the document
-  // stays operable; canvas re-fits. The static `inert` in the markup means the
-  // stacked read is correct on a first paint that never runs the canvas path.
+  document.getElementById("zoom-in")?.addEventListener("click", () => centerZoom(1.2));
+  document.getElementById("zoom-out")?.addEventListener("click", () => centerZoom(1 / 1.2));
+  document.getElementById("zoom-fit")?.addEventListener("click", () => focus(null));
+  tourPrev?.addEventListener("click", () => tourStep(-1));
+  tourNext?.addEventListener("click", () => tourStep(1));
+
+  // --- Hash listener ---
+
+  addEventListener("hashchange", () => {
+    if (applyingHash) return;
+    applyHash();
+  });
+
+  // --- Init ---
+
   function init() {
     if (compact.matches) {
       cancelAnimationFrame(raf);
       canvas.removeAttribute("style");
       focused?.removeAttribute("data-focused");
       focused = null;
+      tourIndex = -1;
+      spotlight(null);
       for (const f of frames) f.querySelector(".oa-frame-body").inert = false;
-      for (const n of notes) n.dataset.collapsed = "false";
+      for (const n of notes) setNoteCollapsed(n, false);
+      updateTourUI();
       return;
     }
     focus(null);
     fitTo(bounds(), 0);
+    updateTourUI();
+    // Apply deep link after initial fit.
+    requestAnimationFrame(() => applyHash());
   }
   compact.addEventListener("change", init);
   addEventListener("resize", () => { if (!compact.matches && !focused) fitTo(bounds(), 0); });
@@ -586,20 +1072,39 @@ are unitless pixel numbers describing the **body**.
 <div class="oa-canvas" id="canvas" role="group"
      aria-label="Canvas. Drag to pan, ctrl-scroll to zoom, click a frame to focus.">
   <div class="oa-plane" id="plane">
-    <!-- connectors: one inline SVG in world coords, behind the frames -->
-    <svg class="oa-connectors" aria-hidden="true"><path d="M ..."/></svg>
+    <!-- connectors: one inline SVG in world coords, behind the frames.
+         data-from/data-to reference frame ids for spotlight linking. -->
+    <svg class="oa-connectors" aria-hidden="true">
+      <path d="M ..." data-from="login" data-to="dashboard"/>
+    </svg>
 
-    <section class="oa-frame" style="--x:0;--y:0;--w:390;--h:844">
+    <!-- Every frame MUST have a human-readable kebab-case id (deep-link key).
+         Optional data-tour="n" enrolls the frame in the guided tour. -->
+    <section class="oa-frame" id="login" data-tour="1"
+             style="--x:0;--y:0;--w:390;--h:844">
       <button class="oa-frame-label" type="button">Login</button>
+      <div class="oa-frame-body" inert><!-- real, operable UI --></div>
+    </section>
+
+    <section class="oa-frame" id="dashboard" data-tour="2"
+             style="--x:510;--y:0;--w:1440;--h:900">
+      <button class="oa-frame-label" type="button">Dashboard</button>
       <div class="oa-frame-body" inert><!-- real, operable UI --></div>
     </section>
 
     <p class="oa-note" style="--x:150;--y:920">Cold-start empty state still open.</p>
   </div>
 </div>
-<div class="oa-zoom" role="group" aria-label="Zoom controls">
+<!-- Tour controls: include only when at least one frame has data-tour. -->
+<div class="oa-zoom" role="group" aria-label="Zoom and tour controls">
+  <div class="oa-tour" role="group" aria-label="Guided tour">
+    <button id="tour-prev" type="button" aria-label="Previous step">Prev</button>
+    <output id="tour-status" aria-label="Tour progress">1 / 2</output>
+    <button id="tour-next" type="button" aria-label="Next step">Next</button>
+    <div class="oa-tour-sep" aria-hidden="true"></div>
+  </div>
   <button id="zoom-out" type="button" aria-label="Zoom out">&minus;</button>
-  <output id="zoom-pct">100%</output>
+  <output id="zoom-pct" aria-label="Current zoom">100%</output>
   <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
   <button id="zoom-fit" type="button" aria-label="Fit all to view">⤢</button>
 </div>
@@ -626,8 +1131,19 @@ focused by clicking it. Put `inert` on `.oa-frame-body` only — on the wrapper 
 kills click-to-focus for the same reason.
 
 A frame holds a bounded screen/slide/variant. Build the UI for real, with real
-states — the "no fake screenshots" ban in `design.md` explicitly exempts the case
+states -- the "no fake screenshots" ban in `design.md` explicitly exempts the case
 where the artifact *is* the prototype, and a canvas of frames is that case.
+
+**Every frame must have an `id`.** Human-readable kebab-case derived from the
+frame's purpose: `id="login"`, `id="settings-billing"`, never `id="frame-1"`
+or `id="f2"`. The id is the deep-link anchor (`#login` opens and focuses that
+frame), the spotlight adjacency key, and the inspectable-markup requirement
+from `design.md`. A frame without an id breaks deep links and spotlight.
+
+**Tour order is spatial narrative.** When `data-tour` attributes are present,
+adjacent tour steps must be spatial neighbors or connected by a visible
+connector path. The camera movement between steps reads as travel through the
+composition, not teleportation. Number steps by the story's reading order.
 
 ## The freeform contract
 
@@ -635,12 +1151,17 @@ Between frames: sticky notes (`.oa-note`, `--accent-soft` + one `--elev-ring`),
 annotations, connector lines (one inline `<svg class="oa-connectors">` in world
 coordinates, `stroke: var(--border)`, accent only to mark the primary path), and
 a legend (a `.oa-note`). Freeform elements take `--x`/`--y` but no label and no
-focus behavior. A connector must encode a real relation — never decorative
-spaghetti.
+focus behavior.
+
+**Every connector path must carry `data-from` and `data-to` referencing real
+frame ids.** A connector without these attributes cannot participate in spotlight
+highlighting, and likely represents a decorative line rather than a real relation.
+No decorative spaghetti.
 
 **Place notes in the gutters, not over frames.** A note's `--x/--y` is its
-top-left; `max-width: 22ch` counter-scales to ~3× at low overview zoom, so a
-note whose box intersects a frame body lands *on top of* that frame's content.
+top-left while expanded and its center while collapsed; `max-width: 28ch`
+counter-scales to ~3× at low overview zoom, so a note whose box intersects a
+frame body lands *on top of* that frame's content.
 Before placing a note, compute its right edge (`--x + ~22ch ≈ --x + 360 world
 px`) and bottom edge (`--y + ~120 world px`) and confirm neither crosses a
 frame's `--x..--x+--w` / `--y..--y+--h` rectangle. The gutter between two
@@ -654,7 +1175,8 @@ accent chip (the vendored Remix `ri-edit` glyph, masked so it inherits
 Clicking a chip — or Enter/Space on it, chips are focusable buttons — pins it
 open in place; crossing the zoom threshold resets the pin, and zooming in past
 the threshold expands every note. Author content lives inside the note as
-normal — no markup change needed; the runtime adds `tabindex`/`role` itself.
+normal — no markup change needed; the runtime adds `tabindex`, `role`, and
+`aria-expanded` only while the note is collapsed.
 
 ## Accessibility
 
@@ -667,20 +1189,50 @@ handler bails when the target is an `input`/`textarea`/`select`/`contenteditable
 so a focused frame's form keeps its keystrokes.
 
 Every tween checks `prefers-reduced-motion` and jumps instantly. Frame labels
-counter-scale by `1/k` (capped at 3×) so they stay legible at any zoom.
+counter-scale by `1/k` (capped at 3x) so they stay legible at any zoom.
 Zoom-cluster buttons are 44px.
 
+**Multi-touch pinch is implemented.** The runtime tracks up to two pointers
+via a `pointers` Map. When two pointers are active, drag is cancelled and the
+runtime zooms about their midpoint using `zoomAt()` with the same MIN/MAX
+clamp as wheel-zoom. Beyond the clamp limits, pinch applies log-scale rubber-
+banding so the gesture feels elastic, not locked; releasing snaps back via
+`settle()`. A third pointer is ignored. Falling to one pointer re-samples
+velocity for a potential flick. `touch-action: none` is required on the
+canvas for this to work (it suppresses native pinch, which would fight the
+custom handler). Below 640px the plane is stacked and pinch is not active.
+
+**Tour keyboard model.** When `data-tour` frames exist and `tour.length >= 2`:
+Left/Right arrow keys step through the tour (this is a named exception to the
+"arrows pan" rule, per the frequency table in `motion.md`: tours are
+occasional and deliberate). Up/Down still pan. Without `data-tour` frames,
+all four arrow keys pan (backwards compatible). Tour steps animate the camera
+at the standard 400ms fit tween; `prefers-reduced-motion` makes them instant.
+`Escape` returns to overview and resets the tour index. Prev/next buttons are
+real `<button>` elements with `aria-label`. Progress is an `<output>` showing
+"n / N" in tabular-nums.
+
+**Deep links via `#frame-id`.** On load, if `location.hash` matches a frame
+id, that frame receives focus (with the standard fit animation, or instantly
+under reduced-motion). Clicking or tabbing to a frame updates the hash via
+`history.replaceState` (no new history entries, so Back does not step through
+frames). Returning to overview clears the hash. A `hashchange` listener
+handles external navigation (shared links, bookmarks).
+
+**Spotlight is driven by hover and focus**, never applied decoratively.
+Hovering a frame (gated behind `@media (hover: hover) and (pointer: fine)`)
+or focusing a frame label via keyboard both activate spotlight on that frame
+and its connected neighbors. Moving the pointer away or blurring the label
+clears spotlight. When a frame is focused (zoomed in), spotlight is
+suppressed. Spotlight never weakens the focus ring.
+
 **The mobile story.** Below 640px the plane linearizes into a scrolling stack
-of full-width frames; the grid, connectors, and zoom cluster hide, and every
-handler bails. The gate is viewport **width**, not `(pointer: coarse)` — a
+of full-width frames; the grid, connectors, zoom cluster, and tour controls
+hide, and every handler bails. Spotlight is also disabled (opacity overridden
+to 1). The gate is viewport **width**, not `(pointer: coarse)` -- a
 touchscreen laptop drives a canvas fine, while a narrow mouse-driven window
-cannot, so input type is the wrong signal. Crossing the breakpoint live re-runs
-`init()` in both directions. State the honest limitation: **multi-touch pinch is
-not implemented.** Trackpad pinch works because browsers deliver it as `wheel` +
-`ctrlKey`; a touch tablet above 640px pans by drag and zooms with the cluster
-buttons. `touch-action: none` is required for drag-pan to work at all, and it
-suppresses native pinch — faking a worse pinch than the browser's is not a trade
-worth making.
+cannot, so input type is the wrong signal. Crossing the breakpoint live
+re-runs `init()` in both directions.
 
 ## Bans
 
@@ -693,7 +1245,16 @@ worth making.
 - The dot grid stays `var(--border)` and fades; not high-contrast graph paper.
 - No row of identical device mockups (the identical-card-grid trope, spatial
   form).
-- No infinite plane holding one frame — that is a document, so drop `--canvas`.
+- No infinite plane holding one frame -- that is a document, so drop `--canvas`.
+- No auto-playing tours. The tour is driven by the viewer (click or arrow key),
+  never a timed slideshow or screensaver.
+- No arbitrary tour order. Tour steps must follow the spatial narrative rule
+  (adjacent steps are neighbors or connected). Random jumps across the canvas
+  break the travel metaphor.
+- No `frame-1` / `f2` / `section-3` hash ids. Frame ids are human-readable
+  kebab-case derived from purpose (`login`, `settings-billing`).
+- No decorative spotlight. The dimming effect responds only to hover or focus,
+  never as a default resting state of the canvas.
 
 ## Ship gate — canvas addendum
 
@@ -712,3 +1273,22 @@ Run the `design.md` ship gate, plus:
 - [ ] 640px degrades to the stacked read; content fully reachable, no pinch
       required, zoom cluster hidden.
 - [ ] In-memory state only (no `localStorage`); no external requests.
+
+**Canvas fluid-interaction addendum** (all items P0 when included):
+- [ ] Flick-to-glide decays naturally and a mid-flight grab stops it with no
+      jump (interruptible, per `motion.md`).
+- [ ] Over-scroll shows rubber-band resistance; releasing snaps back.
+- [ ] Pinch-to-zoom tracks two pointers, respects MIN/MAX with rubber-band,
+      and shares the same clamp as ctrl+wheel.
+- [ ] Double-click zooms in at the pointer; Shift+double-click zooms out.
+- [ ] Tour steps follow `data-tour` order with camera animation, "n / N"
+      progress, and Escape returns to overview. Tour order reads as spatial
+      travel (adjacent steps are neighbors or connected).
+- [ ] Hover or focus on a frame lights it and its connected neighbors;
+      everything else dims. Moving away clears spotlight.
+- [ ] `#frame-id` in the URL focuses that frame on load. Clicking or
+      focusing a frame updates the hash via replaceState. Overview clears it.
+- [ ] `prefers-reduced-motion` collapses all physics and camera tweens to
+      instant, without locking input.
+- [ ] Keyboard-only: all features reachable (tour arrows, zoom shortcuts,
+      frame focus via Tab, Escape to overview).

@@ -1,5 +1,9 @@
 # Motion patterns (Level 3)
 
+> Sources: [open-design](https://github.com/nexu-io/open-design) motion
+> system, Emil Kowalski's easing/frequency/duration rules. See root README
+> credits.
+
 Level 3 artifacts use **native browser APIs only** — no Framer Motion, no
 GSAP, no CDN scripts. The strict CSP (`script-src 'unsafe-inline';
 default-src 'none'`) blocks all external requests, so every animation is
@@ -17,6 +21,22 @@ eye), narrative (revealing in a sequence that matters), feedback
 (acknowledging an action), or state (showing something changed). "It looks
 cool" is not a reason; motion without a reason is the AI-generated feeling.
 
+### Frequency table
+
+The reason also gates the *budget*. Higher-frequency actions get less motion:
+
+| Frequency | Examples | Motion budget |
+| --- | --- | --- |
+| 100+/day | keyboard shortcut, palette toggle, tab switch | **None.** Jump to end state instantly. These are operated, not watched (see Anti-patterns). |
+| Dozens/day | dropdown, tooltip, hover reveal | Minimal, <=150ms. Feedback only. |
+| Several/day | modal open, drawer, route change | Standard durations from the ladder below. |
+| Rare / first-time | onboarding, empty-state reveal, first launch | Delight permitted. Longer durations, richer materials. |
+
+When in doubt, one tier less motion than you think. The canvas runtime's
+keyboard shortcuts (`0`/`F`/`Esc`/`1`/`+`/`-`) are all 100+/day tier and
+jump instantly; the guided tour (occasional, deliberate) is the named
+exception that earns a camera animation.
+
 ## Easing and duration
 
 `--ease-out-expo` (settle, premium) and `--ease-spring` (overshoot, lively)
@@ -24,21 +44,103 @@ ship in the token contract — don't redefine them. Add locally if needed:
 
 ```css
 --ease-in-out-quad: cubic-bezier(0.45, 0, 0.55, 1);  /* balanced, ambient */
+--ease-in-out-strong: cubic-bezier(0.77, 0, 0.175, 1); /* dramatic in-out */
+--ease-out-drawer: cubic-bezier(0.32, 0.72, 0, 1);     /* drawer / sheet */
 ```
 
-Use `--ease-out-expo` for entrances (things arriving), `--ease-spring` for
-emphasis (one or two moments per page, not everywhere). Never linear for
-organic motion, never bounce/elastic on UI. Durations follow the ladder:
+### Easing decision tree
 
-| Duration | Use |
-| --- | --- |
-| 100–150ms | feedback — press, toggle, color |
-| 200–300ms | state — menu, tooltip, hover reveal |
-| 300–500ms | layout — accordion, drawer, view transition |
-| 500–800ms | entrances — load sequence, hero reveal (L3 only) |
+Pick by intent, not by feel:
+
+| Intent | Token / curve | Notes |
+| --- | --- | --- |
+| Enter (appear, slide in) | `--ease-out-expo` | Near-equivalent to Emil's `cubic-bezier(0.23,1,0.32,1)`. |
+| Exit (dismiss, slide out) | `--ease-out-expo` | Same curve, ~75% of entrance duration. |
+| Move / resize in view | `--ease-in-out-quad` | Balanced, ambient. |
+| Hover, color, opacity | `--ease-standard` | The token's default ease. |
+| Emphasis (one per page) | `--ease-spring` | Overshoot. Use sparingly. |
+| Drawer / bottom sheet | `--ease-out-drawer` | Soft deceleration. |
+| Dramatic in-out | `--ease-in-out-strong` | Pin, hold, release. |
+| Uniform / progress | `linear` | Only for timed progress or hold-to-confirm. |
+| Unsure | `--ease-out-expo` | When in doubt, ease out. |
+
+Never linear for organic motion, never bounce/elastic on UI.
+
+### Duration ladder
+
+| Duration | Use | Element examples |
+| --- | --- | --- |
+| 80–100ms | instant feedback | toggle snap, checkbox fill (below ~80ms a transition is imperceptible, so button `:active` skips it entirely) |
+| 100–160ms | fast feedback | press scale, color shift, icon swap |
+| 125–200ms | tooltip, small state | tooltip, badge, chip |
+| 150–250ms | dropdown, menu | select menu, popover, tab panel |
+| 200–350ms | modal, drawer | dialog, slide-over, nav drawer |
+| 300–500ms | layout shift | accordion, view transition, reorder |
+| 500–800ms | entrance sequence | load stagger, hero reveal (L3 only) |
+
+**UI motion stays under 300ms unless you can name the reason it needs
+longer.** Entrances (500-800ms) are the named exception for L3 hero moments.
 
 Exits run ~75% of the matching entrance duration — leaving is quicker than
-arriving.
+arriving. open-design's enter-200ms/exit-140ms pair is exactly this ratio and
+works well for mid-tier elements.
+
+## Interruptibility
+
+**Animate from the current rendered value, never from a fixed start.**
+When a user grabs mid-flight, the animation stops where it is and input
+takes over with no jump.
+
+**Never lock input during an animation.** A tween that blocks pointer or
+keyboard events forces the user to wait for your transition, which feels
+broken.
+
+**High-frequency triggers use `transition`, not `keyframes`.** A CSS
+transition re-targets from its current interpolated value when the property
+changes mid-flight; a `keyframes` animation restarts from `from{}`. For any
+element the user can trigger faster than the animation completes (dropdowns,
+tabs, hover states), prefer `transition` so a re-trigger reads as a smooth
+course correction, not a stutter.
+
+```css
+/* Bad — keyframes restart on re-trigger */
+.dropdown { animation: slide-down 200ms var(--ease-out-expo); }
+
+/* Good — transition redirects mid-flight */
+.dropdown { transition: transform 200ms var(--ease-out-expo),
+                        opacity 200ms var(--ease-out-expo); }
+```
+
+The canvas runtime's mid-flight grab (pointerdown cancels the running
+`requestAnimationFrame` loop and resumes from `view`'s current values) is
+the JS equivalent of this rule.
+
+## Transform origin and asymmetric timing
+
+**Set `transform-origin` to the trigger.** A dropdown opens from its
+toggle, a modal from the button that launched it, a tooltip from its anchor.
+The eye tracks the cause, so motion should expand outward from there.
+Exception: centered modals with no spatial trigger open from center.
+
+**Asymmetric hold-to-action timing communicates consequence.** The pressing
+phase is slow and deliberate (linear, 1.5-2s), giving the user time to
+reconsider; the release on cancel is fast and forgiving (ease-out, 150-200ms).
+
+```css
+/* Hold-to-delete: slow fill = deliberate, fast drain = forgiving */
+.hold-bar {
+  transform-origin: left;
+  transform: scaleX(0);
+}
+.hold-bar.pressing {
+  transform: scaleX(1);
+  transition: transform 2s linear;      /* slow, deliberate */
+}
+.hold-bar.released {
+  transform: scaleX(0);
+  transition: transform 200ms var(--ease-out-expo); /* fast, forgiving */
+}
+```
 
 ## Motion materials
 
@@ -49,6 +151,15 @@ stay smooth. The rule is not "transform only" — it is: never animate
 layout-driving properties (`top`/`left`/`width`/`height`/margins), keep
 expensive paint areas small and isolated, and verify smoothness mentally on
 a mid-range phone.
+
+**Keep `blur()` under 20px.** Larger radii are expensive to composite and
+read as a rendering glitch rather than a material. 4-12px is the sweet spot
+for depth-of-field effects.
+
+**Use `translateY(100%)` for self-height sliding.** When an element's own
+height is the travel distance (bottom sheet, notification toast), percentage
+translate references the element's own box, so no JS measurement needed and
+it stays correct as content resizes.
 
 ## Page-load sequence
 
@@ -77,7 +188,9 @@ lead with the most characteristic thing.
 ```
 
 Keep the cascade under 6 items and total under 800ms — longer feels like a
-loading screen, not an entrance.
+loading screen, not an entrance. **Stagger delay 30-80ms per item, and never
+block interaction on the stagger** — each element must be clickable as soon
+as it paints, even if siblings are still animating in.
 
 ## Scroll-triggered reveals
 
@@ -192,6 +305,12 @@ not decoration.
 Don't animate `box-shadow` directly on heavy elements — animate a pseudo-
 element's opacity layered behind for better perf.
 
+**Tooltip group-show pattern.** After the first tooltip in a group appears
+(with its standard delay), subsequent tooltips in the same group show
+instantly while the pointer stays in the group's region. This avoids
+penalizing the user with repeated delays for sequential discovery. Reset
+the delay when the pointer leaves the group entirely.
+
 ## Animated numerics
 
 Count up on reveal. Use `requestAnimationFrame` with an ease-out curve, never
@@ -254,6 +373,20 @@ as a loading state.
 - Motion that hides content from reduced-motion users — always provide the
   static endpoint.
 
+### Fix priority
+
+When auditing motion problems, fix in this order (highest damage first):
+
+1. **Delete** — remove animations that have no one-sentence reason
+2. **Reduce** — drop high-frequency actions to instant (frequency table)
+3. **Fix easing** — replace `ease-in` and `linear` on organic motion
+4. **Fix origin** — align transform-origin to the trigger
+5. **Make interruptible** — switch keyframes to transitions where re-trigger is possible
+6. **GPU-promote** — move layout-property animations to transform/opacity
+7. **Asymmetric timing** — add deliberate/forgiving asymmetry to destructive holds
+8. **Polish** — tune duration, add stagger, refine materials
+9. **A11y** — verify reduced-motion path shows the static endpoint
+
 ## Budget
 
 A Level 3 page should have **one orchestrated moment** (the load sequence or
@@ -262,3 +395,9 @@ one place; ornament elsewhere reads as AI-slop. On a `--canvas` page
 (references/canvas.md) that moment is the overview → focus zoom — don't also
 stack scroll-reveal theatre inside frames, and there is no page scroll to drive
 `animation-timeline: scroll()`. One orchestrated camera move, quiet frames.
+
+**Motion matches the page's personality.** An editorial/documentation page
+earns no bounce and no overshoot; a playful product launch may earn one
+`--ease-spring` moment. The frequency table, duration ladder, and easing
+decision tree above are constraints, not style — apply them within the page's
+own voice.

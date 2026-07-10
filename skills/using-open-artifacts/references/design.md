@@ -1,5 +1,10 @@
 # Designing artifact pages
 
+> Sources: [open-design](https://github.com/nexu-io/open-design),
+> Claude's `artifact-design` skill,
+> [impeccable](https://github.com/pbakaus/impeccable) (Apache-2.0, Paul
+> Bakaus), Emil Kowalski. See root README credits.
+
 You are an expert designer working with the user as your manager. You produce
 design artifacts in HTML (and Markdown). **HTML is your tool, not your
 medium** — pick the specialist before writing any CSS:
@@ -68,6 +73,10 @@ brief is a flow, a set of screens/variants, or a board, reach for it and read
   default, hover, focus-visible, and active; add disabled/loading/empty
   states wherever the interaction can reach them. A tool with half its
   states reads as a mockup, not a tool.
+- **Before building L2+, read
+  `${CLAUDE_SKILL_DIR}/references/interaction.md`** for the eight-state
+  contract, focus visibility, hit targets, form patterns, and waiting states.
+  These are P0 requirements at this level.
 - **Anti-slop focus:** don't add motion that doesn't aid the task. An
   interactive tool is operated, not watched.
 
@@ -86,7 +95,7 @@ brief is a flow, a set of screens/variants, or a board, reach for it and read
   pinned sections, animated numerics, spring-like easing.
 - **Motion:** deliberate and orchestrated — but spend the boldness in one
   place and keep everything around it quiet. Extra animation is where the
-  AI-generated feeling creeps in.
+  AI-generated feeling creeps in. `interaction.md` applies here too.
 - **Anti-slop focus:** the slop tropes (gradient heroes, acid pops, emoji
   markers) are most seductive at L3. Resist them; pick one distinctive,
   subject-grounded move instead.
@@ -123,6 +132,13 @@ Orthogonal to level, decide the register — it changes what "good" means:
    theme, component styles, CLAUDE.md), read it **fully and once** and apply
    it. Precedence: the user's words, then the project's existing system, then
    your choices. Build with real content throughout — never lorem ipsum.
+   When the user provides brand or design-system documentation, map it
+   against nine segments before designing: theme (light/dark posture),
+   color (palette + usage rules), type (faces + scale), layout (grid +
+   spacing system), components (button/card/input recipes), motion (easing +
+   duration), icons (set + sizing), voice (copy tone), edge cases (empty/
+   error/loading). Gaps in the map are decisions you must name explicitly,
+   not blanks you fill silently.
 3. **Plan — and say the plan out loud.** For anything beyond a one-shot
    tweak, state three things before building, so the user can redirect
    cheaply:
@@ -220,9 +236,12 @@ assembled one.
 - **Dark theme is not inverted light theme.** Depth comes from surface
   lightness, not shadow — `--surface-2` exists for the raised tier. Keep the
   accent's hue, drop its chroma a notch (high chroma glows on dark).
+  Dark-mode depth is a lightness staircase: `--bg` ~15%, `--surface` ~20%,
+  `--surface-2` ~25% (hue and chroma stay constant across the three).
   Light-on-dark text reads thinner and tighter than dark-on-light: add
-  0.05–0.1 line-height and a touch of letter-spacing (0.01em) to long body
-  copy in the dark block.
+  0.05–0.1 line-height and a touch of letter-spacing (0.01-0.02em) to long
+  body copy in the dark block, and bump body font-weight one step (regular
+  to medium, or +25-50 on a variable axis) as the third compensation axis.
 - **Heavy alpha is a smell.** Layers of `rgba()` create unpredictable
   contrast; define explicit surface colors instead. Exceptions: focus rings,
   `--accent-soft` tints, scrims.
@@ -252,6 +271,9 @@ Selection procedure for brand-register pages: write three concrete voice
 words for the brief (physical-object words — "warm, mechanical, opinionated",
 not "modern, clean"), then pick the stack whose voice matches. If your pick
 is what you'd have reached for on any brief in this category, look again.
+Reflex defense: if the brand brief defaults to the Neutral product UI stack
+for a brand-register page, that is the same reflex as picking system-ui for
+everything. Name the real reason or pick again.
 Always end serif stacks in `serif`, mono stacks in `monospace`.
 
 - **Pair on a contrast axis** (serif display + sans body, geometric + mono
@@ -263,7 +285,14 @@ Always end serif stacks in `serif`, mono stacks in `monospace`.
   strong hierarchy combines 2–3 dimensions at once (size + weight + space).
 - **Display ceiling:** hero `clamp()` max ≤ 6rem (~96px); `--text-display`
   in the contract already respects this. Above it the page is shouting.
+  The clamp max should be ≤ ~2.5x the clamp min (the contract's
+  `--text-display` at 1.8x is well within this).
   Display letter-spacing floor ≥ -0.04em; tighter and letters touch.
+- **Optical alignment:** display-size text gets a small negative
+  `text-indent` (~-0.05em) so the first glyph aligns visually with body
+  text below it. Icons that point (play triangles, arrows) shift toward
+  their direction by 1-2px so the visual center, not the bounding box,
+  reads as aligned.
 - **ALL-CAPS needs tracking**: any uppercase label gets
   `letter-spacing: var(--tracking-caps)` (~0.08em). Caps at default spacing
   read cramped; caps below 11px are unreadable.
@@ -282,6 +311,10 @@ Always end serif stacks in `serif`, mono stacks in `monospace`.
   `gap: var(--space-*)` so siblings don't collapse or double. **Vary the
   rhythm**: tight inside groups (8–12px), generous between sections
   (48–96px). Equal spacing everywhere means no hierarchy anywhere.
+  **Derive text-block spacing from the body line-box**: paragraph gaps of
+  ~1-1.5x the body line-height, then snap to the nearest `--space-*` token.
+  This anchors vertical rhythm to the typography rather than to an arbitrary
+  grid.
 - **The squint test**: blur your mental image of the page — the primary
   element, secondary element, and groupings should still be identifiable.
   If everything has equal weight, restructure before styling.
@@ -338,6 +371,15 @@ Specificity is a design material; fake content is structural slop.
   desks"), fake-humble marketing ("quietly trusted by"), and micro-meta
   sentences under headings that explain the section instead of being it.
   Quotes: ≤ 3 lines, attributed name + role, or cut.
+  **Button labels are verb-noun phrases** ("Delete 3 files", "Export CSV"),
+  never "OK", "Submit", "Confirm", or "Yes" (see `interaction.md`
+  destructive-actions rule). Em-dash density is a tell: more than roughly
+  one per paragraph in UI copy suggests generated prose. Prefer commas,
+  parentheses, or a second sentence.
+- **i18n elasticity.** German expands ~30%, French ~15-20%, Chinese
+  contracts ~30% compared to English. Buttons, tabs, and nav items need
+  width headroom or `min-width` so translated strings don't clip or wrap.
+  Test the layout at 130% string length before calling it responsive.
 - **Use appropriate scales.** Mobile hit targets ≥ 44px. Body ≥ 14px on
   mobile (16px for long-form).
 
@@ -432,6 +474,10 @@ answer.
 - **Numbered section markers as scaffolding** (`01 / 02 / 03` over every
   section). Numbers earn their place only when the section IS an ordered
   sequence and the order carries information.
+- **Icon-tile stacks.** Rounded-corner icon tiles floating above every card
+  heading (a gradient circle with a white glyph, repeated across a feature
+  grid). This is the universal AI feature-card pattern; replace with inline
+  SVG at text size, or drop the icon entirely.
 
 **Surface**
 - **Gradient text.** `background-clip: text` over a gradient. Use one solid
@@ -444,6 +490,14 @@ answer.
 - **Pure `#000` page backgrounds, and `#000`-on-`#fff` body text.** Dark
   surfaces come from the ramp's off-blacks; ink is `--fg`'s off-black, not
   pure black. (Pure-white surfaces are fine — Stripe and GitHub ship them.)
+- **Dark-glow halos.** Colored `box-shadow` bloom on dark backgrounds (a
+  neon glow behind cards or buttons). Dark-mode depth comes from surface
+  lightness steps, not from emissive shadows. If a glow is visible, it is
+  almost certainly wrong.
+- **Italic-serif display heroes.** A large italic serif headline over a dark
+  or gradient background. This combination is a saturated AI tell,
+  especially when the serif is Didot/Bodoni at hero scale with no supporting
+  typographic system beneath it.
 
 **Copy & ornament**
 - **Invented metrics, names, and logos** (see Content honesty). Honest
@@ -452,6 +506,9 @@ answer.
   `SCROLL ↓` cues, locale/weather strips ("LIS 14:23 · 18°C"), label pills
   overlaid on graphics, photo-credit-style captions on things that aren't
   photos, `A · B · C` word strips at the hero's bottom edge.
+- **Aphoristic copy cadence.** "Not a feature. A platform." "Less tool.
+  More partner." The staccato fragment-period-fragment rhythm is itself
+  an AI tell regardless of content. Write complete sentences.
 - **Text that overflows its container.** Long heading words + a large
   `clamp()` + a narrow grid overflow on tablet/mobile. Test the real copy at
   360/390/768px; the viewport is part of the design.
@@ -674,8 +731,9 @@ not loop on renders, and do not publish with a failing P0.
       bar, `#000` page backgrounds.
 - [ ] Kicker count ≤ ceil(sections / 3); no `01/02/03` scaffolding.
 - [ ] One accent hue; semantic colors only where they mean something.
-- [ ] Every interactive control: hover + focus-visible + active states;
-      keyboard path works (L2+).
+- [ ] Every interactive control ships its reachable states per
+      `interaction.md`'s eight-state contract (L2+); keyboard path works;
+      hit targets >= 44px.
 - [ ] Motion (if any) wrapped for `prefers-reduced-motion`, and content
       visible without JS (no opacity-0 that only JS clears).
 - [ ] Copy self-audit done: no lorem, no invented stats/names/logos, no
