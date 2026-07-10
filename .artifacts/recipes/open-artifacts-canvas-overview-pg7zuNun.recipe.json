@@ -1,0 +1,44 @@
+{
+  "$schema": "../../skills/using-open-artifacts/references/recipe.schema.json",
+  "version": 1,
+  "artifact": {
+    "title": "Open Artifacts — canvas overview",
+    "description": "",
+    "favicon": "🎨",
+    "format": "html",
+    "level": 2,
+    "canvas": true,
+    "channel": "project-intro-canvas",
+    "scope": "canvas-mode overview of open-artifacts: the project, publishing flow, levels+canvas, design directions",
+    "watch": [
+      "README.md",
+      "docs/architecture.md",
+      "skills/using-open-artifacts/references/canvas.md"
+    ],
+    "local": false,
+    "autoUpdate": false
+  },
+  "document": {
+    "language": "en",
+    "theme": "migrated",
+    "fragments": {
+      "theme": [
+        "../fragments/open-artifacts-canvas-overview-pg7zuNun/theme.css"
+      ],
+      "styles": [],
+      "body": [
+        "../fragments/open-artifacts-canvas-overview-pg7zuNun/body.html"
+      ],
+      "scripts": [
+        "../fragments/open-artifacts-canvas-overview-pg7zuNun/behavior.js"
+      ]
+    }
+  },
+  "security": {
+    "encrypted": false,
+    "passwordCredential": null
+  },
+  "build": {
+    "strategy": "auto"
+  }
+}

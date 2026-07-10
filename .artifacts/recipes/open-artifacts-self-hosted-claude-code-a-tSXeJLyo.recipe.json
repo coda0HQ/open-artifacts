@@ -1,0 +1,54 @@
+{
+  "$schema": "../../skills/using-open-artifacts/references/recipe.schema.json",
+  "version": 1,
+  "artifact": {
+    "title": "Open Artifacts — self-hosted Claude Code Artifacts on Cloudflare",
+    "description": "",
+    "favicon": "📦",
+    "format": "html",
+    "level": 3,
+    "canvas": false,
+    "channel": "project-intro",
+    "scope": "project overview of open-artifacts. DESIGN DIRECTION LOCKED: Brutalist — refresh content only, never change direction.",
+    "watch": [
+      "README.md",
+      "README.zh-CN.md",
+      "docs/architecture.md",
+      "docs/saas-design.md",
+      "src/api.ts",
+      "src/domain.ts",
+      "src/store.ts",
+      "src/tokens.ts",
+      "src/wrap.ts",
+      "src/og.ts",
+      "src/index.ts",
+      "wrangler.jsonc",
+      "skills/using-open-artifacts/**"
+    ],
+    "local": false,
+    "autoUpdate": true
+  },
+  "document": {
+    "language": "en",
+    "theme": "migrated",
+    "fragments": {
+      "theme": [
+        "../fragments/open-artifacts-self-hosted-claude-code-a-tSXeJLyo/theme.css"
+      ],
+      "styles": [],
+      "body": [
+        "../fragments/open-artifacts-self-hosted-claude-code-a-tSXeJLyo/body.html"
+      ],
+      "scripts": [
+        "../fragments/open-artifacts-self-hosted-claude-code-a-tSXeJLyo/behavior.js"
+      ]
+    }
+  },
+  "security": {
+    "encrypted": false,
+    "passwordCredential": null
+  },
+  "build": {
+    "strategy": "auto"
+  }
+}

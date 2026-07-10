@@ -1,0 +1,173 @@
+<div class="oa-canvas" id="canvas" role="group"
+     aria-label="Canvas. Drag to pan, ctrl-scroll to zoom, click a frame to focus.">
+  <div class="oa-plane" id="plane">
+    <svg class="oa-connectors" aria-hidden="true">
+      <!-- Hero -> What it is (primary narrative) -->
+      <path d="M 1440 450 L 1560 450" data-from="hero" data-to="what-it-is"/>
+      <!-- What it is -> Publishing flow (curves down-left) -->
+      <path d="M 1940 900 C 1940 970, 720 970, 720 1040" data-from="what-it-is" data-to="publishing-flow"/>
+      <!-- Publishing flow -> Levels & canvas -->
+      <path d="M 1440 1420 L 1560 1420" data-from="publishing-flow" data-to="levels-canvas"/>
+      <!-- Levels & canvas -> Design directions -->
+      <path d="M 1950 1420 L 2070 1420" data-from="levels-canvas" data-to="design-directions"/>
+    </svg>
+    <!-- F1: Hero — 1440x900, top-left. The thesis. -->
+    <section class="oa-frame" id="hero" data-tour="1"
+             style="--x:0;--y:0;--w:1440;--h:900">
+      <button class="oa-frame-label" type="button">Hero</button>
+      <div class="oa-frame-body" inert>
+        <div class="fr-pad center">
+          <p class="fr-kicker">Open Artifacts</p>
+          <h1 class="fr-h1">Self-hosted Claude Code<br/>Artifacts on Cloudflare.</h1>
+          <p class="fr-lead">Let any coding agent publish self-contained HTML/Markdown pages to shareable URLs, protect them with zero-knowledge passwords, and keep them updated as the project evolves. Runs entirely on Cloudflare, fits the free tier, no accounts anywhere.</p>
+          <div class="fr-row">
+            <span class="fr-pill">Workers</span>
+            <span class="fr-pill">D1</span>
+            <span class="fr-pill">R2</span>
+            <span class="fr-pill">MIT</span>
+            <span class="fr-pill fr-mono">Node &ge; 20</span>
+          </div>
+          <p class="fr-hint">Hosted at <span class="fr-mono">coda0.com</span> or self-host on your own Cloudflare account &mdash; same MIT-licensed engine either way.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- F2: What it is — 760x900, top-right. Supporting panel. -->
+    <section class="oa-frame" id="what-it-is" data-tour="2"
+             style="--x:1560;--y:0;--w:760;--h:900">
+      <button class="oa-frame-label" type="button">What it is</button>
+      <div class="oa-frame-body" inert>
+        <div class="fr-pad tight">
+          <h2 class="fr-h2">What it is</h2>
+          <p class="fr-body sm">An open-source clone of Claude Code Artifacts: an agent skill plus a Cloudflare backend. The skill composes body-only HTML from a Recipe; the Worker wraps it in a sandboxed skeleton; D1 holds metadata and tokens, R2 holds content bodies &mdash; both strongly consistent.</p>
+          <table class="fr-table">
+            <thead><tr><th>Concern</th><th>Design</th></tr></thead>
+            <tbody>
+              <tr><td>Identity</td><td>No accounts. 12-char crypto-random ids. Creation returns a one-time write token; only its SHA-256 is stored.</td></tr>
+              <tr><td>Deterministic sources</td><td>A strict Recipe plus ordered fragments generates every artifact. The builder injects tokens and, for Canvas, the vendored runtime. Manifest v2 records Recipe/input/output hashes; direct HTML/Markdown publishing is rejected.</td></tr>
+              <tr><td>Channels</td><td><span class="fr-mono">artifact.channel</span> in the Recipe binds a stable URL; the CLI keeps a per-channel token (<span class="fr-mono">ch_</span>) in credentials. Only the channel hash is stored server-side.</td></tr>
+              <tr><td>Local mode</td><td><span class="fr-mono">artifact.local: true</span> places sources under gitignored <span class="fr-mono">.artifacts/recipes.local/</span> and <span class="fr-mono">.artifacts/fragments.local/</span>, with state in <span class="fr-mono">manifest.local.json</span>. Shared Recipes/fragments may be committed.</td></tr>
+              <tr><td>Storage</td><td>D1: metadata, token hashes, version index. R2: bodies at <span class="fr-mono">content/&lt;id&gt;/&lt;v&gt;</span>.</td></tr>
+              <tr><td>Serving</td><td>CSP <span class="fr-mono">sandbox</span> + <span class="fr-mono">default-src 'none'</span> &mdash; opaque origin, no cookies, no storage.</td></tr>
+              <tr><td>Link previews</td><td>OpenGraph + Twitter tags on every page. <span class="fr-mono">/og/:id</span> returns a 1200x630 PNG card rasterized on the edge &mdash; no external requests.</td></tr>
+              <tr><td>Passwords</td><td>PBKDF2-HMAC-SHA256 (600k iterations) + AES-256-GCM, client-side. Server stores only <span class="fr-mono">{salt, iv, ciphertext}</span>.</td></tr>
+              <tr><td>Markdown</td><td>Vendored <span class="fr-mono">marked</span> inlined &mdash; encrypted and plain share one code path.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- F3: Publishing flow — 1440x760, second row left. The "how". -->
+    <section class="oa-frame" id="publishing-flow" data-tour="3"
+             style="--x:0;--y:1040;--w:1440;--h:760">
+      <button class="oa-frame-label" type="button">Publishing flow</button>
+      <div class="oa-frame-body" inert>
+        <div class="fr-pad tight">
+          <h2 class="fr-h2 sm">How publishing works</h2>
+          <p class="fr-flow">A zero-dep Node CLI (<span class="fr-mono">artifact.mjs</span>) is the agent's only tool. Every artifact is generated from a versioned JSON <b>Recipe</b> plus ordered <b>fragments</b>; the CLI validates and composes in memory, then sends one final publish request.</p>
+          <div class="fr-code">
+            <code>node skills/using-open-artifacts/scripts/artifact.mjs validate \
+  artifacts/app-interactions.recipe.json
+node skills/using-open-artifacts/scripts/artifact.mjs create \
+  artifacts/app-interactions.recipe.json</code>
+          </div>
+          <div style="display:flex;justify-content:flex-end">
+            <button class="fr-btn" id="copy-cmd" type="button" data-cmd="node skills/using-open-artifacts/scripts/artifact.mjs validate artifacts/app-interactions.recipe.json && node skills/using-open-artifacts/scripts/artifact.mjs create artifacts/app-interactions.recipe.json">Copy command</button>
+          </div>
+          <ol class="fr-steps">
+            <li><strong>Recipe</strong> &mdash; JSON owns title, favicon, scope, <span class="fr-mono">watch</span> globs, channel, level, Canvas mode, locality, and encryption policy. Fragments are ordered theme, styles, body, scripts.</li>
+            <li><strong>validate</strong> &mdash; local builder checks path traversal, duplicate or oversized fragments, external scripts/styles, remote media, network APIs, and (for Canvas) frame IDs, geometry, connectors, tours, and builder-owned controls. Writes nothing.</li>
+            <li><strong>build</strong> &mdash; composes final bytes in memory: injects <span class="fr-mono">tokens.css</span>, then the theme fragment, then vendored Canvas CSS/JS when <span class="fr-mono">canvas: true</span>. No timestamps or random values &mdash; the build is deterministic.</li>
+            <li><strong>publish</strong> &mdash; <span class="fr-mono">create</span> sends one request; the server returns <span class="fr-mono">id</span>, a one-time <span class="fr-mono">writeToken</span>, and a URL. Manifest v2 records the Recipe path and Recipe/input/output hashes only after the publish succeeds.</li>
+            <li><strong>update</strong> &mdash; same id, new immutable version; reads the Recipe from Manifest v2, rebuilds and re-validates in memory, publishes once. <span class="fr-mono">?v=N</span> views history; <span class="fr-mono">baseVersion</span> mismatches return 409.</li>
+            <li><strong>status</strong> &mdash; hashes watched files against the last snapshot, reports every stale artifact; <span class="fr-mono">ack &lt;id&gt;</span> advances the baseline without republishing when the change is out of scope.</li>
+          </ol>
+        </div>
+      </div>
+    </section>
+
+    <!-- F4: Levels & canvas — 390x760 mobile, second row center. -->
+    <section class="oa-frame" id="levels-canvas" data-tour="4"
+             style="--x:1560;--y:1040;--w:390;--h:760">
+      <button class="oa-frame-label" type="button">Levels &amp; canvas</button>
+      <div class="oa-frame-body" inert>
+        <div class="fr-pad tight">
+          <h2 class="fr-h2 sm">Levels &amp; canvas</h2>
+          <div class="fr-tabs" role="tablist" aria-label="Fidelity and canvas">
+            <button role="tab" id="tab-levels" aria-selected="true" aria-controls="panel-levels" type="button">Levels</button>
+            <button role="tab" id="tab-canvas" aria-selected="false" aria-controls="panel-canvas" type="button">Canvas</button>
+          </div>
+          <div class="fr-panel" id="panel-levels" role="tabpanel" aria-labelledby="tab-levels" aria-hidden="false">
+            <p class="fr-body sm">Every artifact picks one of three levels &mdash; fidelity and motion budget.</p>
+            <div class="fr-levels">
+              <div class="fr-lv">1</div><div class="fr-body sm">Typography-led document. No flashy hero, no JS state.</div>
+              <div class="fr-lv">2</div><div class="fr-body sm">Information design. Scannable, stateful, no external requests.</div>
+              <div class="fr-lv">3</div><div class="fr-body sm">Editorial. One orchestrated motion moment, native APIs only.</div>
+            </div>
+          </div>
+          <div class="fr-panel" id="panel-canvas" role="tabpanel" aria-labelledby="tab-canvas" aria-hidden="true">
+            <p class="fr-body sm"><b style="color:var(--accent)">canvas: true</b> swaps the <em>shell</em> &mdash; a pan/zoom plane of frames instead of a scrolling document. Composes with any level.</p>
+            <p class="fr-hint">Vendored runtime: momentum + pinch physics, optional presenter tour, connector spotlighting, <span class="fr-mono">#frame-id</span> deep links, frame + freeform contracts, and a canvas ship-gate.</p>
+            <p class="fr-hint">This board is <span class="fr-mono">level 2, canvas: true</span>.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- F5: Design directions — 660x760, second row right. -->
+    <section class="oa-frame" id="design-directions" data-tour="5"
+             style="--x:2070;--y:1040;--w:660;--h:760">
+      <button class="oa-frame-label" type="button">Design directions</button>
+      <div class="oa-frame-body" inert>
+        <div class="fr-pad tight">
+          <h2 class="fr-h2 sm">Design directions</h2>
+          <p class="fr-body sm">When no brand is specified, pick one of five token directions. This board runs <b style="color:var(--accent)">Modern minimal</b>.</p>
+          <div>
+            <div class="fr-dirrow">
+              <span class="fr-swatch" style="background:oklch(52% 0.10 28)"></span>
+              <div>
+                <p class="fr-dirname">Editorial &mdash; Monocle / FT</p>
+                <p class="fr-dirpost">Serif headlines, paper + ink, one accent.</p>
+              </div>
+            </div>
+            <div class="fr-dirrow">
+              <span class="fr-swatch" style="background:oklch(58% 0.18 255)"></span>
+              <div>
+                <p class="fr-dirname">Modern minimal &mdash; Linear / Vercel <span class="fr-hint">(this board)</span></p>
+                <p class="fr-dirpost">System fonts, crisp neutrals, hairline borders.</p>
+              </div>
+            </div>
+            <div class="fr-dirrow">
+              <span class="fr-swatch" style="background:oklch(56% 0.12 170)"></span>
+              <div>
+                <p class="fr-dirname">Human &mdash; Airbnb / Duolingo</p>
+                <p class="fr-dirpost">Tactile, generous radii, clear hierarchy.</p>
+              </div>
+            </div>
+            <div class="fr-dirrow">
+              <span class="fr-swatch" style="background:oklch(58% 0.16 145)"></span>
+              <div>
+                <p class="fr-dirname">Tech utility &mdash; Datadog / GitHub</p>
+                <p class="fr-dirpost">Data-dense, mono-friendly, tabular numerics.</p>
+              </div>
+            </div>
+            <div class="fr-dirrow">
+              <span class="fr-swatch" style="background:oklch(60% 0.22 25)"></span>
+              <div>
+                <p class="fr-dirname">Brutalist &mdash; Are.na / Yale</p>
+                <p class="fr-dirpost">Loud type, visible grid, oversized serif.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Freeform notes (counter-scaled by the runtime).
+         Placed in the row-gap (y 900-1040) between row 1 and row 2.
+         Neither note's box crosses any frame rectangle. -->
+    <p class="oa-note" style="--x:540;--y:910">Each frame holds real, operable UI &mdash; not bitmap mockups. Click a frame to focus it.</p>
+    <p class="oa-note" style="--x:1700;--y:910">This board is itself a <span class="fr-mono">level 2, canvas: true</span> artifact.</p>
+  </div>
+</div>
