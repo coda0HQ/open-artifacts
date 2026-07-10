@@ -21,7 +21,7 @@ memory; the sandbox is opaque-origin, so `localStorage`/`sessionStorage` throw.
 
 ## Tunable constants
 
-`MIN`/`MAX` (0.1–4× zoom), `PAD` (fit padding, 64 screen px), dot spacing
+`MIN`/`MAX` (0.1–4× zoom), `PAD` (fit padding, 48 screen px), dot spacing
 (24 world px), the wheel-zoom divisor (`/200`), and the 400 ms tween — a camera
 fit reads better slightly longer than `--motion-base`. Override any of them for
 a specific composition, but name why.
@@ -116,7 +116,9 @@ a specific composition, but name why.
 }
 .oa-frame[data-focused] .oa-frame-body { box-shadow: 0 0 0 2px var(--accent); }
 
-/* Freeform layer: notes and connectors share the plane's world coordinates. */
+/* Freeform layer: notes and connectors share the plane's world coordinates.
+   Counter-scaled like frame labels, or a note's max-width: 22ch collapses to
+   a thin sliver at low overview zoom (the single most common canvas bug). */
 .oa-note {
   position: absolute;
   left: calc(var(--x) * 1px);
@@ -128,17 +130,84 @@ a specific composition, but name why.
   border-radius: var(--radius-sm);
   box-shadow: var(--elev-ring);
   font-size: var(--text-sm);
+  transform: scale(min(calc(1 / var(--k, 1)), 3));
+  transform-origin: 0 0;
 }
+/* At overview zoom a counter-scaled note balloons to ~3x and clutters the
+   plane. paint() collapses it to a small pill chip; clicking (or Enter /
+   Space on the focused chip) pins it open until zoom crosses back over the
+   threshold. data-open gates the collapsed styles, so a pinned note shows
+   its full text even while collapsed-by-zoom.
+   Collapsed/pinned notes counter-scale FULLY (no 3x cap) and CENTER on
+   their --x/--y anchor: they are screen-space UI like a Figma comment pin —
+   constant on-screen size at any zoom, pinned by their center so they never
+   creep down-right into neighboring frames. translate comes AFTER scale in
+   the list so the -50% offset resolves in screen pixels, not world pixels. */
+.oa-note[data-collapsed="true"] {
+  transform: scale(calc(1 / var(--k, 1))) translate(-50%, -50%);
+  user-select: none;
+  -webkit-user-select: none;
+  z-index: 1;
+}
+/* Pinned open while collapsed-by-zoom: a floating popover over the plane.
+   Solid surface (the translucent accent tint reads muddy over frames),
+   raised shadow, above neighboring chips. */
+.oa-note[data-collapsed="true"][data-open="true"] {
+  background: var(--surface);
+  box-shadow: var(--elev-ring), var(--elev-raised);
+  z-index: 2;
+  cursor: pointer;
+}
+.oa-note[data-collapsed="true"]:not([data-open="true"]) {
+  max-width: none;
+  width: 44px;
+  height: 28px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  box-shadow: var(--elev-ring), var(--elev-raised);
+  font-size: 0;
+  cursor: pointer;
+}
+/* rem-sized children (e.g. an inline .fr-mono span) ignore the parent's
+   font-size: 0 — zero every descendant or their text leaks out of the chip. */
+.oa-note[data-collapsed="true"]:not([data-open="true"]) * { font-size: 0; }
+.oa-note[data-collapsed="true"]:not([data-open="true"])::after {
+  content: "";
+  width: 13px;
+  height: 13px;
+  background: var(--accent);
+  /* Remix ri-edit, vendored from references/icons.md, as a data-URI mask so
+     the glyph inherits --accent in both themes (content:url() SVGs cannot be
+     recolored). */
+  mask: url('data:image/svg+xml;utf8,<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M6.41421 15.89L16.5563 5.74785L15.1421 4.33363L5 14.4758V15.89H6.41421ZM7.24264 17.89H3V13.6473L14.435 2.21231C14.8256 1.82179 15.4587 1.82179 15.8492 2.21231L18.6777 5.04074C19.0682 5.43126 19.0682 6.06443 18.6777 6.45495L7.24264 17.89ZM3 19.89H21V21.89H3V19.89Z"/></svg>') center / contain no-repeat;
+  -webkit-mask: url('data:image/svg+xml;utf8,<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M6.41421 15.89L16.5563 5.74785L15.1421 4.33363L5 14.4758V15.89H6.41421ZM7.24264 17.89H3V13.6473L14.435 2.21231C14.8256 1.82179 15.4587 1.82179 15.8492 2.21231L18.6777 5.04074C19.0682 5.43126 19.0682 6.06443 18.6777 6.45495L7.24264 17.89ZM3 19.89H21V21.89H3V19.89Z"/></svg>') center / contain no-repeat;
+}
+.oa-note:focus-visible { outline: none; box-shadow: var(--focus-ring), var(--elev-ring); }
 .oa-connectors {
   position: absolute;
   inset: 0;
   overflow: visible;
   pointer-events: none;
+  /* vector-effect keeps strokes one screen-px regardless of the plane's
+     scale, so a 1.5px connector stays 1.5px at k=0.25 instead of vanishing
+     to 0.375px. Without it, connectors disappear at overview zoom. */
 }
-.oa-connectors path { fill: none; stroke: var(--border); stroke-width: 1.5; }
+.oa-connectors path {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
 
 /* fixed, NOT sticky: LAYOUT_SCRIPT rewrites the `top` of every sticky element
-   in the body. z-index stays under the service header. */
+   in the body. z-index stays under the service header. Buttons carry vendored
+   Remix glyphs (ri-subtract / ri-add / ri-fullscreen-exit) as data-URI masks
+   on ::after — the button text stays for accessibility but renders at size 0,
+   so screen readers announce it while the glyph inherits --fg/--accent. */
 .oa-zoom {
   position: fixed;
   right: var(--space-4);
@@ -146,31 +215,59 @@ a specific composition, but name why.
   z-index: 10;
   display: flex;
   align-items: center;
-  gap: var(--space-1);
   padding: var(--space-1);
-  background: var(--surface);
+  background: color-mix(in oklab, var(--surface), transparent 8%);
+  backdrop-filter: blur(10px);
   border-radius: var(--radius-pill);
   box-shadow: var(--elev-ring), var(--elev-raised);
 }
 .oa-zoom button {
-  width: 44px;
-  height: 44px;
+  width: 40px;
+  height: 40px;
   border: 0;
-  border-radius: 50%;
+  border-radius: var(--radius-pill);
   background: none;
-  color: var(--fg);
-  font: inherit;
+  color: var(--muted);
+  font-size: 0;
+  display: grid;
+  place-items: center;
   cursor: pointer;
-  transition: background var(--motion-fast) var(--ease-standard);
+  transition: background var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard);
 }
-.oa-zoom button:hover { background: var(--surface-2); }
+.oa-zoom button::after {
+  content: "";
+  width: 15px;
+  height: 15px;
+  background: currentColor;
+  mask: var(--icon) center / contain no-repeat;
+  -webkit-mask: var(--icon) center / contain no-repeat;
+}
+#zoom-out { --icon: url('data:image/svg+xml;utf8,<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M5 11V13H19V11H5Z"/></svg>'); }
+#zoom-in { --icon: url('data:image/svg+xml;utf8,<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M11 11V5H13V11H19V13H13V19H11V13H5V11H11Z"/></svg>'); }
+#zoom-fit { --icon: url('data:image/svg+xml;utf8,<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M18 7H22V9H16V3H18V7ZM8 9H2V7H6V3H8V9ZM18 17V21H16V15H22V17H18ZM8 15V21H6V17H2V15H8Z"/></svg>'); }
+/* Gate :hover behind fine-pointer so a touch tablet above 640px (which the
+   canvas supports for cluster-button zoom) cannot get a sticky hover state it
+   cannot dismiss. */
+@media (hover: hover) and (pointer: fine) {
+  .oa-zoom button:hover { background: var(--surface-2); color: var(--fg); }
+}
+.oa-zoom button:active { background: var(--surface-2); color: var(--fg); }
 .oa-zoom button:focus-visible { box-shadow: var(--focus-ring); }
+/* The readout doubles as the fit affordance's neighbor — hairline separators
+   carve the pill into zones without boxing every control. */
 .oa-zoom output {
   min-width: 5ch;
+  padding: 0 var(--space-1);
   text-align: center;
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
   color: var(--muted);
+}
+.oa-zoom #zoom-fit {
+  margin-left: var(--space-1);
+  border-left: 1px solid var(--border);
+  border-radius: 0 var(--radius-pill) var(--radius-pill) 0;
 }
 
 /* Usability of a pan/zoom plane tracks viewport WIDTH, not input type: a
@@ -195,11 +292,12 @@ a specific composition, but name why.
   const canvas = document.getElementById("canvas");
   const pct = document.getElementById("zoom-pct");
   const frames = [...canvas.querySelectorAll(".oa-frame")];
+  const notes = [...canvas.querySelectorAll(".oa-note")];
   if (!frames.length) return;
 
   const MIN = 0.1;
   const MAX = 4;
-  const PAD = 64;
+  const PAD = 48;
   const reduced = matchMedia("(prefers-reduced-motion: reduce)");
   // Matches the CSS breakpoint. Below it the plane is a stacked document read,
   // so every handler bails and the transform is cleared.
@@ -223,6 +321,27 @@ a specific composition, but name why.
     s.setProperty("--k", view.k);
     s.setProperty("--dot-o", clamp((view.k - 0.3) * 1.8, 0, 1));
     pct.value = `${Math.round(view.k * 100)}%`;
+    // Collapse notes to a chip at overview zoom so they don't clutter the
+    // plane when counter-scaled; expand once zoomed in enough to read them.
+    // Crossing the threshold in either direction resets a click-pinned note,
+    // so zoom state stays the single source of truth.
+    const collapsed = view.k < 0.5;
+    for (const n of notes) {
+      if (n.dataset.collapsed !== String(collapsed)) {
+        n.dataset.collapsed = collapsed ? "true" : "false";
+        delete n.dataset.open;
+      }
+    }
+  }
+
+  // Coalesce pointermove/wheel paints through a single rAF so at most one
+  // style-invalidation + dot-grid repaint composites per frame. pointermove
+  // fires above frame rate; only the last position per frame matters.
+  let paintPending = false;
+  function schedulePaint() {
+    if (paintPending) return;
+    paintPending = true;
+    requestAnimationFrame(() => { paintPending = false; paint(); });
   }
 
   function tweenTo(to, ms) {
@@ -265,7 +384,7 @@ a specific composition, but name why.
   function pan(dx, dy) {
     view.x += dx;
     view.y += dy;
-    paint();
+    schedulePaint();
   }
 
   function fitTo(b, ms) {
@@ -293,7 +412,7 @@ a specific composition, but name why.
   // wrapper — which is what click-to-focus needs. Assigning `inert` across
   // every body re-inerts the OUTGOING frame, so tabbing A -> B never leaves
   // two live bodies. `inert` belongs on the body, never the .oa-frame wrapper.
-  function focus(frame) {
+  function focus(frame, instant = false) {
     if (compact.matches) return;
     focused?.removeAttribute("data-focused");
     focused = frame;
@@ -301,23 +420,45 @@ a specific composition, but name why.
       f.querySelector(".oa-frame-body").inert = f !== frame;
     }
     if (!frame) {
-      fitTo(bounds(), 400);
+      // Overview return ~20% faster than focus-in: dismissal snaps, the
+      // deliberate focus-in stays weighted. Keyboard triggers (0/F/Esc) jump
+      // instantly — they are high-frequency and operated, not watched.
+      fitTo(bounds(), instant ? 0 : 320);
       return;
     }
     frame.setAttribute("data-focused", "");
-    fitTo(box(frame), 400);
+    fitTo(box(frame), instant ? 0 : 400);
   }
 
   // One delegated click covers both paths: the label button and an inert body
   // both resolve to their .oa-frame wrapper via closest(). A click on the
   // background (or the focused frame, whose body is live and handles its own
-  // clicks) returns to the overview.
+  // clicks) returns to the overview. A collapsed note chip expands in place
+  // instead of falling through to the overview branch.
   canvas.addEventListener("click", (e) => {
     if (compact.matches || clickSuppressed || e.target.closest(".oa-zoom")) return;
+    const note = e.target.closest(".oa-note");
+    if (note && note.dataset.collapsed === "true") {
+      note.dataset.open = note.dataset.open === "true" ? "false" : "true";
+      return;
+    }
     const frame = e.target.closest(".oa-frame");
     if (frame && frame !== focused) focus(frame);
     else if (!frame) focus(null);
   });
+
+  // Chips are keyboard-reachable: Enter/Space toggles, mirroring the click.
+  for (const n of notes) {
+    n.tabIndex = 0;
+    n.setAttribute("role", "button");
+    n.addEventListener("keydown", (e) => {
+      if (n.dataset.collapsed !== "true") return;
+      if (e.key !== "Enter" && e.key !== " ") return;
+      e.preventDefault();
+      e.stopPropagation();
+      n.dataset.open = n.dataset.open === "true" ? "false" : "true";
+    });
+  }
 
   // Tabbing to a label focuses its frame, so keyboard navigation mirrors the
   // click behavior without a second listener.
@@ -343,7 +484,7 @@ a specific composition, but name why.
     } else {
       view.x -= dx;
       view.y -= dy;
-      paint();
+      schedulePaint();
     }
   }, { passive: false });
 
@@ -370,7 +511,7 @@ a specific composition, but name why.
     drag.py = e.clientY;
     view.x += dx;
     view.y += dy;
-    paint();
+    schedulePaint();
   });
   // A drag that crossed the threshold must not also fire a click (which would
   // focus whatever frame the pan happened to end over). Read by the click
@@ -387,14 +528,17 @@ a specific composition, but name why.
 
   addEventListener("keydown", (e) => {
     if (compact.matches) return;
-    // Let the focused frame's own inputs keep their keystrokes.
-    if (e.target.closest("input, textarea, select, [contenteditable]")) return;
+    // Let the focused frame's own inputs and buttons keep their keystrokes —
+    // Space on a <button> must activate it, not arm space-drag.
+    if (e.target.closest("button, input, textarea, select, [contenteditable]")) return;
     if (e.code === "Space") space = true;
-    else if (e.key === "0" || e.key.toLowerCase() === "f") focus(null);
+    // Keyboard-initiated actions jump instantly — they are high-frequency and
+    // operated, not watched. Animation on a shortcut is slop.
+    else if (e.key === "0" || e.key.toLowerCase() === "f") focus(null, true);
     // Zoom to 100% about the viewport center. Setting k alone would scale
     // about the plane origin and fling the composition off-screen.
     else if (e.key === "1") centerZoom(1 / view.k);
-    else if (e.key === "Escape") focus(null);
+    else if (e.key === "Escape") focus(null, true);
     else if (e.key === "+" || e.key === "=") centerZoom(1.2);
     else if (e.key === "-") centerZoom(1 / 1.2);
     else if (e.key === "ArrowLeft") pan(60, 0);
@@ -421,6 +565,7 @@ a specific composition, but name why.
       focused?.removeAttribute("data-focused");
       focused = null;
       for (const f of frames) f.querySelector(".oa-frame-body").inert = false;
+      for (const n of notes) n.dataset.collapsed = "false";
       return;
     }
     focus(null);
@@ -464,9 +609,14 @@ are unitless pixel numbers describing the **body**.
 
 Frames are first-class: a real `<section>`, a `<button>` label that is the
 keyboard entry point, a bounded body. Size to real device or slide dimensions
-(390×844, 1440×900, 1600×900). Gutter ≥ 120 world px so counter-scaled labels
-never collide at low zoom. Lay frames out with intent — a row is a flow, a grid
-is a set of variants — not scattered across empty pixels.
+(390×844, 1440×900, 1600×900), but **mix sizes** — five identical 1440×900
+frames span a ~3000×3060 bounding rect that pushes the initial fit to ~0.25×,
+drowning the composition in whitespace. Prefer 390×844 mobile frames beside one
+or two 1440×900 screens, and **keep the bounding rect under ~2× the smallest
+viewport dimension** so overview zoom lands at ≥ ~0.5×. Gutter ≥ 120 world px so
+counter-scaled labels never collide at low zoom, but no wider — a 200+ px gap is
+dead space the fit must shrink past. Lay frames out with intent — a row is a
+flow, a grid is a set of variants — not scattered across empty pixels.
 
 Unfocused frame bodies carry `inert`, which removes them from hit-testing *and*
 the tab order in one move. `pointer-events: none` would do neither job: it
@@ -487,6 +637,24 @@ coordinates, `stroke: var(--border)`, accent only to mark the primary path), and
 a legend (a `.oa-note`). Freeform elements take `--x`/`--y` but no label and no
 focus behavior. A connector must encode a real relation — never decorative
 spaghetti.
+
+**Place notes in the gutters, not over frames.** A note's `--x/--y` is its
+top-left; `max-width: 22ch` counter-scales to ~3× at low overview zoom, so a
+note whose box intersects a frame body lands *on top of* that frame's content.
+Before placing a note, compute its right edge (`--x + ~22ch ≈ --x + 360 world
+px`) and bottom edge (`--y + ~120 world px`) and confirm neither crosses a
+frame's `--x..--x+--w` / `--y..--y+--h` rectangle. The gutter between two
+1440-wide frames at 120 px gap is only 120 px wide — too narrow for a 22ch note
+at low zoom; place such notes in the row-gap (between row 1 and row 2), centered
+on the connector, where vertical space is free.
+
+At overview zoom (`--k < 0.5`) the runtime collapses each note to a small
+accent chip (the vendored Remix `ri-edit` glyph, masked so it inherits
+`--accent` in both themes) so counter-scaled text does not clutter the plane.
+Clicking a chip — or Enter/Space on it, chips are focusable buttons — pins it
+open in place; crossing the zoom threshold resets the pin, and zooming in past
+the threshold expands every note. Author content lives inside the note as
+normal — no markup change needed; the runtime adds `tabindex`/`role` itself.
 
 ## Accessibility
 

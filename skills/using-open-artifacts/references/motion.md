@@ -230,6 +230,21 @@ as a loading state.
 - Animating `top`/`left`/`margin` — use `transform` (and the bounded
   materials above).
 - `linear` easing for organic motion; bounce/elastic anywhere.
+- **`ease-in` (and ease-in-only curves) for UI.** It is the single most
+  load-bearing slop tell — entrances accelerate *into* the destination and
+  feel cheap. Entrances and emphasis use `--ease-out-expo`/`--ease-out`; in-view
+  movement uses `--ease-in-out-quad`. Symmetric ambient loops may use a balanced
+  in-out, never a bare ease-in.
+- **Animating from `scale(0)` or `opacity:0`-only reveals.** Start appearances
+  from `scale(0.9)`–`scale(0.97)` + `opacity:0` so the element has presence on
+  the way in; `scale(0)` is a pop with no mass, and an opacity-only fade has no
+  spatial read.
+- `transition: all` — name the properties you mean; `all` animates layout and
+  repaints cheaply-seeming things expensively.
+- **Animation on keyboard-initiated or high-frequency (100+/day) actions.**
+  Keyboard shortcuts and command-palette toggles are operated, not watched —
+  remove the animation entirely; jump to the end state. Reserve motion for
+  pointer-initiated or rare, deliberate actions.
 - A `scroll` event listener — `IntersectionObserver`, `animation-timeline`,
   or nothing.
 - Stagger cascades longer than 6 items or 800ms.
