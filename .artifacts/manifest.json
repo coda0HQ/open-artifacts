@@ -49,6 +49,31 @@
       },
       "version": 18,
       "updatedAt": "2026-07-06T18:06:52.908Z"
+    },
+    {
+      "id": "pg7zuNunQpo5",
+      "url": "https://coda0.com/a/pg7zuNunQpo5",
+      "title": "Open Artifacts — canvas overview",
+      "favicon": "🎨",
+      "format": "html",
+      "encrypted": false,
+      "scope": "canvas-mode overview of open-artifacts: the project, publishing flow, levels+canvas, design directions",
+      "autoUpdate": false,
+      "channel": "project-intro-canvas",
+      "level": 2,
+      "canvas": true,
+      "watch": [
+        "README.md",
+        "docs/architecture.md",
+        "skills/using-open-artifacts/references/canvas.md"
+      ],
+      "snapshot": {
+        "README.md": "94d8e183539be73ce5bdbd01d812b8262a3d7c4195a53c60255ebdea068fa9b3",
+        "docs/architecture.md": "ae05564b3358fa040ace7f64f5294c40d38bb0437c738d9ee9441ba5c198a12d",
+        "skills/using-open-artifacts/references/canvas.md": "0d7c1d82aac709a124d6c84429af1c7620be43d6e19bc02e2714c2d3be097d54"
+      },
+      "version": 11,
+      "updatedAt": "2026-07-10T01:48:23.379Z"
     }
   ]
 }

@@ -1,0 +1,909 @@
+<style>
+/*
+ * Open Artifacts — shared design-token contract.
+ * Pasted verbatim from references/tokens.css. Direction overrides go
+ * BELOW this block, unlayered, so they always win over the contract.
+ */
+@layer oa-tokens {
+  :root {
+    /* ── Identity — override per direction ──────────────────────────── */
+    --bg: #ffffff;
+    --surface: #f8f8f8;
+    --fg: #18181b;
+    --muted: #71717a;
+    --border: #e4e4e7;
+    --accent: #6457f0;
+    --font-display: system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-body: system-ui, -apple-system, "Segoe UI", sans-serif;
+
+    /* ── Accent states — derived from --accent ──────────────────────── */
+    --accent-on: #ffffff;
+    --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+    --accent-active: color-mix(in oklab, var(--accent), black 14%);
+
+    /* ── Semantic state — separate from the accent hue ──────────────── */
+    --success: #16a34a;
+    --warn: #eab308;
+    --danger: #dc2626;
+
+    /* ── Derived tiers — adapt to any direction and theme ───────────── */
+    --surface-2: color-mix(in oklab, var(--surface), var(--fg) 4%);
+    --accent-soft: color-mix(in oklab, var(--accent), transparent 88%);
+
+    /* ── Monospace ──────────────────────────────────────────────────── */
+    --font-mono:
+      ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+
+    /* ── Spacing scale — 4px grid ───────────────────────────────────── */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-8: 32px;
+    --space-12: 48px;
+
+    /* ── Radius scale ───────────────────────────────────────────────── */
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-pill: 9999px;
+
+    /* ── Elevation — three sanctioned levels, no fourth ─────────────── */
+    --elev-flat: none;
+    --elev-ring: 0 0 0 1px var(--border);
+    --elev-raised: 0 2px 8px color-mix(in oklab, var(--fg), transparent 92%);
+
+    /* ── Focus — layered outside the element via box-shadow ─────────── */
+    --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 70%);
+
+    /* ── Motion — short, purposeful, stable easing ──────────────────── */
+    --motion-fast: 150ms;
+    --motion-base: 200ms;
+    --motion-slow: 400ms;
+    --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+    --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+    /* ── Layout structure ───────────────────────────────────────────── */
+    --container-max: 72ch;
+    --section-y: var(--space-12);
+
+    /* ── Type scale — modular, 1.250 ratio (major third) ────────────── */
+    --text-xs: 0.75rem;
+    --text-sm: 0.875rem;
+    --text-base: 1rem;
+    --text-lg: 1.25rem;
+    --text-xl: 1.5rem;
+    --text-2xl: 2rem;
+    --text-3xl: 2.5rem;
+    --text-4xl: 3.5rem;
+    --text-display: clamp(2.5rem, 1.6rem + 3vw, 4.5rem);
+
+    /* ── Type craft ─────────────────────────────────────────────────── */
+    --tracking-caps: 0.08em;
+    --leading-display: 1.1;
+    --leading-body: 1.6;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #131316;
+      --surface: #1c1c21;
+      --fg: #e7e7ea;
+      --muted: #9a9aa2;
+      --border: #2e2e33;
+      --accent: #8d82f5;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #131316;
+    --surface: #1c1c21;
+    --fg: #e7e7ea;
+    --muted: #9a9aa2;
+    --border: #2e2e33;
+    --accent: #8d82f5;
+  }
+
+  :root[data-theme="light"] {
+    --bg: #ffffff;
+    --surface: #f8f8f8;
+    --fg: #18181b;
+    --muted: #71717a;
+    --border: #e4e4e7;
+    --accent: #6457f0;
+  }
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  line-height: var(--leading-body);
+}
+
+/* ── Direction: Modern minimal (Linear / Vercel) ─────────────────────── */
+:root {
+  --bg: oklch(99% 0.002 240);
+  --surface: oklch(100% 0 0);
+  --fg: oklch(18% 0.012 250);
+  --muted: oklch(54% 0.012 250);
+  --border: oklch(92% 0.005 250);
+  --accent: oklch(58% 0.18 255);
+  --font-display: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+}
+:root[data-theme="dark"] {
+  --bg: oklch(15% 0.002 250);
+  --surface: oklch(19% 0.004 250);
+  --fg: oklch(95% 0.004 250);
+  --muted: oklch(64% 0.008 250);
+  --border: oklch(28% 0.004 250);
+  --accent: oklch(68% 0.16 255);
+}
+
+/* ── Canvas runtime CSS (vendored from references/canvas.md) ─────────── */
+/* Viewport. Sized to the visible area below the service header.
+   padding/border MUST stay 0: background-origin is padding-box, so any inset
+   would shift the dot lattice out of step with the plane's transform. */
+.oa-canvas {
+  position: relative;
+  height: calc(100dvh - var(--oa-header-h, 2.5rem));
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  touch-action: none;
+  overscroll-behavior: contain;
+  cursor: grab;
+  background-color: var(--bg);
+  /* Dot grid lives on the viewport, not the plane, so its spacing tracks
+     zoom while its origin tracks pan. --dot-o is written by paint(). */
+  background-image: radial-gradient(circle at 1px 1px,
+    color-mix(in oklab, var(--muted) calc(var(--dot-o, 1) * 42%), transparent) 1px,
+    transparent 0);
+  background-size: calc(24px * var(--k, 1)) calc(24px * var(--k, 1));
+  background-position: var(--tx, 0px) var(--ty, 0px);
+}
+.oa-canvas[data-panning] { cursor: grabbing; }
+
+/* One transformed element. Never animate top/left/width/height.
+   will-change only while a gesture is live: a permanent hint promotes the
+   whole plane to its own layer for the life of the page. */
+.oa-plane {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 0;
+  transform: translate(var(--tx, 0px), var(--ty, 0px)) scale(var(--k, 1));
+}
+.oa-canvas[data-panning] .oa-plane { will-change: transform; }
+
+/* Frames are placed in world coordinates via --x/--y/--w/--h (unitless px).
+   The label is absolutely positioned ABOVE the frame, so --x/--y/--w/--h
+   describe the body exactly — otherwise the label's height would offset
+   every fitTo() by a scaled ~20px. */
+.oa-frame {
+  position: absolute;
+  left: calc(var(--x) * 1px);
+  top: calc(var(--y) * 1px);
+  width: calc(var(--w) * 1px);
+}
+.oa-frame-label {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  margin: 0 0 var(--space-2);
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: var(--text-sm);
+  color: var(--muted);
+  text-align: left;
+  cursor: pointer;
+  /* Counter-scale so labels stay legible at any zoom, as in Figma. Capped at
+     3x: an uncapped 1/k balloons the label past its frame when zoomed far out.
+     Origin is the anchored corner (bottom:100%; left:0) or the label drifts. */
+  transform: scale(min(calc(1 / var(--k, 1)), 3));
+  transform-origin: 0 100%;
+}
+.oa-frame-label:focus-visible { box-shadow: var(--focus-ring); border-radius: var(--radius-sm); }
+.oa-frame-body {
+  height: calc(var(--h) * 1px);
+  overflow: hidden;
+  background: var(--bg);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--elev-ring);
+}
+.oa-frame[data-focused] .oa-frame-body { box-shadow: 0 0 0 2px var(--accent); }
+
+/* Freeform layer: notes and connectors share the plane's world coordinates.
+   Counter-scaled like frame labels, or a note's max-width: 22ch collapses to
+   a thin sliver at low overview zoom (the single most common canvas bug). */
+.oa-note {
+  position: absolute;
+  left: calc(var(--x) * 1px);
+  top: calc(var(--y) * 1px);
+  max-width: 22ch;
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  background: var(--accent-soft);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--elev-ring);
+  font-size: var(--text-sm);
+  transform: scale(min(calc(1 / var(--k, 1)), 3));
+  transform-origin: 0 0;
+}
+/* At overview zoom a counter-scaled note balloons to ~3x and clutters the
+   plane. paint() collapses it to a small pill chip; clicking (or Enter /
+   Space on the focused chip) pins it open until zoom crosses back over the
+   threshold. data-open gates the collapsed styles, so a pinned note shows
+   its full text even while collapsed-by-zoom.
+   Collapsed/pinned notes counter-scale FULLY (no 3x cap) and CENTER on
+   their --x/--y anchor: they are screen-space UI like a Figma comment pin —
+   constant on-screen size at any zoom, pinned by their center so they never
+   creep down-right into neighboring frames. translate comes AFTER scale in
+   the list so the -50% offset resolves in screen pixels, not world pixels. */
+.oa-note[data-collapsed="true"] {
+  transform: scale(calc(1 / var(--k, 1))) translate(-50%, -50%);
+  user-select: none;
+  -webkit-user-select: none;
+  z-index: 1;
+}
+/* Pinned open while collapsed-by-zoom: a floating popover over the plane.
+   Solid surface (the translucent accent tint reads muddy over frames),
+   raised shadow, above neighboring chips. */
+.oa-note[data-collapsed="true"][data-open="true"] {
+  background: var(--surface);
+  box-shadow: var(--elev-ring), var(--elev-raised);
+  z-index: 2;
+  cursor: pointer;
+}
+.oa-note[data-collapsed="true"]:not([data-open="true"]) {
+  max-width: none;
+  width: 44px;
+  height: 28px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  box-shadow: var(--elev-ring), var(--elev-raised);
+  font-size: 0;
+  cursor: pointer;
+}
+/* rem-sized children (e.g. an inline .fr-mono span) ignore the parent's
+   font-size: 0 — zero every descendant or their text leaks out of the chip. */
+.oa-note[data-collapsed="true"]:not([data-open="true"]) * { font-size: 0; }
+.oa-note[data-collapsed="true"]:not([data-open="true"])::after {
+  content: "";
+  width: 13px;
+  height: 13px;
+  background: var(--accent);
+  /* Remix ri-edit, vendored from references/icons.md, as a data-URI mask so
+     the glyph inherits --accent in both themes (content:url() SVGs cannot be
+     recolored). */
+  mask: url('data:image/svg+xml;utf8,<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M6.41421 15.89L16.5563 5.74785L15.1421 4.33363L5 14.4758V15.89H6.41421ZM7.24264 17.89H3V13.6473L14.435 2.21231C14.8256 1.82179 15.4587 1.82179 15.8492 2.21231L18.6777 5.04074C19.0682 5.43126 19.0682 6.06443 18.6777 6.45495L7.24264 17.89ZM3 19.89H21V21.89H3V19.89Z"/></svg>') center / contain no-repeat;
+  -webkit-mask: url('data:image/svg+xml;utf8,<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M6.41421 15.89L16.5563 5.74785L15.1421 4.33363L5 14.4758V15.89H6.41421ZM7.24264 17.89H3V13.6473L14.435 2.21231C14.8256 1.82179 15.4587 1.82179 15.8492 2.21231L18.6777 5.04074C19.0682 5.43126 19.0682 6.06443 18.6777 6.45495L7.24264 17.89ZM3 19.89H21V21.89H3V19.89Z"/></svg>') center / contain no-repeat;
+}
+.oa-note:focus-visible { outline: none; box-shadow: var(--focus-ring), var(--elev-ring); }
+.oa-connectors {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+  /* vector-effect keeps strokes one screen-px regardless of the plane's
+     scale, so a 1.5px connector stays 1.5px at k=0.25 instead of vanishing
+     to 0.375px. Without it, connectors disappear at overview zoom. */
+}
+.oa-connectors path {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+/* fixed, NOT sticky: LAYOUT_SCRIPT rewrites the `top` of every sticky element
+   in the body. z-index stays under the service header. Buttons carry vendored
+   Remix glyphs (ri-subtract / ri-add / ri-fullscreen-exit) as data-URI masks
+   on ::after — the button text stays for accessibility but renders at size 0,
+   so screen readers announce it while the glyph inherits --fg/--accent. */
+.oa-zoom {
+  position: fixed;
+  right: var(--space-4);
+  bottom: var(--space-4);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  padding: var(--space-1);
+  background: color-mix(in oklab, var(--surface), transparent 8%);
+  backdrop-filter: blur(10px);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--elev-ring), var(--elev-raised);
+}
+.oa-zoom button {
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: none;
+  color: var(--muted);
+  font-size: 0;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard);
+}
+.oa-zoom button::after {
+  content: "";
+  width: 15px;
+  height: 15px;
+  background: currentColor;
+  mask: var(--icon) center / contain no-repeat;
+  -webkit-mask: var(--icon) center / contain no-repeat;
+}
+#zoom-out { --icon: url('data:image/svg+xml;utf8,<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M5 11V13H19V11H5Z"/></svg>'); }
+#zoom-in { --icon: url('data:image/svg+xml;utf8,<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M11 11V5H13V11H19V13H13V19H11V13H5V11H11Z"/></svg>'); }
+#zoom-fit { --icon: url('data:image/svg+xml;utf8,<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M18 7H22V9H16V3H18V7ZM8 9H2V7H6V3H8V9ZM18 17V21H16V15H22V17H18ZM8 15V21H6V17H2V15H8Z"/></svg>'); }
+/* Gate :hover behind fine-pointer so a touch tablet above 640px (which the
+   canvas supports for cluster-button zoom) cannot get a sticky hover state it
+   cannot dismiss. */
+@media (hover: hover) and (pointer: fine) {
+  .oa-zoom button:hover { background: var(--surface-2); color: var(--fg); }
+}
+.oa-zoom button:active { background: var(--surface-2); color: var(--fg); }
+.oa-zoom button:focus-visible { box-shadow: var(--focus-ring); }
+/* The readout doubles as the fit affordance's neighbor — hairline separators
+   carve the pill into zones without boxing every control. */
+.oa-zoom output {
+  min-width: 5ch;
+  padding: 0 var(--space-1);
+  text-align: center;
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.oa-zoom #zoom-fit {
+  margin-left: var(--space-1);
+  border-left: 1px solid var(--border);
+  border-radius: 0 var(--radius-pill) var(--radius-pill) 0;
+}
+
+/* Usability of a pan/zoom plane tracks viewport WIDTH, not input type: a
+   touchscreen laptop drives a canvas fine, a narrow mouse-driven window does
+   not. Below 640px the plane linearizes into a scrolling stack rather than
+   shipping a pinch handler that fights native scroll. */
+@media (max-width: 640px) {
+  .oa-canvas { height: auto; overflow: visible; touch-action: auto; cursor: auto; background-image: none; }
+  .oa-plane { position: static; transform: none; display: flex; flex-direction: column; gap: var(--space-8); padding: var(--space-4); }
+  .oa-frame { position: static; width: 100%; }
+  .oa-frame-label { position: static; transform: none; margin-bottom: var(--space-2); }
+  .oa-frame-body { height: auto; min-height: 60vh; }
+  .oa-note { position: static; max-width: 100%; }
+  .oa-zoom, .oa-connectors { display: none; }
+}
+
+
+
+/* ── Frame-internal components (token-driven) ───────────────────────── */
+.fr-pad { padding: var(--space-8) var(--space-12); height: 100%; box-sizing: border-box; display: flex; flex-direction: column; gap: var(--space-5); overflow: auto; }
+.fr-pad.tight { padding: var(--space-6) var(--space-8); gap: var(--space-4); }
+/* Hero frame: center the column so a 1440-wide frame doesn't leave a dead
+   right half. max-width caps the text block; margin auto centers it. */
+.fr-pad.center { align-items: center; text-align: center; max-width: 64ch; margin: 0 auto; justify-content: center; }
+.fr-pad.center .fr-row { justify-content: center; }
+.fr-pad.center .fr-lead { max-width: 52ch; }
+.fr-kicker { font-size: var(--text-xs); text-transform: uppercase; letter-spacing: var(--tracking-caps); color: var(--muted); margin: 0; }
+.fr-h1 { font-size: var(--text-4xl); line-height: var(--leading-display); letter-spacing: -0.03em; margin: 0; font-weight: 700; }
+.fr-h2 { font-size: var(--text-2xl); line-height: var(--leading-display); letter-spacing: -0.02em; margin: 0; font-weight: 600; }
+.fr-h2.sm { font-size: var(--text-xl); }
+.fr-lead { font-size: var(--text-lg); line-height: 1.45; margin: 0; color: var(--fg); max-width: 52ch; }
+.fr-body { font-size: var(--text-base); margin: 0; color: var(--fg); }
+.fr-body.sm { font-size: var(--text-sm); }
+.fr-muted { color: var(--muted); }
+.fr-row { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.fr-pill { display: inline-flex; align-items: center; gap: var(--space-1); padding: var(--space-1) var(--space-3); border-radius: var(--radius-pill); background: var(--surface-2); font-size: var(--text-sm); color: var(--fg); }
+.fr-table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+.fr-table th, .fr-table td { border-bottom: 1px solid var(--border); padding: var(--space-2) var(--space-3); text-align: left; vertical-align: top; }
+.fr-table th { color: var(--muted); text-transform: uppercase; letter-spacing: var(--tracking-caps); font-size: var(--text-xs); font-weight: 500; }
+.fr-table td { font-variant-numeric: tabular-nums; }
+.fr-code { font-family: var(--font-mono); background: var(--surface); border-radius: var(--radius-sm); padding: var(--space-3) var(--space-4); font-size: var(--text-sm); overflow: hidden; }
+.fr-code code { font-family: var(--font-mono); white-space: pre; display: block; }
+.fr-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); counter-reset: step; }
+.fr-steps > li { counter-increment: step; padding-left: calc(var(--space-6) + var(--space-2)); position: relative; font-size: var(--text-sm); }
+.fr-steps > li::before { content: counter(step); position: absolute; left: 0; top: 0; width: var(--space-6); height: var(--space-6); display: flex; align-items: center; justify-content: center; border-radius: var(--radius-pill); background: var(--accent-soft); color: var(--accent); font-size: var(--text-xs); font-weight: 600; }
+.fr-steps strong { font-weight: 600; }
+.fr-btn { background: var(--accent); color: var(--accent-on); padding: var(--space-2) var(--space-4); border-radius: var(--radius-md); font: inherit; border: 0; cursor: pointer; transition: background var(--motion-fast) var(--ease-standard); font-size: var(--text-sm); }
+@media (hover: hover) and (pointer: fine) {
+  .fr-btn:hover { background: var(--accent-hover); }
+}
+.fr-btn:active { background: var(--accent-active); transform: translateY(1px); }
+.fr-btn:focus-visible { box-shadow: var(--focus-ring); }
+.fr-btn[data-state="copied"] { background: var(--success); }
+.fr-tabs { display: flex; gap: var(--space-1); padding: var(--space-1); background: var(--surface-2); border-radius: var(--radius-pill); width: fit-content; }
+.fr-tabs button { border: 0; background: none; color: var(--muted); font: inherit; font-size: var(--text-sm); padding: var(--space-1) var(--space-3); border-radius: var(--radius-pill); cursor: pointer; transition: background var(--motion-fast) var(--ease-standard); }
+.fr-tabs button[aria-selected="true"] { background: var(--bg); color: var(--fg); box-shadow: var(--elev-ring); }
+.fr-tabs button:focus-visible { box-shadow: var(--focus-ring); }
+.fr-panel { display: none; }
+.fr-panel[aria-hidden="false"] { display: block; }
+.fr-swatch { display: inline-block; width: var(--space-6); height: var(--space-6); border-radius: var(--radius-sm); box-shadow: var(--elev-ring); vertical-align: middle; }
+.fr-dirrow { display: grid; grid-template-columns: var(--space-6) minmax(0, 1fr); gap: var(--space-3); align-items: start; padding: var(--space-2) 0; border-bottom: 1px solid var(--border); }
+.fr-dirrow:last-child { border-bottom: 0; }
+.fr-dirname { font-weight: 600; font-size: var(--text-sm); margin: 0 0 var(--space-1); }
+.fr-dirpost { font-size: var(--text-xs); color: var(--muted); margin: 0; line-height: 1.4; }
+.fr-hint { font-size: var(--text-xs); color: var(--muted); margin: 0; }
+.fr-mono { font-family: var(--font-mono); font-size: var(--text-sm); }
+.fr-levels { display: grid; grid-template-columns: auto 1fr; gap: var(--space-2) var(--space-3); font-size: var(--text-sm); }
+.fr-levels .fr-lv { font-weight: 600; color: var(--accent); font-variant-numeric: tabular-nums; }
+.fr-levels .fr-lvhead { color: var(--muted); text-transform: uppercase; letter-spacing: var(--tracking-caps); font-size: var(--text-xs); }
+.fr-flow { font-size: var(--text-sm); color: var(--muted); margin: 0; line-height: 1.5; }
+.fr-flow b { color: var(--fg); font-weight: 600; }
+</style>
+<title>Open Artifacts — canvas overview</title>
+
+<div class="oa-canvas" id="canvas" role="group"
+     aria-label="Canvas. Drag to pan, ctrl-scroll to zoom, click a frame to focus.">
+  <div class="oa-plane" id="plane">
+    <svg class="oa-connectors" aria-hidden="true">
+      <!-- Hero -> What it is (primary narrative) -->
+      <path class="primary" d="M 1440 450 L 1560 450"/>
+      <!-- What it is -> Publishing flow (primary narrative, curves down-left) -->
+      <path class="primary" d="M 1940 900 C 1940 970, 720 970, 720 1040"/>
+      <!-- Publishing flow -> Levels & canvas (concept link) -->
+      <path d="M 1440 1420 L 1560 1420"/>
+      <!-- Levels & canvas -> Design directions -->
+      <path d="M 1950 1420 L 2070 1420"/>
+    </svg>
+
+    <!-- F1: Hero — 1440x900, top-left. The thesis. -->
+    <section class="oa-frame" style="--x:0;--y:0;--w:1440;--h:900">
+      <button class="oa-frame-label" type="button">Hero</button>
+      <div class="oa-frame-body" inert>
+        <div class="fr-pad center">
+          <p class="fr-kicker">Open Artifacts</p>
+          <h1 class="fr-h1">Self-hosted Claude Code<br/>Artifacts on Cloudflare.</h1>
+          <p class="fr-lead">Let any coding agent publish self-contained HTML/Markdown pages to shareable URLs, protect them with zero-knowledge passwords, and keep them updated as the project evolves. Runs entirely on Cloudflare, fits the free tier, no accounts anywhere.</p>
+          <div class="fr-row">
+            <span class="fr-pill">Workers</span>
+            <span class="fr-pill">D1</span>
+            <span class="fr-pill">R2</span>
+            <span class="fr-pill">MIT</span>
+            <span class="fr-pill fr-mono">Node &ge; 20</span>
+          </div>
+          <p class="fr-hint">Hosted at <span class="fr-mono">coda0.com</span> or self-host on your own Cloudflare account &mdash; same MIT-licensed engine either way.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- F2: What it is — 760x900, top-right. Supporting panel. -->
+    <section class="oa-frame" style="--x:1560;--y:0;--w:760;--h:900">
+      <button class="oa-frame-label" type="button">What it is</button>
+      <div class="oa-frame-body" inert>
+        <div class="fr-pad tight">
+          <h2 class="fr-h2">What it is</h2>
+          <p class="fr-body sm">An open-source clone of Claude Code Artifacts: an agent skill plus a Cloudflare backend. The skill publishes body-only HTML the Worker wraps in a sandboxed skeleton; D1 holds metadata and tokens, R2 holds content bodies &mdash; both strongly consistent.</p>
+          <table class="fr-table">
+            <thead><tr><th>Concern</th><th>Design</th></tr></thead>
+            <tbody>
+              <tr><td>Identity</td><td>No accounts. 12-char crypto-random ids. Creation returns a one-time write token; only its SHA-256 is stored.</td></tr>
+              <tr><td>Storage</td><td>D1: metadata, token hashes, version index. R2: bodies at <span class="fr-mono">content/&lt;id&gt;/&lt;v&gt;</span>.</td></tr>
+              <tr><td>Serving</td><td>CSP <span class="fr-mono">sandbox</span> + <span class="fr-mono">default-src 'none'</span> &mdash; opaque origin, no cookies, no storage.</td></tr>
+              <tr><td>Passwords</td><td>PBKDF2-HMAC-SHA256 (600k iterations) + AES-256-GCM, client-side. Server stores only <span class="fr-mono">{salt, iv, ciphertext}</span>.</td></tr>
+              <tr><td>Markdown</td><td>Vendored <span class="fr-mono">marked</span> inlined &mdash; encrypted and plain share one code path.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- F3: Publishing flow — 1440x760, second row left. The "how". -->
+    <section class="oa-frame" style="--x:0;--y:1040;--w:1440;--h:760">
+      <button class="oa-frame-label" type="button">Publishing flow</button>
+      <div class="oa-frame-body" inert>
+        <div class="fr-pad tight">
+          <h2 class="fr-h2 sm">How publishing works</h2>
+          <p class="fr-flow">A zero-dep Node CLI (<span class="fr-mono">artifact.mjs</span>) is the agent's only tool. Channels bind an artifact to a stable URL so the same link survives every update.</p>
+          <div class="fr-code">
+            <code>node skills/using-open-artifacts/scripts/artifact.mjs create page.html \
+  --favicon <span style="color:var(--accent)">&chi;</span> --level 2 --canvas \
+  --channel app-interactions \
+  --scope "app interaction flows" --watch "src/views/**"</code>
+          </div>
+          <div style="display:flex;justify-content:flex-end">
+            <button class="fr-btn" id="copy-cmd" type="button" data-cmd="node skills/using-open-artifacts/scripts/artifact.mjs create page.html --favicon X --level 2 --canvas --channel app-interactions --scope app-interaction-flows --watch src/views/**">Copy command</button>
+          </div>
+          <ol class="fr-steps">
+            <li><strong>create</strong> &mdash; publishes; returns <span class="fr-mono">id</span>, one-time <span class="fr-mono">writeToken</span>, and a URL.</li>
+            <li><strong>channel</strong> &mdash; <span class="fr-mono">--channel &lt;slug&gt;</span> binds a stable URL; a per-channel token (<span class="fr-mono">ch_</span>) updates the same link across machines.</li>
+            <li><strong>update</strong> &mdash; same id, new immutable version; <span class="fr-mono">?v=N</span> views history; <span class="fr-mono">baseVersion</span> mismatches return 409.</li>
+            <li><strong>status</strong> &mdash; hashes watched files against the last snapshot, reports every stale artifact.</li>
+            <li><strong>auto-update</strong> &mdash; opt-in (off by default); the Stop hook only ever acts on artifacts you turned on.</li>
+          </ol>
+        </div>
+      </div>
+    </section>
+
+    <!-- F4: Levels & canvas — 390x760 mobile, second row center. -->
+    <section class="oa-frame" style="--x:1560;--y:1040;--w:390;--h:760">
+      <button class="oa-frame-label" type="button">Levels &amp; canvas</button>
+      <div class="oa-frame-body" inert>
+        <div class="fr-pad tight">
+          <h2 class="fr-h2 sm">Levels &amp; canvas</h2>
+          <div class="fr-tabs" role="tablist" aria-label="Fidelity and canvas">
+            <button role="tab" id="tab-levels" aria-selected="true" aria-controls="panel-levels" type="button">Levels</button>
+            <button role="tab" id="tab-canvas" aria-selected="false" aria-controls="panel-canvas" type="button">Canvas</button>
+          </div>
+          <div class="fr-panel" id="panel-levels" role="tabpanel" aria-labelledby="tab-levels" aria-hidden="false">
+            <p class="fr-body sm">Every artifact picks one of three levels &mdash; fidelity and motion budget.</p>
+            <div class="fr-levels">
+              <div class="fr-lv">1</div><div class="fr-body sm">Typography-led document. No flashy hero, no JS state.</div>
+              <div class="fr-lv">2</div><div class="fr-body sm">Information design. Scannable, stateful, no external requests.</div>
+              <div class="fr-lv">3</div><div class="fr-body sm">Editorial. One orchestrated motion moment, native APIs only.</div>
+            </div>
+          </div>
+          <div class="fr-panel" id="panel-canvas" role="tabpanel" aria-labelledby="tab-canvas" aria-hidden="true">
+            <p class="fr-body sm"><b style="color:var(--accent)">--canvas</b> swaps the <em>shell</em> &mdash; a pan/zoom plane of frames instead of a scrolling document. Composes with any level.</p>
+            <p class="fr-hint">This board is <span class="fr-mono">--level 2 --canvas</span>.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- F5: Design directions — 660x760, second row right. -->
+    <section class="oa-frame" style="--x:2070;--y:1040;--w:660;--h:760">
+      <button class="oa-frame-label" type="button">Design directions</button>
+      <div class="oa-frame-body" inert>
+        <div class="fr-pad tight">
+          <h2 class="fr-h2 sm">Design directions</h2>
+          <p class="fr-body sm">When no brand is specified, pick one of five token directions. This board runs <b style="color:var(--accent)">Modern minimal</b>.</p>
+          <div>
+            <div class="fr-dirrow">
+              <span class="fr-swatch" style="background:oklch(52% 0.10 28)"></span>
+              <div>
+                <p class="fr-dirname">Editorial &mdash; Monocle / FT</p>
+                <p class="fr-dirpost">Serif headlines, paper + ink, one accent.</p>
+              </div>
+            </div>
+            <div class="fr-dirrow">
+              <span class="fr-swatch" style="background:oklch(58% 0.18 255)"></span>
+              <div>
+                <p class="fr-dirname">Modern minimal &mdash; Linear / Vercel <span class="fr-hint">(this board)</span></p>
+                <p class="fr-dirpost">System fonts, crisp neutrals, hairline borders.</p>
+              </div>
+            </div>
+            <div class="fr-dirrow">
+              <span class="fr-swatch" style="background:oklch(56% 0.12 170)"></span>
+              <div>
+                <p class="fr-dirname">Human &mdash; Airbnb / Duolingo</p>
+                <p class="fr-dirpost">Tactile, generous radii, clear hierarchy.</p>
+              </div>
+            </div>
+            <div class="fr-dirrow">
+              <span class="fr-swatch" style="background:oklch(58% 0.16 145)"></span>
+              <div>
+                <p class="fr-dirname">Tech utility &mdash; Datadog / GitHub</p>
+                <p class="fr-dirpost">Data-dense, mono-friendly, tabular numerics.</p>
+              </div>
+            </div>
+            <div class="fr-dirrow">
+              <span class="fr-swatch" style="background:oklch(60% 0.22 25)"></span>
+              <div>
+                <p class="fr-dirname">Brutalist &mdash; Are.na / Yale</p>
+                <p class="fr-dirpost">Loud type, visible grid, oversized serif. <span class="fr-hint">Locked project-intro uses this.</span></p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Freeform notes (counter-scaled by the runtime).
+         Placed in the row-gap (y 900-1040) between row 1 and row 2,
+         centered on the free vertical space. Neither note's box
+         (~360w x ~120h world px) crosses any frame rectangle. -->
+    <p class="oa-note" style="--x:540;--y:910">Each frame holds real, operable UI &mdash; not bitmap mockups. Click a frame to focus it.</p>
+    <p class="oa-note" style="--x:1700;--y:910">This board is itself a <span class="fr-mono">--level 2 --canvas</span> artifact.</p>
+  </div>
+</div>
+
+<div class="oa-zoom" role="group" aria-label="Zoom controls">
+  <button id="zoom-out" type="button" aria-label="Zoom out">&minus;</button>
+  <output id="zoom-pct">100%</output>
+  <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
+  <button id="zoom-fit" type="button" aria-label="Fit all to view">&#x2922;</button>
+</div>
+
+<script>
+/* Canvas runtime JS (vendored from references/canvas.md) — pasted verbatim. */
+(function () {
+  const canvas = document.getElementById("canvas");
+  const pct = document.getElementById("zoom-pct");
+  const frames = [...canvas.querySelectorAll(".oa-frame")];
+  const notes = [...canvas.querySelectorAll(".oa-note")];
+  if (!frames.length) return;
+
+  const MIN = 0.1;
+  const MAX = 4;
+  const PAD = 48;
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)");
+  // Matches the CSS breakpoint. Below it the plane is a stacked document read,
+  // so every handler bails and the transform is cleared.
+  const compact = matchMedia("(max-width: 640px)");
+  const view = { x: 0, y: 0, k: 1 };
+  let raf = 0;
+  let focused = null;
+
+  const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
+  const box = (f) => ({
+    x: +f.style.getPropertyValue("--x"),
+    y: +f.style.getPropertyValue("--y"),
+    w: +f.style.getPropertyValue("--w"),
+    h: +f.style.getPropertyValue("--h"),
+  });
+
+  function paint() {
+    const s = canvas.style;
+    s.setProperty("--tx", `${view.x}px`);
+    s.setProperty("--ty", `${view.y}px`);
+    s.setProperty("--k", view.k);
+    s.setProperty("--dot-o", clamp((view.k - 0.3) * 1.8, 0, 1));
+    pct.value = `${Math.round(view.k * 100)}%`;
+    // Collapse notes to a chip at overview zoom so they don't clutter the
+    // plane when counter-scaled; expand once zoomed in enough to read them.
+    // Crossing the threshold in either direction resets a click-pinned note,
+    // so zoom state stays the single source of truth.
+    const collapsed = view.k < 0.5;
+    for (const n of notes) {
+      if (n.dataset.collapsed !== String(collapsed)) {
+        n.dataset.collapsed = collapsed ? "true" : "false";
+        delete n.dataset.open;
+      }
+    }
+  }
+
+  // Coalesce pointermove/wheel paints through a single rAF so at most one
+  // style-invalidation + dot-grid repaint composites per frame. pointermove
+  // fires above frame rate; only the last position per frame matters.
+  let paintPending = false;
+  function schedulePaint() {
+    if (paintPending) return;
+    paintPending = true;
+    requestAnimationFrame(() => { paintPending = false; paint(); });
+  }
+
+  function tweenTo(to, ms) {
+    cancelAnimationFrame(raf);
+    if (reduced.matches || !ms) {
+      Object.assign(view, to);
+      paint();
+      return;
+    }
+    const from = { ...view };
+    const t0 = performance.now();
+    const step = (now) => {
+      const p = Math.min(1, (now - t0) / ms);
+      const e = 1 - (1 - p) ** 4;
+      view.x = from.x + (to.x - from.x) * e;
+      view.y = from.y + (to.y - from.y) * e;
+      view.k = from.k + (to.k - from.k) * e;
+      paint();
+      if (p < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+  }
+
+  // Scale about a viewport point so the world point under it stays pinned.
+  // Derived from screen = world * k + t, solved for the new t. `r` uses the
+  // CLAMPED k, so the pin holds even when the zoom saturates at MIN/MAX.
+  function zoomAt(factor, cx, cy) {
+    const k = clamp(view.k * factor, MIN, MAX);
+    const r = k / view.k;
+    view.x = cx - (cx - view.x) * r;
+    view.y = cy - (cy - view.y) * r;
+    view.k = k;
+    paint();
+  }
+
+  function centerZoom(factor) {
+    zoomAt(factor, canvas.clientWidth / 2, canvas.clientHeight / 2);
+  }
+
+  function pan(dx, dy) {
+    view.x += dx;
+    view.y += dy;
+    schedulePaint();
+  }
+
+  function fitTo(b, ms) {
+    const vw = canvas.clientWidth;
+    const vh = canvas.clientHeight;
+    const k = clamp(Math.min((vw - PAD * 2) / b.w, (vh - PAD * 2) / b.h), MIN, MAX);
+    tweenTo({ k, x: (vw - b.w * k) / 2 - b.x * k, y: (vh - b.h * k) / 2 - b.y * k }, ms);
+  }
+
+  function bounds() {
+    const bs = frames.map(box);
+    const x = Math.min(...bs.map((b) => b.x));
+    const y = Math.min(...bs.map((b) => b.y));
+    return {
+      x,
+      y,
+      w: Math.max(...bs.map((b) => b.x + b.w)) - x,
+      h: Math.max(...bs.map((b) => b.y + b.h)) - y,
+    };
+  }
+
+  // `inert` (not pointer-events) gates an unfocused frame: it takes the body
+  // out of BOTH hit-testing and the tab order, so Tab never lands inside a
+  // frame the viewer has not opened, and a click on it retargets to the
+  // wrapper — which is what click-to-focus needs. Assigning `inert` across
+  // every body re-inerts the OUTGOING frame, so tabbing A -> B never leaves
+  // two live bodies. `inert` belongs on the body, never the .oa-frame wrapper.
+  function focus(frame, instant = false) {
+    if (compact.matches) return;
+    focused?.removeAttribute("data-focused");
+    focused = frame;
+    for (const f of frames) {
+      f.querySelector(".oa-frame-body").inert = f !== frame;
+    }
+    if (!frame) {
+      // Overview return ~20% faster than focus-in: dismissal snaps, the
+      // deliberate focus-in stays weighted. Keyboard triggers (0/F/Esc) jump
+      // instantly — they are high-frequency and operated, not watched.
+      fitTo(bounds(), instant ? 0 : 320);
+      return;
+    }
+    frame.setAttribute("data-focused", "");
+    fitTo(box(frame), instant ? 0 : 400);
+  }
+
+  // One delegated click covers both paths: the label button and an inert body
+  // both resolve to their .oa-frame wrapper via closest(). A click on the
+  // background (or the focused frame, whose body is live and handles its own
+  // clicks) returns to the overview. A collapsed note chip expands in place
+  // instead of falling through to the overview branch.
+  canvas.addEventListener("click", (e) => {
+    if (compact.matches || clickSuppressed || e.target.closest(".oa-zoom")) return;
+    const note = e.target.closest(".oa-note");
+    if (note && note.dataset.collapsed === "true") {
+      note.dataset.open = note.dataset.open === "true" ? "false" : "true";
+      return;
+    }
+    const frame = e.target.closest(".oa-frame");
+    if (frame && frame !== focused) focus(frame);
+    else if (!frame) focus(null);
+  });
+
+  // Chips are keyboard-reachable: Enter/Space toggles, mirroring the click.
+  for (const n of notes) {
+    n.tabIndex = 0;
+    n.setAttribute("role", "button");
+    n.addEventListener("keydown", (e) => {
+      if (n.dataset.collapsed !== "true") return;
+      if (e.key !== "Enter" && e.key !== " ") return;
+      e.preventDefault();
+      e.stopPropagation();
+      n.dataset.open = n.dataset.open === "true" ? "false" : "true";
+    });
+  }
+
+  // Tabbing to a label focuses its frame, so keyboard navigation mirrors the
+  // click behavior without a second listener.
+  for (const frame of frames) {
+    frame.querySelector(".oa-frame-label").addEventListener("focus", () => {
+      if (frame !== focused) focus(frame);
+    });
+  }
+
+  // passive:false or preventDefault() is ignored and the page scrolls away.
+  canvas.addEventListener("wheel", (e) => {
+    if (compact.matches) return;
+    e.preventDefault();
+    // deltaMode 1 = lines (a real mouse wheel in Firefox), 2 = pages.
+    const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? canvas.clientHeight : 1;
+    const dx = e.deltaX * unit;
+    const dy = e.deltaY * unit;
+    const r = canvas.getBoundingClientRect();
+    // Trackpad pinch and Cmd/Ctrl+wheel both arrive as ctrlKey; a bare
+    // wheel/two-finger swipe pans.
+    if (e.ctrlKey) {
+      zoomAt(Math.exp(-dy / 200), e.clientX - r.left, e.clientY - r.top);
+    } else {
+      view.x -= dx;
+      view.y -= dy;
+      schedulePaint();
+    }
+  }, { passive: false });
+
+  let drag = null;
+  let space = false;
+  let clickSuppressed = false;
+  canvas.addEventListener("pointerdown", (e) => {
+    if (compact.matches || e.button !== 0 || e.target.closest(".oa-zoom")) return;
+    clickSuppressed = false;
+    // Without space held, a press inside a frame belongs to the frame: it is
+    // either a click-to-focus or, once focused, the frame's own UI. Space-drag
+    // pans from anywhere.
+    if (!space && e.target.closest(".oa-frame")) return;
+    drag = { px: e.clientX, py: e.clientY, moved: 0 };
+    canvas.setPointerCapture(e.pointerId);
+    canvas.setAttribute("data-panning", "");
+  });
+  canvas.addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    const dx = e.clientX - drag.px;
+    const dy = e.clientY - drag.py;
+    drag.moved += Math.abs(dx) + Math.abs(dy);
+    drag.px = e.clientX;
+    drag.py = e.clientY;
+    view.x += dx;
+    view.y += dy;
+    schedulePaint();
+  });
+  // A drag that crossed the threshold must not also fire a click (which would
+  // focus whatever frame the pan happened to end over). Read by the click
+  // handler above, which runs after pointerup.
+  function endDrag(e) {
+    if (!drag) return;
+    clickSuppressed = drag.moved > 6 || space;
+    drag = null;
+    canvas.releasePointerCapture(e.pointerId);
+    canvas.removeAttribute("data-panning");
+  }
+  canvas.addEventListener("pointerup", endDrag);
+  canvas.addEventListener("pointercancel", endDrag);
+
+  addEventListener("keydown", (e) => {
+    if (compact.matches) return;
+    // Let the focused frame's own inputs and buttons keep their keystrokes —
+    // Space on a <button> must activate it, not arm space-drag.
+    if (e.target.closest("button, input, textarea, select, [contenteditable]")) return;
+    if (e.code === "Space") space = true;
+    // Keyboard-initiated actions jump instantly — they are high-frequency and
+    // operated, not watched. Animation on a shortcut is slop.
+    else if (e.key === "0" || e.key.toLowerCase() === "f") focus(null, true);
+    // Zoom to 100% about the viewport center. Setting k alone would scale
+    // about the plane origin and fling the composition off-screen.
+    else if (e.key === "1") centerZoom(1 / view.k);
+    else if (e.key === "Escape") focus(null, true);
+    else if (e.key === "+" || e.key === "=") centerZoom(1.2);
+    else if (e.key === "-") centerZoom(1 / 1.2);
+    else if (e.key === "ArrowLeft") pan(60, 0);
+    else if (e.key === "ArrowRight") pan(-60, 0);
+    else if (e.key === "ArrowUp") pan(0, 60);
+    else if (e.key === "ArrowDown") pan(0, -60);
+    else return;
+    e.preventDefault();
+  });
+  addEventListener("keyup", (e) => { if (e.code === "Space") space = false; });
+
+  document.getElementById("zoom-in").addEventListener("click", () => centerZoom(1.2));
+  document.getElementById("zoom-out").addEventListener("click", () => centerZoom(1 / 1.2));
+  document.getElementById("zoom-fit").addEventListener("click", () => focus(null));
+
+  // Crossing the breakpoint in either direction re-establishes the right mode:
+  // stacked read clears the transform and un-inerts every body so the document
+  // stays operable; canvas re-fits. The static `inert` in the markup means the
+  // stacked read is correct on a first paint that never runs the canvas path.
+  function init() {
+    if (compact.matches) {
+      cancelAnimationFrame(raf);
+      canvas.removeAttribute("style");
+      focused?.removeAttribute("data-focused");
+      focused = null;
+      for (const f of frames) f.querySelector(".oa-frame-body").inert = false;
+      for (const n of notes) n.dataset.collapsed = "false";
+      return;
+    }
+    focus(null);
+    fitTo(bounds(), 0);
+  }
+  compact.addEventListener("change", init);
+  addEventListener("resize", () => { if (!compact.matches && !focused) fitTo(bounds(), 0); });
+  init();
+})();
+
+</script>
