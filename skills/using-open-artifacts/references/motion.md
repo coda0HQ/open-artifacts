@@ -37,6 +37,24 @@ keyboard shortcuts (`0`/`F`/`Esc`/`1`/`+`/`-`) are all 100+/day tier and
 jump instantly; the guided tour (occasional, deliberate) is the named
 exception that earns a camera animation.
 
+## Chrome / spatial camera budget
+
+Applies to **viewer chrome and canvas chrome regardless of `artifact.level`**.
+Product-register surfaces are operated mid-task; choreography is banned here
+even on Level 3 pages.
+
+| Scenario | Rule | Why |
+| --- | --- | --- |
+| Keyboard shortcut or tab-driven label focus moves the camera | Jump instantly (`ms = 0` / reduced-motion path) | 100+/day tier; animation makes the tool feel slow |
+| Pointer fit into a frame or guided tour step | 400ms camera tween (already the canvas default); reduced-motion still instant | Occasional, deliberate travel; one orchestrated moment |
+| Pointerdown while a tween or glide is running | Cancel the raf and resume from the current transform | Interruptibility is load-bearing; grabbing mid-flight must not jump |
+| Theme toggle, zoom-cluster press, Esc to overview | No orchestrated sequence; at most `var(--motion-fast)` color/press feedback | Chrome is an instrument cluster, not a hero |
+| Pinch past MIN/MAX | Elastic `rubber()` overshoot; `settle()` snaps `k` back | Hard clamp feels locked; pan already uses the same rubber |
+
+Compact chrome buttons (zoom, tour, labels, chips) use
+`transform: translateY(1px)` on `:active` — press feedback on pointer-down,
+not a timed animation (see `interaction.md` Press feedback).
+
 ## Easing and duration
 
 `--ease-out-expo` (settle, premium) and `--ease-spring` (overshoot, lively)

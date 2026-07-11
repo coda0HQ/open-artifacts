@@ -117,8 +117,8 @@ interactive elements, or use the pseudo-element inset technique so the visual
 gap is larger while hit areas just touch.
 
 The canvas runtime's zoom-cluster buttons are 44px. Frame labels counter-scale
-via `transform` to stay legible at any zoom, so they remain tappable without
-needing the pseudo-element extension.
+via `transform` and extend their hit area with a `::before` halo (min 44px
+wide, ±12px vertical) so overview labels stay tappable at low zoom.
 
 ## Hover is an enhancement
 
@@ -252,8 +252,27 @@ list: one member is in the tab order (`tabindex="0"`), the rest are
 the next control. This keeps the tab sequence short and navigable.
 
 The canvas runtime exemplifies several of these rules: frame labels are in
-DOM (reading) order, Escape always returns to the overview, and arrow keys
+DOM (reading) order and act as pan surface that tap-to-focuses (Figma chrome,
+not in-frame controls), Escape always returns to the overview, and arrow keys
 drive tour navigation or pan (depending on whether `data-tour` frames exist).
+
+## Pointer ownership (canvas / spatial shells)
+
+Encode these as strict agent rules. Each line is **scenario → rule → why**.
+
+| Scenario | Rule | Why |
+| --- | --- | --- |
+| Drag starts on a frame label | Treat the label as **pan surface**; tap (release under `TAP_SLOP`) focuses the frame | Labels are Figma-style canvas chrome, not in-frame widgets; a dead zone above every frame feels broken |
+| Drag starts on an in-frame field, button, link, summary, media control, or editable region | That widget **owns the pointer**; do not pan-capture | Caret / activate / toggle must work; Space-drag still pans from anywhere |
+| Extending the control list | Never add `[role=button]` to CONTROLS | Collapsed note chips use that role and must reach `tap()` to expand |
+| Resolving frame focus after a press | Focus from the **pointerdown** deep target on pointerup, not from the native `click` | Pointer capture retargets `click` to the canvas in some engines, which read as "background" and exited the frame |
+| Assistive tech activates a note chip | Keep a canvas `click` path; set `clickConsumed` only on `pointerup` | AT dispatches click without pointer events; pointer gestures must not double-toggle |
+| Tuning tap vs pan | Name `TAP_SLOP`; resumed pinches start at `TAP_SLOP + 1` | Magic `6`/`7` pairs drift and reintroduce tap-after-pinch exits |
+| Cursor on the plane | `grab` at rest, `grabbing` while `data-panning`; `pointer` on real controls | Earned Figma familiarity; custom cursors invent affordances |
+| Hit testing authored web components | Resolve via `composedPath` + shadow-crossing `closest` | `e.target` alone is blind inside open shadow roots |
+
+Full runtime: `references/canvas.md`. Ship-gate items there are P0 when
+`artifact.canvas` is true.
 
 ## Ship-gate hook
 

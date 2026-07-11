@@ -175,6 +175,50 @@ function validateCanvas(content) {
   }
 }
 
+// A "container" rule caps the content measure (max-width) so it does not span
+// the full viewport. This catches the silent defect where CSS defines such a
+// class but the body fragment never applies it — the page then ships at 100%
+// width with no error, exactly the bug that hit the Hydra artifact (.shell was
+// defined, never used). Only max-width is tracked, not margin:auto, because
+// centering a button is a common non-container use of auto margins and would
+// false-positive. Only plain single-class selectors (.foo) are considered;
+// compound selectors, ids, and element/attribute selectors are left alone.
+// Comments are stripped first so a max-width inside a /* */ block does not
+// produce a false positive.
+const CONTAINER_SELECTOR = /(^|[^-\w])\.([A-Za-z_][\w-]*)\s*\{/g;
+const MEASURE_PATTERN = /max-width\s*:/i;
+
+function validateContainer(authoredStyles, authoredBody) {
+  const stripped = authoredStyles.replace(/\/\*[\s\S]*?\*\//g, "");
+  const defined = new Set();
+  for (const match of stripped.matchAll(CONTAINER_SELECTOR)) {
+    const className = match[2];
+    // Inspect the rule block that opens at this match: from the { to the next
+    // unescaped ; or }. A measure cap anywhere in that declaration set counts.
+    const blockStart = match.index + match[0].length;
+    const blockEnd = stripped.indexOf("}", blockStart);
+    const block =
+      blockEnd === -1
+        ? stripped.slice(blockStart)
+        : stripped.slice(blockStart, blockEnd);
+    if (MEASURE_PATTERN.test(block)) defined.add(className);
+  }
+  for (const className of defined) {
+    // The body applies a class via class="a b c". A class is "applied" if it
+    // appears as a whole token in some class attribute, anchored on word
+    // boundaries so .foo does not match .foo-bar.
+    const applied = new RegExp(
+      `class\\s*=\\s*["'][^"']*\\b${className.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`,
+      "i",
+    ).test(authoredBody);
+    if (!applied) {
+      fail(
+        `CSS defines a container class ".${className}" with max-width, but the body fragment never applies it; move the constraint onto an element that exists in the body (or body itself), or wrap the body in <div class="${className}">`,
+      );
+    }
+  }
+}
+
 function validateTheme(loaded) {
   if (loaded.recipe.artifact.format !== "html") return;
   const themeFragments = loaded.descriptors.filter(
@@ -241,6 +285,7 @@ export function validateBuild(loaded, composed) {
     } catch (error) {
       fail(`inline JavaScript syntax error: ${error.message}`);
     }
+    validateContainer(composed.authoredStyles, composed.authoredBody);
   }
   if (artifact.canvas) validateCanvas(composed.authoredBody);
   const title = artifact.title ?? extractTitle(content, artifact.format);
