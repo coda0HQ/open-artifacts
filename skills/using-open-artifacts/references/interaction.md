@@ -56,8 +56,10 @@ button:focus-visible {
 
 When using `outline` directly instead of `box-shadow`, spec it as
 `2-3px solid` with `outline-offset: 2px` and a contrast ratio of at least
-3:1 against the adjacent background. The token `var(--focus-ring)` already
-meets this in both themes.
+3:1 against the adjacent background. The token `var(--focus-ring)` uses a
+solid accent edge separated from the surface by a background keyline, so it
+meets this in the default themes. Recheck both adjacent surfaces when a
+direction overrides `--accent`, `--bg`, or `--surface`.
 
 **Dark theme check.** Verify the focus ring is visible on both `--bg` and
 `--surface` backgrounds in dark mode. The token handles this, but custom
@@ -200,7 +202,8 @@ Use a confirmation dialog only when:
 **Button labels are verb-noun phrases.** "Delete 3 files", "Remove member",
 "Cancel subscription". Never "OK", "Confirm", "Yes", "Submit". The label
 tells the user exactly what will happen. Destructive buttons use
-`var(--danger)` as their background or text color, never the default accent.
+`var(--danger)` as their background with `var(--danger-on)` text, or as their
+text color on a neutral surface, never the default accent.
 
 ## Overlays, done natively
 

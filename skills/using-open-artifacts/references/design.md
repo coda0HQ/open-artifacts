@@ -163,10 +163,11 @@ Orthogonal to level, decide the register — it changes what "good" means:
 ## The token contract
 
 `${CLAUDE_SKILL_DIR}/references/tokens.css` defines the shared token set:
-identity (`--bg`, `--fg`, `--accent`, fonts), accent states, semantic colors
-(success/warn/danger — separate from the accent), derived tiers
-(`--surface-2`, `--accent-soft`), spacing (4px grid), radius, elevation
-(three levels), focus, motion (durations + `--ease-standard`,
+identity (`--bg`, `--fg`, `--accent`, matching `--accent-on`, fonts), accent
+states, accessible semantic color pairs (success/warn/danger — separate from
+the accent), derived tiers (`--surface-2`, `--accent-soft`), spacing (4px
+grid), direction-aware shape and elevation, focus, motion (durations +
+`--ease-standard`,
 `--ease-out-expo`, `--ease-spring`), tracking/leading, and a modular type
 scale with a fluid `--text-display` for heroes.
 
@@ -180,15 +181,21 @@ The contract lives in `@layer oa-tokens`; the builder places your direction
 override after it, **unlayered**, so it always wins, including
 over the contract's explicit light block, whose higher specificity would
 otherwise silently revert your light theme. A direction override always
-defines both of these, and only identity tokens:
+defines both selectors. Put light identity plus any shape/elevation decisions
+in the base block; keep the dark block to dark identity so geometry does not
+shift when the theme changes:
 
 ```css
-:root { /* light identity tokens + fonts */ }
-:root[data-theme="dark"] { /* dark identity tokens */ }
+:root { /* light identity + fonts; optional coherent shape/elevation */ }
+:root[data-theme="dark"] { /* dark identity, including contrast pairs */ }
 ```
 
-Never redefine structure/state tokens per direction, and never wrap your
-overrides in `@layer`. The contract's closing `body` rule binds
+Identity includes `--accent-on` and any semantic colors the direction uses;
+foreground/background pairs must pass contrast together. A direction may
+override the radius scale and the three elevation tokens as one coherent
+visual posture. Never redefine spacing, type scale, motion, or interaction
+state mechanics per direction, and never wrap overrides in `@layer`. The
+contract's closing `body` rule binds
 `--bg`/`--fg`/`--font-body` to the canvas so a direction actually repaints
 the page — don't delete it. The tokens are also your consistency locks: **one accent for the
 whole page** (semantic colors are not accents), **one radius scale** (don't
@@ -440,7 +447,8 @@ page feel designed rather than assembled:
   tinted background via `color-mix(in oklab, var(--success), transparent
   88%)`; border-radius `var(--radius-pill)`; padding `var(--space-1)
   var(--space-3)`. Semantic color is meaning, not decoration — no colored
-  dots sprinkled on nav items and list rows for vibes.
+  dots sprinkled on nav items and list rows for vibes. Solid semantic buttons
+  pair each fill with its matching `--success-on`/`--warn-on`/`--danger-on`.
 - **Focus**: never `outline: none` without a `:focus-visible` replacement.
   The keyboard path through tabs/accordions/dialogs must work (native
   `<details>`, `<dialog>`, real `<button>`s get this free — prefer them).
@@ -538,9 +546,11 @@ anything that must persuade (brand register).
 ## Direction library (when no brand is specified)
 
 When the user hasn't given a brand or visual direction, pick one and override
-only the identity tokens (`--bg`, `--surface`, `--fg`, `--muted`, `--border`,
-`--accent`, `--font-display`, `--font-body`, plus `--font-mono` where the
-direction calls for it). Pick the one that fits the subject; don't default to
+the identity tokens (`--bg`, `--surface`, `--fg`, `--muted`, `--border`,
+`--accent`, `--accent-on`, `--font-display`, `--font-body`, plus `--font-mono`
+where the direction calls for it). Override semantic pairs when the chosen
+surfaces require it; optionally set the complete radius and elevation scales
+in the base block. Pick the one that fits the subject; don't default to
 Modern minimal for everything. These five are a floor, not a ceiling: for a
 L3 brand-register page, derive a bespoke direction from the subject when you
 can name the real-world reference it's built on — then run the two-altitude

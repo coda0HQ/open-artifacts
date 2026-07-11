@@ -127,6 +127,15 @@ Override any constant for a specific composition, but name why.
   transform: scale(min(calc(1 / var(--k, 1)), 3));
   transform-origin: 0 100%;
 }
+.oa-frame-label::before {
+  content: "";
+  position: absolute;
+  top: -12px;
+  bottom: -12px;
+  left: 50%;
+  width: max(100%, 44px);
+  transform: translateX(-50%);
+}
 .oa-frame-label:focus-visible { box-shadow: var(--focus-ring); border-radius: var(--radius-sm); }
 .oa-frame-body {
   height: calc(var(--h) * 1px);
@@ -211,6 +220,11 @@ Override any constant for a specific composition, but name why.
   cursor: pointer;
   transition: background var(--motion-fast) var(--ease-standard),
     box-shadow var(--motion-fast) var(--ease-standard);
+}
+.oa-note[data-collapsed="true"]:not([data-open="true"])::before {
+  content: "";
+  position: absolute;
+  inset: -6px;
 }
 /* rem-sized children (e.g. an inline .fr-mono span) ignore the parent's
    font-size: 0 — zero every descendant or their text leaks out of the chip. */
@@ -368,6 +382,16 @@ Override any constant for a specific composition, but name why.
 .oa-plane:not([data-spotlight]) .oa-connectors path {
   transition: opacity 150ms var(--ease-standard);
 }
+@media (prefers-reduced-motion: reduce) {
+  .oa-plane[data-spotlight] .oa-frame,
+  .oa-plane[data-spotlight] .oa-note,
+  .oa-plane[data-spotlight] .oa-connectors path,
+  .oa-plane:not([data-spotlight]) .oa-frame,
+  .oa-plane:not([data-spotlight]) .oa-note,
+  .oa-plane:not([data-spotlight]) .oa-connectors path {
+    transition: none;
+  }
+}
 
 /* --- Tour controls: prev/next + progress, docked to the zoom cluster --- */
 .oa-tour {
@@ -445,7 +469,7 @@ Override any constant for a specific composition, but name why.
   .oa-plane[data-spotlight] .oa-note:not([data-lit]),
   .oa-plane[data-spotlight] .oa-connectors path:not([data-lit]) { opacity: 1; }
   .oa-frame { position: static; width: 100%; }
-  .oa-frame-label { position: static; transform: none; margin-bottom: var(--space-2); }
+  .oa-frame-label { position: relative; transform: none; margin-bottom: var(--space-2); }
   .oa-frame-body { height: auto; min-height: 60vh; }
   .oa-note { position: static; max-width: 100%; }
   .oa-zoom, .oa-connectors, .oa-tour { display: none; }
@@ -845,7 +869,7 @@ Override any constant for a specific composition, but name why.
   for (const frame of frames) {
     const label = frame.querySelector(".oa-frame-label");
     label.addEventListener("focus", () => {
-      if (frame !== focused) focus(frame);
+      if (frame !== focused) focus(frame, true);
     });
     // Spotlight on label focusin (keyboard-driven).
     label.addEventListener("focusin", () => {
@@ -920,8 +944,10 @@ Override any constant for a specific composition, but name why.
     }
     if (pointers.size > 2) return;
 
-    // Single pointer: frame press belongs to frame (unless space-drag).
-    if (!space && e.target.closest(".oa-frame")) return;
+    // In overview an inert frame is canvas surface, so dragging from it pans.
+    // Once focused, real controls inside that frame keep pointer ownership;
+    // Space-drag remains available from anywhere.
+    if (!space && focused && e.target.closest(".oa-frame") === focused) return;
     drag = { px: e.clientX, py: e.clientY, moved: 0 };
     canvas.setPointerCapture(e.pointerId);
     canvas.setAttribute("data-panning", "");
@@ -1194,9 +1220,12 @@ controls. `Escape`, `0`, `F`, and the fit button all return to the overview;
 handler bails when the target is an `input`/`textarea`/`select`/`contenteditable`,
 so a focused frame's form keeps its keystrokes.
 
-Every tween checks `prefers-reduced-motion` and jumps instantly. Frame labels
-counter-scale by `1/k` (capped at 3x) so they stay legible at any zoom.
-Zoom-cluster buttons are 44px.
+Every tween checks `prefers-reduced-motion` and jumps instantly; spotlight
+state changes also drop their transition. Tabbing to a frame label uses an
+instant camera jump because keyboard focus is a high-frequency navigation
+action. Frame labels counter-scale by `1/k` (capped at 3x) and extend their
+hit area to at least 44px. Zoom-cluster buttons and collapsed note chips also
+have 44px targets.
 
 **Multi-touch pinch is implemented.** The runtime tracks up to two pointers
 via a `pointers` Map. When two pointers are active, drag is cancelled and the
@@ -1274,8 +1303,9 @@ Run the `design.md` ship gate, plus:
 - [ ] Pan (drag + space-drag), wheel-pan, ctrl/pinch zoom, and keyboard
       (`0`/`F`/`1`/`+`/`-`/arrows/Esc) all work; focus zoom respects
       reduced-motion (instant).
-- [ ] A drag that starts on a frame pans rather than clicking through; focus +
-      `Escape` round-trips.
+- [ ] In overview, a drag that starts on an inert frame pans rather than
+      clicking through; a focused frame keeps its controls operable, and
+      space-drag still pans; focus + `Escape` round-trips.
 - [ ] 640px degrades to the stacked read; content fully reachable, no pinch
       required, zoom cluster hidden.
 - [ ] In-memory state only (no `localStorage`); no external requests.

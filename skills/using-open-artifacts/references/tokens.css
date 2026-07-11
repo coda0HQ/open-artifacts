@@ -30,18 +30,21 @@
     --muted: #71717a;
     --border: #e4e4e7;
     --accent: #6457f0;
+    --accent-on: #ffffff;
     --font-display: system-ui, -apple-system, "Segoe UI", sans-serif;
     --font-body: system-ui, -apple-system, "Segoe UI", sans-serif;
 
     /* ── Accent states — derived from --accent ──────────────────────── */
-    --accent-on: #ffffff;
-    --accent-hover: color-mix(in oklab, var(--accent), black 8%);
-    --accent-active: color-mix(in oklab, var(--accent), black 14%);
+    --accent-hover: color-mix(in oklab, var(--accent), var(--fg) 8%);
+    --accent-active: color-mix(in oklab, var(--accent), var(--fg) 14%);
 
     /* ── Semantic state — separate from the accent hue ──────────────── */
-    --success: #16a34a;
-    --warn: #eab308;
-    --danger: #dc2626;
+    --success: #16703a;
+    --success-on: #ffffff;
+    --warn: #7c4a03;
+    --warn-on: #ffffff;
+    --danger: #b42318;
+    --danger-on: #ffffff;
 
     /* ── Derived tiers — adapt to any direction and theme ───────────── */
     /* Second elevation step. Derived from --surface toward --fg, so in a
@@ -64,19 +67,19 @@
     --space-8: 32px;
     --space-12: 48px;
 
-    /* ── Radius scale ───────────────────────────────────────────────── */
+    /* ── Shape — one coherent scale, direction-overridable ─────────── */
     --radius-sm: 8px;
     --radius-md: 12px;
     --radius-lg: 16px;
     --radius-pill: 9999px;
 
-    /* ── Elevation — three sanctioned levels, no fourth ─────────────── */
+    /* ── Elevation — three direction-overridable levels, no fourth ─── */
     --elev-flat: none;
     --elev-ring: 0 0 0 1px var(--border);
     --elev-raised: 0 2px 8px color-mix(in oklab, var(--fg), transparent 92%);
 
     /* ── Focus — layered outside the element via box-shadow ─────────── */
-    --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 70%);
+    --focus-ring: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
 
     /* ── Motion — short, purposeful, stable easing ──────────────────── */
     --motion-fast: 150ms; /* feedback: press, toggle, color */
@@ -120,6 +123,13 @@
       --muted: #9a9aa2;
       --border: #2e2e33;
       --accent: #8d82f5;
+      --accent-on: #15131f;
+      --success: #69d497;
+      --success-on: #15131f;
+      --warn: #f2bf5a;
+      --warn-on: #15131f;
+      --danger: #ff8f85;
+      --danger-on: #15131f;
     }
   }
 
@@ -131,6 +141,13 @@
     --muted: #9a9aa2;
     --border: #2e2e33;
     --accent: #8d82f5;
+    --accent-on: #15131f;
+    --success: #69d497;
+    --success-on: #15131f;
+    --warn: #f2bf5a;
+    --warn-on: #15131f;
+    --danger: #ff8f85;
+    --danger-on: #15131f;
   }
 
   /* Light theme: explicit so data-theme="light" wins over OS-dark. Your
@@ -142,6 +159,13 @@
     --muted: #71717a;
     --border: #e4e4e7;
     --accent: #6457f0;
+    --accent-on: #ffffff;
+    --success: #16703a;
+    --success-on: #ffffff;
+    --warn: #7c4a03;
+    --warn-on: #ffffff;
+    --danger: #b42318;
+    --danger-on: #ffffff;
   }
 }
 

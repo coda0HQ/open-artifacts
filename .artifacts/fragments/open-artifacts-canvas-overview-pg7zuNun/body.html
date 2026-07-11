@@ -109,6 +109,8 @@ node skills/using-open-artifacts/scripts/artifact.mjs create \
           <div class="fr-panel" id="panel-canvas" role="tabpanel" aria-labelledby="tab-canvas" aria-hidden="true">
             <p class="fr-body sm"><b style="color:var(--accent)">canvas: true</b> swaps the <em>shell</em> &mdash; a pan/zoom plane of frames instead of a scrolling document. Composes with any level.</p>
             <p class="fr-hint">Vendored runtime: momentum + pinch physics, optional presenter tour, connector spotlighting, <span class="fr-mono">#frame-id</span> deep links, frame + freeform contracts, and a canvas ship-gate.</p>
+            <p class="fr-hint">In overview, inert frames are canvas surface &mdash; a drag from one pans; a focused frame keeps its controls operable, and space-drag still pans from anywhere.</p>
+            <p class="fr-hint">Keyboard focus on a label is an instant camera jump (high-frequency); 44px hit targets on labels and note chips; <span class="fr-mono">prefers-reduced-motion</span> collapses physics, tweens, and spotlight transitions.</p>
             <p class="fr-hint">This board is <span class="fr-mono">level 2, canvas: true</span>.</p>
           </div>
         </div>
@@ -167,7 +169,7 @@ node skills/using-open-artifacts/scripts/artifact.mjs create \
     <!-- Freeform notes (counter-scaled by the runtime).
          Placed in the row-gap (y 900-1040) between row 1 and row 2.
          Neither note's box crosses any frame rectangle. -->
-    <p class="oa-note" style="--x:540;--y:910">Each frame holds real, operable UI &mdash; not bitmap mockups. Click a frame to focus it.</p>
+    <p class="oa-note" style="--x:540;--y:910">Each frame holds real, operable UI &mdash; not bitmap mockups. Click to focus; drag an inert frame in overview to pan.</p>
     <p class="oa-note" style="--x:1700;--y:910">This board is itself a <span class="fr-mono">level 2, canvas: true</span> artifact.</p>
   </div>
 </div>

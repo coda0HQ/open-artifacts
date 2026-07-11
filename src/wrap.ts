@@ -66,10 +66,10 @@ const RESET_CSS = `
 html{-webkit-text-size-adjust:100%}
 body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;line-height:1.5;background:var(--oa-bg);color:var(--oa-fg)}
 img,video,canvas{max-width:100%}
-:root{color-scheme:light dark;--oa-bg:#ffffff;--oa-fg:#18181b;--oa-muted:#71717a;--oa-border:#e4e4e7;--oa-surface:#f8f8f8;--oa-accent:#6457f0}
-@media (prefers-color-scheme: dark){:root{--oa-bg:#131316;--oa-fg:#e7e7ea;--oa-muted:#9a9aa2;--oa-border:#2e2e33;--oa-surface:#1c1c21;--oa-accent:#8d82f5}}
-:root[data-theme="light"]{color-scheme:light;--oa-bg:#ffffff;--oa-fg:#18181b;--oa-muted:#71717a;--oa-border:#e4e4e7;--oa-surface:#f8f8f8;--oa-accent:#6457f0}
-:root[data-theme="dark"]{color-scheme:dark;--oa-bg:#131316;--oa-fg:#e7e7ea;--oa-muted:#9a9aa2;--oa-border:#2e2e33;--oa-surface:#1c1c21;--oa-accent:#8d82f5}
+:root{color-scheme:light dark;--oa-bg:#ffffff;--oa-fg:#18181b;--oa-muted:#71717a;--oa-border:#e4e4e7;--oa-surface:#f8f8f8;--oa-accent:#6457f0;--oa-danger:#b42318;--oa-focus-ring:0 0 0 2px var(--oa-bg),0 0 0 4px var(--oa-accent)}
+@media (prefers-color-scheme: dark){:root{--oa-bg:#131316;--oa-fg:#e7e7ea;--oa-muted:#9a9aa2;--oa-border:#2e2e33;--oa-surface:#1c1c21;--oa-accent:#8d82f5;--oa-danger:#ff8f85}}
+:root[data-theme="light"]{color-scheme:light;--oa-bg:#ffffff;--oa-fg:#18181b;--oa-muted:#71717a;--oa-border:#e4e4e7;--oa-surface:#f8f8f8;--oa-accent:#6457f0;--oa-danger:#b42318}
+:root[data-theme="dark"]{color-scheme:dark;--oa-bg:#131316;--oa-fg:#e7e7ea;--oa-muted:#9a9aa2;--oa-border:#2e2e33;--oa-surface:#1c1c21;--oa-accent:#8d82f5;--oa-danger:#ff8f85}
 /* Header height is measured at runtime and exposed as --oa-header-h so
    anchor scroll-offset stays correct without author effort. The header is
    sticky (in-flow), so body content is never obscured — only anchor jumps
@@ -79,11 +79,17 @@ img,video,canvas{max-width:100%}
 .oa-header{position:sticky;top:0;z-index:2147483646;display:flex;align-items:center;gap:.75rem;padding:.5rem 1rem;background:color-mix(in oklab,var(--oa-bg),transparent 8%);backdrop-filter:blur(10px);border-bottom:1px solid var(--oa-border);font-size:.8rem}
 .oa-header .oa-title{flex:1;min-width:0;font-weight:600;color:var(--oa-fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .oa-header .oa-title .oa-fav{margin-right:.4rem}
-.oa-header #oa-theme-toggle{width:30px;height:30px;border-radius:50%;border:1px solid var(--oa-border);background:var(--oa-surface);color:var(--oa-fg);font-size:14px;line-height:1;cursor:pointer;opacity:.7;transition:opacity .15s;flex-shrink:0}
-.oa-header #oa-theme-toggle:hover{opacity:1}
-.oa-brand{display:inline-flex;align-items:center;gap:.35rem;text-decoration:none;color:var(--oa-muted);font-size:.75rem;flex-shrink:0;padding:.25rem .5rem;border-radius:6px;transition:color .15s,background .15s}
-.oa-brand:hover{color:var(--oa-fg);background:var(--oa-surface)}
-.oa-brand svg{width:14px;height:14px}
+.oa-header #oa-theme-toggle{position:relative;width:32px;height:32px;border-radius:8px;border:1px solid var(--oa-border);background:var(--oa-surface);color:var(--oa-fg);font-size:14px;line-height:1;cursor:pointer;opacity:.8;transition:opacity .15s,border-color .15s,background .15s;flex-shrink:0}
+.oa-header #oa-theme-toggle::before{content:"";position:absolute;inset:-6px}
+.oa-header #oa-theme-toggle:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+.oa-header #oa-theme-toggle:active{transform:translateY(1px)}
+.oa-header #oa-theme-toggle svg{display:block}
+.oa-brand{position:relative;display:inline-flex;align-items:center;gap:.35rem;min-height:32px;text-decoration:none;color:var(--oa-muted);font-size:.75rem;flex-shrink:0;padding:.25rem .5rem;border-radius:8px;transition:color .15s,background .15s}
+.oa-brand::before{content:"";position:absolute;inset:-6px 0}
+.oa-brand:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+.oa-brand:active{transform:translateY(1px)}
+.oa-brand svg{display:block;width:14px;height:14px}
+@media (hover:hover) and (pointer:fine){.oa-header #oa-theme-toggle:hover{opacity:1;border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 25%)}.oa-brand:hover{color:var(--oa-fg);background:var(--oa-surface)}}
 @media (max-width:30rem){.oa-brand .oa-brand-text{display:none}}
 `;
 
@@ -145,6 +151,7 @@ const THEME_SCRIPT = `
     var t=root.getAttribute("data-theme");
     btn.innerHTML=t==="dark"?${JSON.stringify(MOON_SVG)}:${JSON.stringify(SUN_SVG)};
     btn.title="Theme: "+(t||"auto");
+    btn.setAttribute("aria-label",t==="dark"?"Switch to light theme":"Switch to dark theme");
   }
   btn.addEventListener("click",function(){
     var t=root.getAttribute("data-theme");
@@ -375,13 +382,15 @@ const UNLOCK_CSS = `
 .oa-card .oa-emoji{font-size:2rem;line-height:1;margin-bottom:.6rem}
 .oa-card h1{font-size:1.1rem;line-height:1.3;margin:0 0 .3rem}
 .oa-card p{margin:0 0 1.35rem;color:var(--oa-muted);font-size:.9rem;line-height:1.55}
-.oa-card input{width:100%;padding:.6rem .75rem;border:1px solid var(--oa-border);border-radius:8px;background:var(--oa-bg);color:var(--oa-fg);font-size:1rem;transition:border-color .15s,box-shadow .15s}
-.oa-card input:focus-visible{outline:none;border-color:var(--oa-accent);box-shadow:0 0 0 3px color-mix(in oklab,var(--oa-accent),transparent 74%)}
-.oa-card button{width:100%;margin-top:.8rem;padding:.6rem .75rem;border:none;border-radius:8px;background:var(--oa-fg);color:var(--oa-bg);font-size:1rem;font-weight:600;cursor:pointer;transition:background .15s,box-shadow .15s,opacity .15s}
-.oa-card button:hover:not(:disabled){background:color-mix(in oklab,var(--oa-fg),var(--oa-bg) 14%)}
-.oa-card button:focus-visible{outline:none;box-shadow:0 0 0 3px color-mix(in oklab,var(--oa-accent),transparent 62%)}
+.oa-label{display:block;margin:0 0 .4rem;color:var(--oa-fg);font-size:.875rem;font-weight:600}
+.oa-card input{width:100%;min-height:44px;padding:.6rem .75rem;border:1px solid var(--oa-border);border-radius:8px;background:var(--oa-bg);color:var(--oa-fg);font-size:1rem;transition:border-color .15s,box-shadow .15s}
+.oa-card input:focus-visible{outline:none;border-color:var(--oa-accent);box-shadow:var(--oa-focus-ring)}
+.oa-card button{width:100%;min-height:44px;margin-top:.8rem;padding:.6rem .75rem;border:none;border-radius:8px;background:var(--oa-fg);color:var(--oa-bg);font-size:1rem;font-weight:600;cursor:pointer;transition:background .15s,box-shadow .15s,opacity .15s}
+.oa-card button:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+.oa-card button:active:not(:disabled){transform:translateY(1px)}
 .oa-card button:disabled{opacity:.6;cursor:wait}
-.oa-error{color:#dc4b4b;font-size:.85rem;min-height:1.2em;margin-top:.7rem}
+.oa-error{color:var(--oa-danger);font-size:.85rem;font-weight:500;min-height:1.2em;margin-top:.7rem}
+@media (hover:hover) and (pointer:fine){.oa-card button:hover:not(:disabled){background:color-mix(in oklab,var(--oa-fg),var(--oa-bg) 14%)}}
 #oa-frame{position:fixed;inset:0;width:100%;height:100%;border:0;display:none}
 `;
 
@@ -458,7 +467,7 @@ form.addEventListener("submit",async function(event){
     frame.style.display="block";
     document.querySelector(".oa-unlock").style.display="none";
   }catch(e){
-    error.textContent="Wrong password. Decryption failed.";
+    error.textContent="Password incorrect. Check it and try again.";
     button.disabled=false;
     button.textContent="Unlock";
   }
@@ -495,8 +504,9 @@ ${headerHtml(favicon, title, hostname, brandUrl)}
   <form class="oa-card" id="oa-form">
     <div class="oa-emoji">${escapeHtml(favicon)}</div>
     <h1>${escapeHtml(title)}</h1>
-    <p>This artifact is password protected. It is decrypted in your browser (PBKDF2 + AES-GCM); the server never sees the password.</p>
-    <input id="oa-password" type="password" autocomplete="current-password" placeholder="Password" required>
+    <p id="oa-help">This artifact is password protected. It is decrypted in your browser (PBKDF2 + AES-GCM); the server never sees the password.</p>
+    <label class="oa-label" for="oa-password">Password</label>
+    <input id="oa-password" type="password" autocomplete="current-password" aria-describedby="oa-help oa-error" required>
     <button id="oa-submit" type="submit">Unlock</button>
     <div class="oa-error" id="oa-error" role="alert"></div>
   </form>

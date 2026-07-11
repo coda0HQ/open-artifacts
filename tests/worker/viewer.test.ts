@@ -115,6 +115,22 @@ describe("GET /a/:id (plain HTML)", () => {
     expect(html).toContain("data-theme");
   });
 
+  it("ships complete interaction states for viewer chrome", async () => {
+    const created = await create({ content: "<p>chrome</p>" });
+    const html = await (
+      await exports.default.fetch(`${BASE}/a/${created.id}`)
+    ).text();
+
+    expect(html).toContain("--oa-focus-ring");
+    expect(html).toContain("#oa-theme-toggle:focus-visible");
+    expect(html).toContain("#oa-theme-toggle:active");
+    expect(html).toContain(".oa-brand:focus-visible");
+    expect(html).toContain("@media (hover:hover) and (pointer:fine)");
+    expect(html).toContain("inset:-6px");
+    expect(html).toContain("Switch to light theme");
+    expect(html).toContain("Switch to dark theme");
+  });
+
   it("404s for an unknown artifact", async () => {
     const res = await exports.default.fetch(`${BASE}/a/nonexistent00`);
     expect(res.status).toBe(404);
@@ -211,6 +227,11 @@ describe("GET /a/:id (encrypted)", () => {
     expect(csp).not.toMatch(/(^|;\s*)sandbox/);
     expect(csp).toContain("default-src 'none'");
     expect(csp).toContain("connect-src 'none'");
+    expect(html).toContain('<label class="oa-label" for="oa-password">');
+    expect(html).toContain('aria-describedby="oa-help oa-error"');
+    expect(html).toContain("min-height:44px");
+    expect(html).toContain("color:var(--oa-danger)");
+    expect(html).toContain("Password incorrect. Check it and try again.");
   });
 
   it("round-trips: the shell's envelope decrypts with the right password", async () => {

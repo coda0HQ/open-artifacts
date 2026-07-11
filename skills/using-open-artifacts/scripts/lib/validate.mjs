@@ -1,3 +1,5 @@
+import { readFragment } from "./recipe.mjs";
+
 const MAX_CONTENT_BYTES = 4 * 1024 * 1024;
 
 const externalChecks = [
@@ -69,7 +71,7 @@ function validateCanvas(content) {
   ) {
     fail("#plane must be nested inside #canvas");
   }
-  const frames = [...content.matchAll(/<(?:section|div)\b[^>]*>/gi)].filter(
+  const frames = [...content.matchAll(/<([a-z][\w-]*)\b[^>]*>/gi)].filter(
     (match) => {
       const classes = match[0].match(/\bclass=["']([^"']+)["']/i)?.[1] ?? "";
       return classes.split(/\s+/).includes("oa-frame");
@@ -89,6 +91,9 @@ function validateCanvas(content) {
   const tours = [];
   for (const match of frames) {
     const tag = match[0];
+    if (match[1].toLowerCase() !== "section") {
+      fail("every canvas frame must use a section element");
+    }
     const id = tag.match(/\bid=["']([^"']+)["']/i)?.[1];
     if (!id || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) {
       fail("every canvas frame needs a human-readable kebab-case id");
@@ -102,6 +107,36 @@ function validateCanvas(content) {
     }
     const tour = tag.match(/\bdata-tour=["'](\d+)["']/i)?.[1];
     if (tour) tours.push(Number(tour));
+
+    const range = elementRange(content, id);
+    const frameContent = range ? content.slice(range.start, range.end) : "";
+    const frameTags = [...frameContent.matchAll(/<([a-z][\w-]*)\b[^>]*>/gi)];
+    const labels = frameTags.filter((candidate) => {
+      const classes =
+        candidate[0].match(/\bclass=["']([^"']+)["']/i)?.[1] ?? "";
+      return classes.split(/\s+/).includes("oa-frame-label");
+    });
+    if (
+      labels.length !== 1 ||
+      labels[0][1].toLowerCase() !== "button" ||
+      !/\btype=["']button["']/i.test(labels[0][0])
+    ) {
+      fail(
+        `canvas frame ${id} requires one button.oa-frame-label with type="button"`,
+      );
+    }
+    const bodies = frameTags.filter((candidate) => {
+      const classes =
+        candidate[0].match(/\bclass=["']([^"']+)["']/i)?.[1] ?? "";
+      return classes.split(/\s+/).includes("oa-frame-body");
+    });
+    if (
+      bodies.length !== 1 ||
+      bodies[0][1].toLowerCase() !== "div" ||
+      !/\binert(?:\s|=|>)/i.test(bodies[0][0])
+    ) {
+      fail(`canvas frame ${id} requires one inert div.oa-frame-body`);
+    }
   }
   if (tours.length > 0) {
     const sorted = [...tours].sort((a, b) => a - b);
@@ -112,12 +147,22 @@ function validateCanvas(content) {
       fail("canvas data-tour values must be unique and contiguous from 1");
     }
   }
-  for (const match of content.matchAll(
-    /<path\b(?=[^>]*\bdata-from=["']([^"']+)["'])(?=[^>]*\bdata-to=["']([^"']+)["'])[^>]*>/gi,
-  )) {
-    const [, from, to] = match;
-    if (!ids.includes(from) || !ids.includes(to)) {
-      fail(`connector references unknown frame: ${from} -> ${to}`);
+  const connectorSvgs = [
+    ...content.matchAll(/<svg\b[^>]*\bclass=["']([^"']+)["'][^>]*>/gi),
+  ].filter((match) => match[1].split(/\s+/).includes("oa-connectors"));
+  for (const svg of connectorSvgs) {
+    const end = content.indexOf("</svg>", svg.index);
+    const connectorContent =
+      end === -1 ? "" : content.slice(svg.index, end + "</svg>".length);
+    for (const path of connectorContent.matchAll(/<path\b[^>]*>/gi)) {
+      const from = path[0].match(/\bdata-from=["']([^"']+)["']/i)?.[1];
+      const to = path[0].match(/\bdata-to=["']([^"']+)["']/i)?.[1];
+      if (!from || !to) {
+        fail("every connector path requires data-from and data-to");
+      }
+      if (!ids.includes(from) || !ids.includes(to)) {
+        fail(`connector references unknown frame: ${from} -> ${to}`);
+      }
     }
   }
   if (
@@ -137,6 +182,19 @@ function validateTheme(loaded) {
   );
   if (themeFragments.length === 0) {
     fail("HTML recipes require at least one theme fragment");
+  }
+  const theme = themeFragments
+    .map((descriptor) => readFragment(descriptor))
+    .join("\n")
+    .replace(/\/\*[\s\S]*?\*\//g, "");
+  if (/@layer\b/i.test(theme)) {
+    fail("theme fragments must be unlayered");
+  }
+  if (!/:root\s*\{/i.test(theme)) {
+    fail("theme fragments require an unlayered :root block");
+  }
+  if (!/:root\s*\[\s*data-theme\s*=\s*["']dark["']\s*\]\s*\{/i.test(theme)) {
+    fail('theme fragments require an unlayered :root[data-theme="dark"] block');
   }
 }
 

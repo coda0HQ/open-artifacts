@@ -223,8 +223,8 @@ function credentials(): CredentialsState {
 function validCanvasBody(): string {
   return `<div class="oa-canvas" id="canvas"><div class="oa-plane" id="plane">
 <svg class="oa-connectors"><path d="M0 0L100 0" data-from="first" data-to="second"/></svg>
-<section class="oa-frame" id="first" data-tour="1" style="--x:0;--y:0;--w:390;--h:844"><button class="oa-frame-label">First</button><div class="oa-frame-body" inert>First</div></section>
-<section class="oa-frame" id="second" data-tour="2" style="--x:510;--y:0;--w:390;--h:844"><button class="oa-frame-label">Second</button><div class="oa-frame-body" inert>Second</div></section>
+<section class="oa-frame" id="first" data-tour="1" style="--x:0;--y:0;--w:390;--h:844"><button class="oa-frame-label" type="button">First</button><div class="oa-frame-body" inert>First</div></section>
+<section class="oa-frame" id="second" data-tour="2" style="--x:510;--y:0;--w:390;--h:844"><button class="oa-frame-label" type="button">Second</button><div class="oa-frame-body" inert>Second</div></section>
 </div></div>`;
 }
 
@@ -364,6 +364,12 @@ describe("Recipe builder", () => {
     expect(html).toContain('id="tour-status"');
     expect(html.match(/class="oa-zoom"/g)).toHaveLength(1);
     expect(html).toContain("const FRICTION");
+    expect(html).toContain("focus(frame, true)");
+    expect(html).toContain(
+      'focused && e.target.closest(".oa-frame") === focused',
+    );
+    expect(html).toContain("@media (prefers-reduced-motion: reduce)");
+    expect(html).toContain("--focus-ring:");
     expect(requests).toHaveLength(0);
   });
 
@@ -388,6 +394,27 @@ describe("Recipe builder", () => {
 
     expect(result.stderr).toContain("direct HTML/Markdown publishing");
     expect(requests).toHaveLength(0);
+  });
+
+  it("requires unlayered light and dark theme blocks", async () => {
+    const missingDark = writeRecipe("missing-dark-theme");
+    writeFileSync(missingDark.themePath, ":root{--accent:blue}\n");
+    const missingDarkResult = await run(["validate", missingDark.recipePath], {
+      expectFailure: true,
+    });
+    expect(missingDarkResult.stderr).toContain(
+      ':root[data-theme="dark"] block',
+    );
+
+    const layered = writeRecipe("layered-theme");
+    writeFileSync(
+      layered.themePath,
+      '@layer direction{:root{--accent:blue}:root[data-theme="dark"]{--accent:cyan}}\n',
+    );
+    const layeredResult = await run(["validate", layered.recipePath], {
+      expectFailure: true,
+    });
+    expect(layeredResult.stderr).toContain("theme fragments must be unlayered");
   });
 
   it("rejects unknown Recipe keys and CSP-incompatible APIs", async () => {
@@ -525,6 +552,61 @@ describe("Recipe builder", () => {
       expectFailure: true,
     });
     expect(templateResult.stderr).toContain("cannot contain template elements");
+  });
+
+  it("rejects incomplete Canvas frame and connector contracts", async () => {
+    const divFrame = writeRecipe("div-frame", {
+      canvas: true,
+      body: validCanvasBody()
+        .replaceAll("<section", "<div")
+        .replaceAll("</section>", "</div>"),
+    });
+    const divFrameResult = await run(["validate", divFrame.recipePath], {
+      expectFailure: true,
+    });
+    expect(divFrameResult.stderr).toContain("must use a section element");
+
+    const missingLabel = writeRecipe("missing-label", {
+      canvas: true,
+      body: validCanvasBody().replace(
+        '<button class="oa-frame-label" type="button">First</button>',
+        "",
+      ),
+    });
+    const missingLabelResult = await run(
+      ["validate", missingLabel.recipePath],
+      { expectFailure: true },
+    );
+    expect(missingLabelResult.stderr).toContain(
+      "requires one button.oa-frame-label",
+    );
+
+    const missingInert = writeRecipe("missing-inert", {
+      canvas: true,
+      body: validCanvasBody().replace(
+        '<div class="oa-frame-body" inert>First</div>',
+        '<div class="oa-frame-body">First</div>',
+      ),
+    });
+    const missingInertResult = await run(
+      ["validate", missingInert.recipePath],
+      { expectFailure: true },
+    );
+    expect(missingInertResult.stderr).toContain(
+      "requires one inert div.oa-frame-body",
+    );
+
+    const missingEndpoint = writeRecipe("missing-endpoint", {
+      canvas: true,
+      body: validCanvasBody().replace(' data-to="second"', ""),
+    });
+    const missingEndpointResult = await run(
+      ["validate", missingEndpoint.recipePath],
+      { expectFailure: true },
+    );
+    expect(missingEndpointResult.stderr).toContain(
+      "connector path requires data-from and data-to",
+    );
   });
 });
 
