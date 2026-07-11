@@ -127,6 +127,11 @@ Feature: Agent skill for creating and maintaining artifacts
     Given a Recipe with canvas true
     When the agent builds a standalone preview
     Then the runtime resolves frame focus on pointerup from the press target instead of the retargetable click event
-    And presses on real controls keep the pointer while drags from any other surface pan
-    And the canvas suppresses text selection except inside form fields and the compact stacked read
-    So that a tap reliably enters a frame and a drag never smears a selection
+    And frame labels remain pan surface while in-frame controls keep the pointer
+    And a named tap slop gates resumed pinches so a pinch lift is never a tap
+    And pinch overshoot past the zoom clamp uses the same rubber helper as pan
+    And hit testing walks composed paths across shadow roots
+    And assistive clicks on collapsed note chips still toggle without a prior pointer gesture
+    And chrome controls press with a one-pixel translate
+    And the canvas suppresses text selection except inside editable fields and the compact stacked read
+    So that a tap reliably enters a frame, a drag pans from every surface, and selection never fights the pan

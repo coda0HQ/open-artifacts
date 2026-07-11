@@ -364,53 +364,38 @@ describe("Recipe builder", () => {
     expect(html).toContain('id="tour-status"');
     expect(html.match(/class="oa-zoom"/g)).toHaveLength(1);
     expect(html).toContain("const FRICTION");
+    expect(html).toContain("const TAP_SLOP");
+    expect(html).toContain("TAP_SLOP + 1");
+    expect(html).toContain("const SPOT_DIM");
+    expect(html).toContain("--spot-dim-frame");
     expect(html).toContain("focus(frame, true)");
-    expect(html).toContain("e.target.closest(CONTROLS)");
-    expect(html).toContain("@media (prefers-reduced-motion: reduce)");
-    expect(html).toContain("--focus-ring:");
-    expect(requests).toHaveLength(0);
-  });
-
-  it("resolves canvas taps from the press target, not the retargetable click", async () => {
-    const { recipePath } = writeRecipe("tap", { canvas: true });
-    const output = join(projectDir, "tap-preview.html");
-
-    await run(["build", recipePath, "--output", output, "--standalone"]);
-
-    const html = readFileSync(output, "utf8");
-    // Pointer capture retargets the native click to the canvas in some
-    // engines, which read as "background" and exited the frame the press had
-    // just focused — so focus resolves on pointerup from the pointerdown
-    // target instead.
     expect(html).toContain("function tap(");
-    expect(html).toContain("pressTarget = e.target");
-    expect(html).not.toContain('canvas.addEventListener("click"');
-    // Presses on real controls never start a pan-capture at all.
-    expect(html).toContain("e.target.closest(CONTROLS)");
+    expect(html).toContain("function closestCrossing(");
+    expect(html).toContain("function eventDeepTarget(");
+    expect(html).toContain("pressTarget = deep");
+    expect(html).toContain("function isPointerControl(");
+    expect(html).toContain("oa-frame-label");
+    expect(html).toContain("clickConsumed");
+    expect(html).toContain('canvas.addEventListener("click"');
+    expect(html).toContain("rubber(rawK - MIN, 1)");
+    expect(html).toContain("rubber(rawK - MAX, 1)");
+    expect(html).toContain('contenteditable]:not([contenteditable="false"])');
+    expect(html).toContain("translateY(1px)");
+    expect(html).toContain("fitTo(box(focused), 0)");
     expect(html).not.toContain('closest(".oa-frame") === focused');
-    expect(requests).toHaveLength(0);
-  });
-
-  it("suppresses text selection on the pan surface and keeps it in form fields", async () => {
-    const { recipePath } = writeRecipe("selection", { canvas: true });
-    const output = join(projectDir, "selection-preview.html");
-
-    await run(["build", recipePath, "--output", output, "--standalone"]);
-
-    const html = readFileSync(output, "utf8");
-    // Drag = pan from every surface, frame text included, so the surface must
-    // kill native selection — inert and pointer capture don't stop it in every
-    // engine, and a selection-drag swallows the tap that focuses a frame.
-    expect(html).toMatch(/\.oa-canvas\s*\{[^}]*user-select:\s*none/);
-    // No blanket re-enable on the focused body: only fields need real carets.
+    expect(html).toMatch(/(?<!-webkit-)user-select:\s*none/);
     expect(html).toContain(
-      ".oa-frame[data-focused] .oa-frame-body :is(input, textarea, select, [contenteditable])",
+      '.oa-frame[data-focused] .oa-frame-body :is(input, textarea, select, [contenteditable]:not([contenteditable="false"]))',
     );
     expect(html).not.toMatch(
       /\.oa-frame\[data-focused\]\s+\.oa-frame-body\s*\{[^}]*user-select/,
     );
-    // The compact stacked read is a document again.
-    expect(html).toContain("touch-action: auto; user-select: auto;");
+    expect(html).toMatch(/touch-action:\s*auto/);
+    expect(html).toMatch(
+      /@media\s*\(max-width:\s*640px\)[\s\S]*?\.oa-canvas\s*\{[^}]*user-select:\s*auto/,
+    );
+    expect(html).toContain("@media (prefers-reduced-motion: reduce)");
+    expect(html).toContain("--focus-ring:");
     expect(requests).toHaveLength(0);
   });
 
@@ -456,6 +441,45 @@ describe("Recipe builder", () => {
       expectFailure: true,
     });
     expect(layeredResult.stderr).toContain("theme fragments must be unlayered");
+  });
+
+  it("fails when a container class is defined but never applied", async () => {
+    const orphan = writeRecipe("orphan-shell", {
+      body: "<main><h1>Orphan</h1><p>No shell wrapper here.</p></main>\n",
+    });
+    writeFileSync(
+      orphan.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n.shell{max-width:880px;margin:0 auto}\n',
+    );
+    const result = await run(["validate", orphan.recipePath], {
+      expectFailure: true,
+    });
+    expect(result.stderr).toContain('container class ".shell" with max-width');
+    expect(requests).toHaveLength(0);
+  });
+
+  it("passes when an applied container class carries max-width", async () => {
+    const applied = writeRecipe("applied-container", {
+      body: '<main class="report"><h1>Report</h1></main>\n',
+    });
+    writeFileSync(
+      applied.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n.report{max-width:72ch;margin:0 auto}\n',
+    );
+    const result = await run(["validate", applied.recipePath]);
+    expect(result.code).toBe(0);
+  });
+
+  it("passes when max-width is set on body, not a class", async () => {
+    const bodyContainer = writeRecipe("body-container", {
+      body: "<main><h1>Body measure</h1></main>\n",
+    });
+    writeFileSync(
+      bodyContainer.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\nbody{max-width:880px;margin:0 auto}\n',
+    );
+    const result = await run(["validate", bodyContainer.recipePath]);
+    expect(result.code).toBe(0);
   });
 
   it("rejects unknown Recipe keys and CSP-incompatible APIs", async () => {
