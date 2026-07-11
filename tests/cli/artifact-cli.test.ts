@@ -107,7 +107,7 @@ beforeAll(async () => {
       if (req.method === "GET" && (req.url ?? "").includes("/raw")) {
         const preset = nextRaw ?? {
           contentType: "text/plain; charset=utf-8",
-          body: '<title>Published</title><style>:root{--accent:blue}:root[data-theme="dark"]{--accent:cyan}</style><h1>Published</h1>',
+          body: '<title>Published</title><style>:root{--accent:blue}:root[data-theme="dark"]{--accent:cyan}main{max-width:72ch;margin-inline:auto;padding:2rem}</style><main><h1>Published</h1></main>',
         };
         nextRaw = null;
         res.writeHead(200, { "content-type": preset.contentType });
@@ -257,7 +257,7 @@ function writeRecipe(
       ? validCanvasBody()
       : format === "markdown"
         ? "# Recipe report\n\nDeterministic Markdown.\n"
-        : '<main class="report"><h1>Recipe report</h1></main>');
+        : '<main class="oa-prose"><h1>Recipe report</h1></main>');
   writeFileSync(bodyPath, body.endsWith("\n") ? body : `${body}\n`);
   if (format === "html") {
     writeFileSync(
@@ -482,6 +482,49 @@ describe("Recipe builder", () => {
     expect(result.code).toBe(0);
   });
 
+  it("rejects a level 1 page with no measure cap and points to .oa-prose", async () => {
+    const bare = writeRecipe("bare-l1", {
+      body: "<main><h1>Bare</h1><p>No measure cap anywhere.</p></main>\n",
+    });
+    writeFileSync(
+      bare.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n',
+    );
+    const result = await run(["validate", bare.recipePath], {
+      expectFailure: true,
+    });
+    expect(result.stderr).toContain("level 1 HTML documents must constrain");
+    expect(result.stderr).toContain("oa-prose");
+    expect(requests).toHaveLength(0);
+  });
+
+  it("passes a level 1 page using the .oa-prose baseline", async () => {
+    const prose = writeRecipe("prose-l1", {
+      body: '<main class="oa-prose"><h1>Prose</h1><p>Baseline.</p></main>\n',
+    });
+    writeFileSync(
+      prose.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n',
+    );
+    const result = await run(["validate", prose.recipePath]);
+    expect(result.code).toBe(0);
+  });
+
+  it("passes a level 2 page with no measure cap (guard is L1-only)", async () => {
+    const bareL2 = writeRecipe("bare-l2", {
+      mutate: (recipe) => {
+        recipe.artifact.level = 2;
+      },
+      body: "<main><h1>Bare L2</h1></main>\n",
+    });
+    writeFileSync(
+      bareL2.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n',
+    );
+    const result = await run(["validate", bareL2.recipePath]);
+    expect(result.code).toBe(0);
+  });
+
   it("rejects unknown Recipe keys and CSP-incompatible APIs", async () => {
     const unknown = writeRecipe("unknown", {
       mutate: (recipe) => {
@@ -573,6 +616,10 @@ describe("Recipe builder", () => {
       );
     }
     writeJson(built.recipePath, recipe);
+    writeFileSync(
+      built.themePath,
+      ':root{--accent:oklch(55% .15 250)}\n:root[data-theme="dark"]{--accent:oklch(72% .14 250)}\nbody{max-width:72ch;margin-inline:auto}\n',
+    );
 
     const result = await run(["validate", built.recipePath]);
 
@@ -734,7 +781,7 @@ describe("Recipe publishing", () => {
     await run(["create", built.recipePath]);
     writeFileSync(
       built.bodyPath,
-      '<main class="report"><h1>Recipe report v2</h1></main>\n',
+      '<main class="oa-prose"><h1>Recipe report v2</h1></main>\n',
     );
 
     await run(["update", "testid123456"]);
@@ -753,7 +800,10 @@ describe("Recipe publishing", () => {
     const built = writeRecipe();
     await run(["create", built.recipePath]);
     const before = manifest();
-    writeFileSync(built.bodyPath, "<main><h1>Conflicting update</h1></main>\n");
+    writeFileSync(
+      built.bodyPath,
+      '<main class="oa-prose"><h1>Conflicting update</h1></main>\n',
+    );
     nextResponse = {
       status: 409,
       body: { error: "conflict", currentVersion: 5 },

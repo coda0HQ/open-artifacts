@@ -179,3 +179,82 @@ body {
   font-family: var(--font-body);
   line-height: var(--leading-body);
 }
+
+/* Opt-in prose baseline for level 1 HTML documents. Mirrors the .oa-md
+   skeleton the viewer gives markdown artifacts, so an authored HTML doc
+   does not ship at 100% width with browser-default spacing just because
+   the author defined tokens but forgot structure. Wrap the body:
+   <main class="oa-prose">…</main>. Uses :where() for zero specificity,
+   so any rule the author writes wins by source order alone — this is a
+   floor, not a constraint. Drop in if you want it; ignore if you don't. */
+:where(.oa-prose) {
+  max-width: var(--container-max);
+  margin-inline: auto;
+  padding: var(--space-12) var(--space-6) var(--space-12);
+}
+:where(.oa-prose) h1,
+:where(.oa-prose) h2,
+:where(.oa-prose) h3 {
+  line-height: var(--leading-display);
+  text-wrap: balance;
+}
+:where(.oa-prose) h1 {
+  font-size: var(--text-3xl);
+}
+:where(.oa-prose) h2 {
+  font-size: var(--text-2xl);
+}
+:where(.oa-prose) h3 {
+  font-size: var(--text-xl);
+}
+:where(.oa-prose) p,
+:where(.oa-prose) ul,
+:where(.oa-prose) ol,
+:where(.oa-prose) blockquote,
+:where(.oa-prose) pre,
+:where(.oa-prose) table {
+  margin-block: var(--space-4);
+}
+:where(.oa-prose) ul,
+:where(.oa-prose) ol {
+  padding-left: var(--space-6);
+}
+:where(.oa-prose) pre {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3) var(--space-4);
+  overflow-x: auto;
+}
+:where(.oa-prose) code {
+  font-family: var(--font-mono);
+  font-size: 0.925em;
+}
+:where(.oa-prose) :not(pre) > code {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.1em 0.35em;
+}
+:where(.oa-prose) table {
+  border-collapse: collapse;
+  display: block;
+  overflow-x: auto;
+}
+:where(.oa-prose) th,
+:where(.oa-prose) td {
+  border: 1px solid var(--border);
+  padding: var(--space-2) var(--space-3);
+  text-align: start;
+}
+:where(.oa-prose) blockquote {
+  padding-left: var(--space-4);
+  border-left: 3px solid var(--border);
+  color: var(--muted);
+}
+:where(.oa-prose) a {
+  color: inherit;
+}
+:where(.oa-prose) img {
+  max-width: 100%;
+}

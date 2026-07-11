@@ -2,13 +2,30 @@
   "manifestVersion": 2,
   "artifacts": [
     {
+      "id": "pg7zuNunQpo5",
+      "url": "https://coda0.com/a/pg7zuNunQpo5",
+      "version": 18,
+      "recipe": ".artifacts/recipes/open-artifacts-canvas-overview-pg7zuNun.recipe.json",
+      "recipeHash": "sha256:f61c0739fc83c2d797434cd9986b5531cec6a06a2ad5c51b8670794385bf6dac",
+      "inputHash": "sha256:848ae6a2ed20a50851593a16549fec4a3d01fb65c98c0ab03296839c21bdf210",
+      "outputHash": "sha256:f3991370c4858a409525dfe471ec57823a89fba1ca42685342aeae65b4221c08",
+      "strategy": "direct",
+      "autoUpdate": false,
+      "snapshot": {
+        "docs/architecture.md": "6aaa2b2deb9715e7b5745e3c64961ab87f468b6e945788b5b4f3ef1af8098709",
+        "README.md": "8953aaf7d6e10d7181928ac83564a11c8d141e7247ccba4511a16f9594884703",
+        "skills/using-open-artifacts/references/canvas.md": "2b4f1c64d96489e14e273b8417060360df04d30d411e496fe9f664ba79e1ba79"
+      },
+      "updatedAt": "2026-07-11T15:33:00.885Z"
+    },
+    {
       "id": "tSXeJLyobwpY",
       "url": "https://coda0.com/a/tSXeJLyobwpY",
-      "version": 24,
+      "version": 25,
       "recipe": ".artifacts/recipes/open-artifacts-self-hosted-claude-code-a-tSXeJLyo.recipe.json",
       "recipeHash": "sha256:85d5d8b0f7ee2ecbbd29a88d6332fe5840a4c77717fadbf508b393fd619e0b2e",
-      "inputHash": "sha256:694b81c052a8a5a75f64070f86da37fa884a4a4a43d1d99ebd50cd0bce83607b",
-      "outputHash": "sha256:c18e7b5b4a15261d77c1c4dc25283fe83443f65b10fc61175712970b636d2d3e",
+      "inputHash": "sha256:d9a80fe85a53c9c8db1b5f1173ab17424c522d64926c19d2e30918e844e00eb8",
+      "outputHash": "sha256:f847d8e0727dd4a2b3ddcb85cf52716851dbff720c3a8a6c63d25f07358fb9db",
       "strategy": "direct",
       "autoUpdate": true,
       "snapshot": {
@@ -25,12 +42,12 @@
         "skills/using-open-artifacts/examples/recipes/document/report.recipe.json": "8ed1a44d7d80d0036a2c5613167ca74672ddb8db452b02d226f44f084ce66a9e",
         "skills/using-open-artifacts/examples/recipes/markdown/fragments/body.md": "8b995caa96a9811fbfe455dabb9136c8ffb3943a91f86397933cc58c0f7dbf0b",
         "skills/using-open-artifacts/examples/recipes/markdown/notes.recipe.json": "fdf5a9795bed3d27d37e414a346c6d84c22689a1d2527ac024d5790f412219e4",
-        "skills/using-open-artifacts/references/canvas.md": "cae851b6ed06b9265c13a31cd7b1ec1dfa088a8fa8cee18e2781bf7574a1318a",
+        "skills/using-open-artifacts/references/canvas.md": "2b4f1c64d96489e14e273b8417060360df04d30d411e496fe9f664ba79e1ba79",
         "skills/using-open-artifacts/references/deployment.md": "6893035c6b9c099c7ad26a3ea180ef3d153ed237da75f8e81bf03532d479ae2c",
         "skills/using-open-artifacts/references/design.md": "07a5755b5b1a95a46fd7ffd3f7575068ced9defb78729f45a830c79b594ad659",
         "skills/using-open-artifacts/references/icons.md": "b6fa700da17590956a4feaf5f729583154597285dd51e194c2c3e59b319ca7c2",
-        "skills/using-open-artifacts/references/interaction.md": "9b3cfa62f3216144649e04efcccb72ff558ef9240cafef35d2b0b832c326e533",
-        "skills/using-open-artifacts/references/motion.md": "c21b1dbb0fc885f4dbbe5bdb0a00402e53c87eece978da4799111ca2244eef1d",
+        "skills/using-open-artifacts/references/interaction.md": "779e483dd2b3dcfe1c5e6cbdf046e772b31b1dd8b48f5d69dce59e55265488ae",
+        "skills/using-open-artifacts/references/motion.md": "e6fb019c2c9cc5864d2657eecfd96d6f4d29d2c3b790d5c6899ff030b3168c53",
         "skills/using-open-artifacts/references/recipe.md": "14c1bb8026fe378d68797169cae003734d4e4c3547872bc57610e50e0952fa58",
         "skills/using-open-artifacts/references/recipe.schema.json": "e054f92ac280df593d174af40ff85ad93ffda4ef1ba152e470ba82d09440d68c",
         "skills/using-open-artifacts/references/tokens.css": "01d944ed161ef3494fd1e8322860bbd1b48ee1e58995da6c4185f83db0034139",
@@ -38,7 +55,7 @@
         "skills/using-open-artifacts/scripts/build-artifact.mjs": "601d527acf81d7e1cb529bd1f5e23ddc2ecd4304ae8e2f7c97dc62986ed4ec80",
         "skills/using-open-artifacts/scripts/lib/compose.mjs": "0d70e1af8317fdfd0d8b572bd34fc66ab5d77782ef61b7d2479d71b9b5c63f74",
         "skills/using-open-artifacts/scripts/lib/recipe.mjs": "c8b04c52bb4643255b7b593a4a2ed70cae7c9c9381093c4ad242810ccfe7504b",
-        "skills/using-open-artifacts/scripts/lib/validate.mjs": "e4a608681f7e93f7b8489a2e2e4f2fd5af41fc355070429f7fc5db035f8ab001",
+        "skills/using-open-artifacts/scripts/lib/validate.mjs": "ed307e432af178cb6bbe3fdc45b4344e3c9fa8e8630eeabfd5362d60e286875c",
         "skills/using-open-artifacts/SKILL.md": "eedfc8a148379f81c35e4734371a47a6cc66f1213fcbd8dde23b6a514f24e1af",
         "src/api.ts": "ddad91ff6aeae6a1b164b637800ebdb44366c9a4a6d1790cc53a8c62978b406e",
         "src/domain.ts": "e5a261d1c99ecdcf9c88f453d9e78d00b5f29057692cdc8d5c0946fd4cb70ce6",
@@ -49,24 +66,7 @@
         "src/wrap.ts": "c7703f327876171e15778b548a201cc45f29db19c7a84502a1b1e1b4ed01f0d0",
         "wrangler.jsonc": "870a14d7bcf752797ea7417d223918de78806e038e7fa8e625a04a56734e9b74"
       },
-      "updatedAt": "2026-07-11T05:33:46.640Z"
-    },
-    {
-      "id": "pg7zuNunQpo5",
-      "url": "https://coda0.com/a/pg7zuNunQpo5",
-      "version": 17,
-      "recipe": ".artifacts/recipes/open-artifacts-canvas-overview-pg7zuNun.recipe.json",
-      "recipeHash": "sha256:f61c0739fc83c2d797434cd9986b5531cec6a06a2ad5c51b8670794385bf6dac",
-      "inputHash": "sha256:da0e863a2322f31e49632bca83cbc484c3e8489281cd96cdee716529846e4e4e",
-      "outputHash": "sha256:dbb198ddd6309cdd44e91588009b97f8177057b140219f924ddf8e2530087140",
-      "strategy": "direct",
-      "autoUpdate": false,
-      "snapshot": {
-        "docs/architecture.md": "6aaa2b2deb9715e7b5745e3c64961ab87f468b6e945788b5b4f3ef1af8098709",
-        "README.md": "8953aaf7d6e10d7181928ac83564a11c8d141e7247ccba4511a16f9594884703",
-        "skills/using-open-artifacts/references/canvas.md": "07b3b1b7cf4b64b8302791d498b081c916099f4f9f7e357c479de0a7b7b14cf6"
-      },
-      "updatedAt": "2026-07-11T11:35:57.304Z"
+      "updatedAt": "2026-07-11T15:33:02.821Z"
     }
   ]
 }

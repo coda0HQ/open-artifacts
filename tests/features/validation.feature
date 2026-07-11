@@ -22,3 +22,21 @@ Feature: Build validation catches silent layout defects
     Given an HTML recipe whose styles set max-width on body itself rather than a class
     When the agent runs the artifact script with validate
     Then the build succeeds because the constraint lives on an element, not a class
+
+  Scenario: A level 1 non-canvas HTML page with no measure cap fails validation
+    Given an HTML recipe at level 1 that defines no max-width anywhere in its
+      theme or styles and does not use the .oa-prose baseline
+    When the agent runs the artifact script with validate
+    Then the build fails with a message pointing the author to the .oa-prose baseline
+      or a measure cap on body
+    And no publish request is made
+
+  Scenario: A level 1 page using the .oa-prose baseline passes validation
+    Given an HTML recipe at level 1 whose body wraps content in main.oa-prose
+    When the agent runs the artifact script with validate
+    Then the build succeeds because the .oa-prose baseline supplies the measure cap
+
+  Scenario: A level 2 or 3 page with no measure cap passes validation
+    Given an HTML recipe at level 2 that defines no max-width anywhere
+    When the agent runs the artifact script with validate
+    Then the build succeeds because the measure-cap guard only applies to level 1

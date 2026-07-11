@@ -1,5 +1,5 @@
 <div class="oa-canvas" id="canvas" role="group"
-     aria-label="Canvas. Drag to pan, ctrl-scroll to zoom, click a frame to focus.">
+     aria-label="Canvas. Drag or Space-drag to pan, pinch or ctrl-scroll to zoom, double-click to zoom in, Shift+double-click to zoom out, click a frame or its label to focus. Escape returns to overview.">
   <div class="oa-plane" id="plane">
     <svg class="oa-connectors" aria-hidden="true">
       <!-- Hero -> What it is (primary narrative) -->
@@ -108,9 +108,9 @@ node skills/using-open-artifacts/scripts/artifact.mjs create \
           </div>
           <div class="fr-panel" id="panel-canvas" role="tabpanel" aria-labelledby="tab-canvas" aria-hidden="true">
             <p class="fr-body sm"><b style="color:var(--accent)">canvas: true</b> swaps the <em>shell</em> &mdash; a pan/zoom plane of frames instead of a scrolling document. Composes with any level.</p>
-            <p class="fr-hint">Vendored runtime: momentum + pinch physics, optional presenter tour, connector spotlighting, <span class="fr-mono">#frame-id</span> deep links, frame + freeform contracts, and a canvas ship-gate.</p>
-            <p class="fr-hint">In overview, inert frames are canvas surface &mdash; a drag from one pans; a focused frame keeps its controls operable, and space-drag still pans from anywhere.</p>
-            <p class="fr-hint">Keyboard focus on a label is an instant camera jump (high-frequency); 44px hit targets on labels and note chips; <span class="fr-mono">prefers-reduced-motion</span> collapses physics, tweens, and spotlight transitions.</p>
+            <p class="fr-hint">Vendored runtime: momentum + pinch with rubber past MIN/MAX, optional presenter tour, connector spotlighting, <span class="fr-mono">#frame-id</span> deep links, frame + freeform contracts, and a canvas ship-gate.</p>
+            <p class="fr-hint">Figma-style pointer ownership: frame labels are pan surface that tap-to-focus; in-frame fields and buttons keep the pointer; Space-drag pans from anywhere. Selection stays off the pan surface except editable fields.</p>
+            <p class="fr-hint">Named <span class="fr-mono">TAP_SLOP</span> separates taps from pans; assistive clicks still open note chips; keyboard focus on a label is an instant camera jump; 44px hit targets; <span class="fr-mono">prefers-reduced-motion</span> collapses physics and tweens.</p>
             <p class="fr-hint">This board is <span class="fr-mono">level 2, canvas: true</span>.</p>
           </div>
         </div>
@@ -169,7 +169,7 @@ node skills/using-open-artifacts/scripts/artifact.mjs create \
     <!-- Freeform notes (counter-scaled by the runtime).
          Placed in the row-gap (y 900-1040) between row 1 and row 2.
          Neither note's box crosses any frame rectangle. -->
-    <p class="oa-note" style="--x:540;--y:910">Each frame holds real, operable UI &mdash; not bitmap mockups. Click to focus; drag an inert frame in overview to pan.</p>
+    <p class="oa-note" style="--x:540;--y:910">Each frame holds real, operable UI &mdash; not bitmap mockups. Drag any surface (labels included) to pan; tap a frame or label to focus.</p>
     <p class="oa-note" style="--x:1700;--y:910">This board is itself a <span class="fr-mono">level 2, canvas: true</span> artifact.</p>
   </div>
 </div>

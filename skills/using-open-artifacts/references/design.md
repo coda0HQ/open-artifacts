@@ -56,6 +56,25 @@ brief is a flow, a set of screens/variants, or a board, reach for it and read
   decorative gradients to a doc. Most pages do not need a flashy hero. A
   designed masthead — title, one-line standfirst, a rule, generous space —
   beats a hero every time.
+- **Prose baseline (default for L1 HTML):** the token contract ships an
+  opt-in `.oa-prose` baseline — a `72ch` measure cap, page padding, heading
+  scale, and styled `code`/`pre`/`table`/`blockquote` (mirrors the `.oa-md`
+  skeleton the viewer injects for markdown). Wrap your body in it so a doc
+  that defines tokens but forgets structure does not ship at 100% width
+  with browser-default spacing:
+
+  ```html
+  <main class="oa-prose">
+    <header class="masthead">…</header>
+    <section>…</section>
+  </main>
+  ```
+
+  It is `:where()`-scoped (zero specificity), so any rule you write wins
+  by source order — a floor, not a constraint. Markdown needs nothing;
+  the viewer wraps it in `.oa-md` automatically. HTML L1 without a
+  measure cap is the most common silent defect, so `validate` fails the
+  build if an L1 non-canvas page has none (see the ship gate).
 
 ### Level 2 — interactive
 
@@ -735,6 +754,10 @@ not loop on renders, and do not publish with a failing P0.
 - [ ] Contrast: body ≥ 4.5:1 in BOTH themes — check `--muted` on `--surface`
       too, in both blocks.
 - [ ] 360px: no horizontal scroll, no heading overflow, hit targets ≥ 44px.
+- [ ] Body width is constrained — an L1 non-canvas page has a measure cap
+      (`max-width` on `body`/`<main>` or via `.oa-prose`); `validate` fails
+      the build if none exists, since the default is a full-width doc with
+      browser-default spacing.
 - [ ] Banned tropes absent — grep for `border-left`/`border-right` accents
       > 1px, `background-clip: text`, `backdrop-filter` outside one floating
       bar, `#000` page backgrounds.

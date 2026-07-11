@@ -219,6 +219,30 @@ function validateContainer(authoredStyles, authoredBody) {
   }
 }
 
+// Level 1 non-canvas HTML documents must constrain body width somewhere —
+// either a `max-width` on body/html in the theme/styles, or the opt-in
+// `.oa-prose` baseline (which carries the cap). Without it, a doc that
+// defines tokens but forgets structure ships at 100% width with browser-
+// default spacing: exactly the bare, unpadded artifact this guard was added
+// to catch. Canvas mode and L2/L3 are exempt — canvas frames position
+// themselves spatially, and interactive/rich pages may be full-bleed by
+// design. Markdown is exempt too: the viewer wraps it in .oa-md, which caps
+// the measure. Markdown never reaches this path (format check above).
+const MEASURE_CAP_PATTERN = /max-width\s*:/i;
+const OA_PROSE_PATTERN = /\boa-prose\b/;
+
+function validateMeasureCap(loaded, composed) {
+  const { artifact } = loaded.recipe;
+  if (artifact.format === "markdown") return;
+  if (artifact.canvas) return;
+  if (artifact.level !== 1) return;
+  if (OA_PROSE_PATTERN.test(composed.authoredBody)) return;
+  if (MEASURE_CAP_PATTERN.test(composed.authoredStyles)) return;
+  fail(
+    'level 1 HTML documents must constrain body width — wrap the body in <main class="oa-prose"> (the token contract\'s prose baseline), or set a max-width on body/html in the theme fragment; without it the page ships at 100% width with browser-default spacing',
+  );
+}
+
 function validateTheme(loaded) {
   if (loaded.recipe.artifact.format !== "html") return;
   const themeFragments = loaded.descriptors.filter(
@@ -286,6 +310,7 @@ export function validateBuild(loaded, composed) {
       fail(`inline JavaScript syntax error: ${error.message}`);
     }
     validateContainer(composed.authoredStyles, composed.authoredBody);
+    validateMeasureCap(loaded, composed);
   }
   if (artifact.canvas) validateCanvas(composed.authoredBody);
   const title = artifact.title ?? extractTitle(content, artifact.format);

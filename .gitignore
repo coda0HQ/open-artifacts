@@ -7,3 +7,5 @@ dist/
 .artifacts/credentials.json
 .artifacts/manifest.local.json
 .artifacts/previews/
+.artifacts/recipes.local/
+.artifacts/fragments.local/
