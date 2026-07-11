@@ -28,6 +28,10 @@ References: Figma's canvas chrome, Linear's toolbar restraint.
 
 - Decorative motion, orchestrated load sequences (users are mid-task).
 - Over-decorated controls, invented affordances for standard tasks.
+- Decorative spotlight or resting "cinema" dim on the canvas; spotlight only
+  on hover/focus of a frame (see `references/canvas.md` ship gate).
+- Invented pan/zoom UI (compass, orbit, novel metaphors) — stick to
+  +/−/%/fit, drag, Space-drag, wheel/pinch, keyboard.
 - The AI-slop tropes already banned in `references/design.md` (side-stripes,
   gradient text, hero metrics, eyebrow-per-section).
 
