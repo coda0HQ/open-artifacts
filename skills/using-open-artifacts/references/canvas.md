@@ -74,6 +74,15 @@ Override any constant for a specific composition, but name why.
   border: 0;
   overflow: hidden;
   touch-action: none;
+  /* Every drag on the surface pans (see pointerdown), frame text included,
+     so this is a pan surface, not a document: suppress native text selection
+     or a drag smears a selection across labels and frame text. inert and
+     pointer capture don't prevent that in every engine (Safari selects
+     regardless), and a stray selection-drag also swallows the tap that
+     focuses a frame. Selection returns where it can't fight a pan: form
+     fields below, and the compact stacked read. */
+  user-select: none;
+  -webkit-user-select: none;
   overscroll-behavior: contain;
   cursor: grab;
   background-color: var(--bg);
@@ -145,6 +154,13 @@ Override any constant for a specific composition, but name why.
   box-shadow: var(--elev-ring);
 }
 .oa-frame[data-focused] .oa-frame-body { box-shadow: 0 0 0 2px var(--accent); }
+/* Drag = pan even inside a focused frame (the Figma model), so flowing text
+   is never drag-selectable. Form fields are the exception: they own their
+   pointer (see CONTROLS in the runtime JS) and caret work needs selection. */
+.oa-frame[data-focused] .oa-frame-body :is(input, textarea, select, [contenteditable]) {
+  user-select: text;
+  -webkit-user-select: text;
+}
 
 /* Freeform layer: notes and connectors share the plane's world coordinates.
    Counter-scaled like frame labels, or a note's fixed max-width collapses to
@@ -463,7 +479,8 @@ Override any constant for a specific composition, but name why.
    not. Below 640px the plane linearizes into a scrolling stack rather than
    shipping a pinch handler that fights native scroll. */
 @media (max-width: 640px) {
-  .oa-canvas { height: auto; overflow: visible; touch-action: auto; cursor: auto; background-image: none; }
+  /* The stacked read is a document again: selection returns with scrolling. */
+  .oa-canvas { height: auto; overflow: visible; touch-action: auto; user-select: auto; -webkit-user-select: auto; cursor: auto; background-image: none; }
   .oa-plane { position: static; transform: none; display: flex; flex-direction: column; gap: var(--space-8); padding: var(--space-4); }
   .oa-plane[data-spotlight] .oa-frame:not([data-lit]),
   .oa-plane[data-spotlight] .oa-note:not([data-lit]),
@@ -519,7 +536,7 @@ Override any constant for a specific composition, but name why.
   const samples = [];
   let drag = null;
   let space = false;
-  let clickSuppressed = false;
+  let pressTarget = null;
   let applyingHash = false;
 
   // --- Spotlight adjacency map ---
@@ -825,23 +842,36 @@ Override any constant for a specific composition, but name why.
     focus(tour[tourIndex]);
   }
 
-  // --- Click handler ---
+  // --- Tap -> focus ---
 
-  canvas.addEventListener("click", (e) => {
-    if (compact.matches || clickSuppressed || e.target.closest(".oa-zoom")) return;
-    const note = e.target.closest(".oa-note");
+  // A tap (press + release under the 6px drag threshold) is the canvas
+  // click, resolved in endDrag from the pointerdown hit target. The native
+  // click event cannot be trusted for this: pointer capture retargets it to
+  // the canvas in some engines, which read as "background" and exited the
+  // frame the press had just focused. Returns true when the camera moved.
+  function tap(target) {
+    const note = target.closest(".oa-note");
     if (note && note.dataset.collapsed === "true") {
       toggleNote(note);
-      return;
+      return true;
     }
-    const frame = e.target.closest(".oa-frame");
-    if (frame && frame !== focused) focus(frame);
-    else if (!frame) focus(null);
-  });
+    const frame = target.closest(".oa-frame");
+    if (frame && frame !== focused) {
+      focus(frame);
+      return true;
+    }
+    if (!frame) {
+      focus(null);
+      return true;
+    }
+    return false;
+  }
 
   // Double-click on background: zoom in at pointer. Shift = zoom out.
   canvas.addEventListener("dblclick", (e) => {
-    if (compact.matches || e.target.closest(".oa-zoom") || e.target.closest(".oa-frame")) return;
+    // Same retargeting hazard as tap(): trust the press target, not e.target.
+    if (compact.matches || e.target.closest(".oa-zoom")) return;
+    if ((pressTarget ?? e.target).closest(".oa-frame")) return;
     const r = canvas.getBoundingClientRect();
     const cx = e.clientX - r.left;
     const cy = e.clientY - r.top;
@@ -870,6 +900,12 @@ Override any constant for a specific composition, but name why.
     const label = frame.querySelector(".oa-frame-label");
     label.addEventListener("focus", () => {
       if (frame !== focused) focus(frame, true);
+    });
+    // Labels are controls (see CONTROLS), so a label press never pan-captures
+    // and its click arrives untargeted. The click still has to focus on
+    // engines that don't focus buttons on mousedown (Safari).
+    label.addEventListener("click", () => {
+      if (frame !== focused) focus(frame);
     });
     // Spotlight on label focusin (keyboard-driven).
     label.addEventListener("focusin", () => {
@@ -919,11 +955,17 @@ Override any constant for a specific composition, but name why.
 
   // --- Pointer events (drag, pinch, velocity) ---
 
+  // Presses on real controls stay with the control; everything else is pan
+  // surface. Mirrors the keyboard handler's control bail-out below.
+  const CONTROLS =
+    "a[href], button, input, select, textarea, summary, label, [contenteditable], audio[controls], video[controls]";
+
   canvas.addEventListener("pointerdown", (e) => {
     if (compact.matches || e.button !== 0 || e.target.closest(".oa-zoom")) return;
     // Cancel any in-flight animation immediately (interruptibility).
     cancelAnimationFrame(raf);
-    clickSuppressed = false;
+    // Hit target before any capture retargeting — tap() resolves against it.
+    pressTarget = e.target;
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     samples.length = 0;
 
@@ -944,10 +986,11 @@ Override any constant for a specific composition, but name why.
     }
     if (pointers.size > 2) return;
 
-    // In overview an inert frame is canvas surface, so dragging from it pans.
-    // Once focused, real controls inside that frame keep pointer ownership;
-    // Space-drag remains available from anywhere.
-    if (!space && focused && e.target.closest(".oa-frame") === focused) return;
+    // Pointer ownership is per-control, not per-frame: a press on a real
+    // control (a focused frame's fields and buttons, a frame label) stays
+    // with the control; a drag from anything else — frame text included,
+    // focused or not — pans. Space-drag pans from anywhere, controls too.
+    if (!space && e.target.closest(CONTROLS)) return;
     drag = { px: e.clientX, py: e.clientY, moved: 0 };
     canvas.setPointerCapture(e.pointerId);
     canvas.setAttribute("data-panning", "");
@@ -1013,7 +1056,8 @@ Override any constant for a specific composition, but name why.
       pinch = null;
       if (pointers.size === 1) {
         const remaining = [...pointers.values()][0];
-        drag = { px: remaining.x, py: remaining.y, moved: 0 };
+        // moved starts past the tap threshold: a resumed pinch is never a tap.
+        drag = { px: remaining.x, py: remaining.y, moved: 7 };
         samples.length = 0;
         canvas.setAttribute("data-panning", "");
       } else {
@@ -1022,13 +1066,16 @@ Override any constant for a specific composition, but name why.
       return;
     }
     if (!drag) return;
-    clickSuppressed = drag.moved > 6 || space;
+    // pointercancel is never a tap: the gesture was taken by the system.
+    const tapped = e.type === "pointerup" && drag.moved <= 6 && !space;
     // Momentum: check velocity and glide or settle.
     const v = velocity();
     const speed = Math.hypot(v.vx, v.vy);
     drag = null;
     canvas.releasePointerCapture(e.pointerId);
     canvas.removeAttribute("data-panning");
+    // A tap that re-aimed the camera owns the tween; don't settle over it.
+    if (tapped && tap(pressTarget)) return;
     if (speed > FLICK && !space) {
       glide(v.vx, v.vy);
     } else {
@@ -1161,6 +1208,17 @@ leaves controls tabbable while mouse-dead, and it lets a click fall through to
 the viewport so `closest(".oa-frame")` returns `null` and the frame can never be
 focused by clicking it. Put `inert` on `.oa-frame-body` only — on the wrapper it
 kills click-to-focus for the same reason.
+
+Pointer ownership is per-control, not per-frame. A press on a real control —
+a focused frame's form fields and buttons, a frame label — stays with the
+control; a drag from anywhere else pans, even when it starts on a focused
+frame's flowing text. Frame focus resolves as a tap on pointerup, from the
+pointerdown hit target — never from the native `click` event, which pointer
+capture retargets to the canvas in some engines (the retargeted click read as
+"background" and exited the frame the press had just focused). Text selection
+follows the same line: none on the pan surface (a selection drag and a pan
+cannot share a gesture), native inside form fields, back to normal in the
+compact stacked read.
 
 A frame holds a bounded screen/slide/variant. Build the UI for real, with real
 states -- the "no fake screenshots" ban in `design.md` explicitly exempts the case
@@ -1303,11 +1361,13 @@ Run the `design.md` ship gate, plus:
 - [ ] Pan (drag + space-drag), wheel-pan, ctrl/pinch zoom, and keyboard
       (`0`/`F`/`1`/`+`/`-`/arrows/Esc) all work; focus zoom respects
       reduced-motion (instant).
-- [ ] In overview, a drag that starts on an inert frame pans rather than
-      clicking through; a focused frame keeps its controls operable, and
-      space-drag still pans; focus + `Escape` round-trips.
-- [ ] 640px degrades to the stacked read; content fully reachable, no pinch
-      required, zoom cluster hidden.
+- [ ] A tap enters a frame and stays entered — no flash back to overview. A
+      drag pans from every surface — overview frames and a focused frame's
+      text alike — and never selects page text; a press on a focused frame's
+      real controls stays with the control (form fields keep caret and
+      selection); space-drag still pans; focus + `Escape` round-trips.
+- [ ] 640px degrades to the stacked read; content fully reachable and text
+      selectable, no pinch required, zoom cluster hidden.
 - [ ] In-memory state only (no `localStorage`); no external requests.
 
 **Canvas fluid-interaction addendum** (all items P0 when included):
