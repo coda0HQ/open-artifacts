@@ -122,3 +122,11 @@ Feature: Agent skill for creating and maintaining artifacts
     When the agent runs the artifact script with create, --level 4, and --canvas
     Then the script fails with a message naming level
     So that --canvas never loosens level validation
+
+  Scenario: The vendored canvas runtime separates taps, pans, and selection
+    Given a Recipe with canvas true
+    When the agent builds a standalone preview
+    Then the runtime resolves frame focus on pointerup from the press target instead of the retargetable click event
+    And presses on real controls keep the pointer while drags from any other surface pan
+    And the canvas suppresses text selection except inside form fields and the compact stacked read
+    So that a tap reliably enters a frame and a drag never smears a selection

@@ -365,11 +365,52 @@ describe("Recipe builder", () => {
     expect(html.match(/class="oa-zoom"/g)).toHaveLength(1);
     expect(html).toContain("const FRICTION");
     expect(html).toContain("focus(frame, true)");
-    expect(html).toContain(
-      'focused && e.target.closest(".oa-frame") === focused',
-    );
+    expect(html).toContain("e.target.closest(CONTROLS)");
     expect(html).toContain("@media (prefers-reduced-motion: reduce)");
     expect(html).toContain("--focus-ring:");
+    expect(requests).toHaveLength(0);
+  });
+
+  it("resolves canvas taps from the press target, not the retargetable click", async () => {
+    const { recipePath } = writeRecipe("tap", { canvas: true });
+    const output = join(projectDir, "tap-preview.html");
+
+    await run(["build", recipePath, "--output", output, "--standalone"]);
+
+    const html = readFileSync(output, "utf8");
+    // Pointer capture retargets the native click to the canvas in some
+    // engines, which read as "background" and exited the frame the press had
+    // just focused — so focus resolves on pointerup from the pointerdown
+    // target instead.
+    expect(html).toContain("function tap(");
+    expect(html).toContain("pressTarget = e.target");
+    expect(html).not.toContain('canvas.addEventListener("click"');
+    // Presses on real controls never start a pan-capture at all.
+    expect(html).toContain("e.target.closest(CONTROLS)");
+    expect(html).not.toContain('closest(".oa-frame") === focused');
+    expect(requests).toHaveLength(0);
+  });
+
+  it("suppresses text selection on the pan surface and keeps it in form fields", async () => {
+    const { recipePath } = writeRecipe("selection", { canvas: true });
+    const output = join(projectDir, "selection-preview.html");
+
+    await run(["build", recipePath, "--output", output, "--standalone"]);
+
+    const html = readFileSync(output, "utf8");
+    // Drag = pan from every surface, frame text included, so the surface must
+    // kill native selection — inert and pointer capture don't stop it in every
+    // engine, and a selection-drag swallows the tap that focuses a frame.
+    expect(html).toMatch(/\.oa-canvas\s*\{[^}]*user-select:\s*none/);
+    // No blanket re-enable on the focused body: only fields need real carets.
+    expect(html).toContain(
+      ".oa-frame[data-focused] .oa-frame-body :is(input, textarea, select, [contenteditable])",
+    );
+    expect(html).not.toMatch(
+      /\.oa-frame\[data-focused\]\s+\.oa-frame-body\s*\{[^}]*user-select/,
+    );
+    // The compact stacked read is a document again.
+    expect(html).toContain("touch-action: auto; user-select: auto;");
     expect(requests).toHaveLength(0);
   });
 
