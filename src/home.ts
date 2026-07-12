@@ -20,6 +20,9 @@ export function isCoda0Host(hostname: string): boolean {
 export interface Brand {
   readonly name: string;
   readonly wordmark: string;
+  /** Short service descriptor; suffixes the document <title> for SERP length
+   *  and drives the OG card's call-to-action. */
+  readonly tagline: string;
 }
 
 // The identity presented to a visitor, keyed on the same host rule as the
@@ -31,8 +34,16 @@ export interface Brand {
 // its own and drifting out of sync.
 export function brandFor(hostname: string): Brand {
   return isCoda0Host(hostname)
-    ? { name: "coda0", wordmark: "CODA0" }
-    : { name: "Open Artifacts", wordmark: "OPEN ARTIFACTS" };
+    ? {
+        name: "coda0",
+        wordmark: "CODA0",
+        tagline: "share self-contained pages",
+      }
+    : {
+        name: "Open Artifacts",
+        wordmark: "OPEN ARTIFACTS",
+        tagline: "self-hosted artifact viewer",
+      };
 }
 
 const setText = (text: string): HTMLRewriterElementContentHandlers => ({

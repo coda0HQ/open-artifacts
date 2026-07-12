@@ -221,6 +221,12 @@ const OG_BRAND_D = BRAND_SVG.match(/ d="([^"]+)"/)?.[1] ?? "";
 const OG_HEAD = `<svg xmlns="http://www.w3.org/2000/svg" width="${OG_CARD_W}" height="${OG_CARD_H}" viewBox="0 0 ${OG_CARD_W} ${OG_CARD_H}">
 <rect width="${OG_CARD_W}" height="${OG_CARD_H}" fill="#131316"/>`;
 
+// A quiet call-to-action pill in the card's bottom-right — a single-accent
+// button so the link preview reads as clickable, balancing the brand footer at
+// left. Present on every card (real and fallback).
+const OG_CTA = `<rect x="962" y="544" width="158" height="48" rx="24" fill="#6457f0"/>
+<text x="1041" y="576" text-anchor="middle" font-size="25" font-family="'Inter SemiBold'" fill="#ffffff" letter-spacing=".3">Open →</text>`;
+
 // Codepoint ranges covered by the embedded faces: Inter (Latin + punctuation)
 // and the Noto Sans SC subset (GB2312 hanzi, kana, and CJK/fullwidth
 // punctuation). Text outside them (Cyrillic, Hangul, Arabic, emoji, ...) has no
@@ -253,8 +259,9 @@ function isRenderable(text: string): boolean {
 // fonts — a clean branded card instead of a blank one.
 function fallbackCardSvg(brand: Brand): string {
   return `${OG_HEAD}
-<g transform="translate(564 231) scale(3)"><path d="${OG_BRAND_D}" fill="#6457f0"/></g>
-<text x="600" y="392" text-anchor="middle" font-size="34" font-family="'Inter SemiBold'" fill="#9a9aa2" letter-spacing="2">${escapeHtml(brand.wordmark)}</text>
+<g transform="translate(564 211) scale(3)"><path d="${OG_BRAND_D}" fill="#6457f0"/></g>
+<text x="600" y="372" text-anchor="middle" font-size="34" font-family="'Inter SemiBold'" fill="#9a9aa2" letter-spacing="2">${escapeHtml(brand.wordmark)}</text>
+${OG_CTA}
 </svg>`;
 }
 
@@ -351,11 +358,11 @@ export function ogCardSvg(options: {
     .join("\n");
 
   // Description follows the actual title height, clipped so its last line
-  // stays clear of the footer.
+  // stays clear of the footer row (brand wordmark and the CTA pill).
   let dy = y + 8;
   const descEls: string[] = [];
   for (const l of descLines) {
-    if (dy > 540) break;
+    if (dy > 520) break;
     descEls.push(
       `<text x="80" y="${dy}" font-size="30" font-family="'Inter'" fill="#9a9aa2">${l}</text>`,
     );
@@ -367,6 +374,7 @@ ${titleEls}
 ${descEls.join("\n")}
 <g transform="translate(80 556) scale(1.08)"><path d="${OG_BRAND_D}" fill="#6457f0"/></g>
 <text x="116" y="578" font-size="24" font-family="'Inter SemiBold'" fill="#9a9aa2" letter-spacing="1.5">${escapeHtml(brand.wordmark)}</text>
+${OG_CTA}
 </svg>`;
 }
 
@@ -398,7 +406,7 @@ document.getElementById("oa-content").innerHTML=marked.parse(${jsonForInlineScri
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${escapeHtml(title)} · ${escapeHtml(brand.name)}</title>
+<title>${escapeHtml(title)} · ${escapeHtml(brand.name)} — ${escapeHtml(brand.tagline)}</title>
 <meta name="description" content="${escapeHtml(ogDescription)}">
 <link rel="icon" href="${faviconDataUri(favicon)}">
 <meta property="og:type" content="article">
@@ -534,7 +542,7 @@ input.focus();
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${escapeHtml(title)} · ${escapeHtml(brand.name)}</title>
+<title>${escapeHtml(title)} · ${escapeHtml(brand.name)} — ${escapeHtml(brand.tagline)}</title>
 <meta name="description" content="${escapeHtml(ogDescription)}">
 <link rel="icon" href="${faviconDataUri(favicon)}">
 <meta property="og:type" content="article">
