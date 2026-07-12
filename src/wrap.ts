@@ -77,8 +77,8 @@ img,video,canvas{max-width:100%}
 :root{--oa-header-h:2.5rem}
 [id]{scroll-margin-top:calc(var(--oa-header-h) + .5rem)}
 .oa-header{position:sticky;top:0;z-index:2147483646;display:flex;align-items:center;gap:.75rem;padding:.5rem 1rem;background:color-mix(in oklab,var(--oa-bg),transparent 8%);backdrop-filter:blur(10px);border-bottom:1px solid var(--oa-border);font-size:.8rem}
-.oa-header .oa-title{flex:1;min-width:0;font-weight:600;color:var(--oa-fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.oa-header .oa-title .oa-fav{margin-right:.4rem}
+.oa-header .oa-header-title{flex:1;min-width:0;font-size:.8rem;font-weight:600;line-height:1.5;letter-spacing:normal;margin:0;color:var(--oa-fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.oa-header .oa-header-title .oa-header-fav{margin-right:.4rem;font-size:1em}
 .oa-header #oa-theme-toggle{position:relative;width:32px;height:32px;border-radius:8px;border:1px solid var(--oa-border);background:var(--oa-surface);color:var(--oa-fg);font-size:14px;line-height:1;cursor:pointer;opacity:.8;transition:opacity .15s,border-color .15s,background .15s;flex-shrink:0}
 .oa-header #oa-theme-toggle::before{content:"";position:absolute;inset:-6px}
 .oa-header #oa-theme-toggle:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
@@ -129,7 +129,7 @@ function headerHtml(
     ? `<a class="oa-brand" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" title="Made with ${escapeHtml(brand.name)}">${BRAND_SVG}<span class="oa-brand-text">${escapeHtml(brand.name)}</span></a>`
     : "";
   return `<header class="oa-header">
-  <span class="oa-title"><span class="oa-fav">${escapeHtml(favicon)}</span>${escapeHtml(title)}</span>
+  <span class="oa-header-title"><span class="oa-header-fav">${escapeHtml(favicon)}</span>${escapeHtml(title)}</span>
   ${chip}
   <button id="oa-theme-toggle" type="button" aria-label="Toggle theme"></button>
 </header>`;
