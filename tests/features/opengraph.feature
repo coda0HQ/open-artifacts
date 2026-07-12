@@ -8,7 +8,7 @@ Feature: Rich link previews
     When I GET /a/:id
     Then the head contains og:title, og:description, and og:url for the artifact
     And the head contains og:site_name set to the host's brand name
-    And the document title is the artifact title suffixed with the brand name
+    And the document title is the artifact title suffixed with the brand name and tagline
     And the head contains twitter:card set to summary_large_image
     And og:image points at the absolute /og/:id URL
     And og:image:type is image/png with width 1200 and height 630
@@ -28,6 +28,7 @@ Feature: Rich link previews
     When I GET /og/:id
     Then the response is an image/png rendered from the artifact title and description
     And the card is drawn with embedded fonts and makes no external request
+    And the card carries a call-to-action pill
 
   Scenario: CJK titles render as real headlines on the card
     Given a published artifact whose title is Simplified Chinese

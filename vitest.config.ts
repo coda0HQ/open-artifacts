@@ -9,5 +9,9 @@ export default defineConfig({
   ],
   test: {
     include: ["tests/worker/**/*.test.ts"],
+    // The embedded OG-card fonts (Inter + a Noto Sans SC subset) make the
+    // worker bundle a few MB, so workerd's first-request cold-start compile can
+    // exceed vitest's 5s default under load. Give each isolate room to warm up.
+    testTimeout: 20000,
   },
 });

@@ -69,8 +69,8 @@
       "updatedAt": "2026-07-12T07:57:04.117Z"
     },
     {
-      "id": "vnxhUKWvGBKA",
-      "url": "https://coda0.com/a/vnxhUKWvGBKA",
+      "id": "9bG94htMRttn",
+      "url": "https://coda0.com/a/9bG94htMRttn",
       "version": 1,
       "recipe": ".artifacts/recipes/open-artifacts-architecture-overview.recipe.json",
       "recipeHash": "sha256:ec8e3d03e81cbc13e5ef193b88a695000d135e6e30e99f7297a379559e1fccf8",
@@ -90,7 +90,7 @@
         "src/wrap.ts": "4507d678a9a582c701c1cfdd55bb818581e4f72ef34b1ba4a262345a1ad2122e",
         "wrangler.jsonc": "870a14d7bcf752797ea7417d223918de78806e038e7fa8e625a04a56734e9b74"
       },
-      "updatedAt": "2026-07-12T10:16:52.666Z"
+      "updatedAt": "2026-07-12T10:27:11.093Z"
     }
   ]
 }

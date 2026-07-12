@@ -54,6 +54,7 @@ describe("brandFor", () => {
     expect(brandFor("coda0.com")).toEqual({
       name: "coda0",
       wordmark: "CODA0",
+      tagline: "share self-contained pages",
     });
     expect(brandFor("www.coda0.com").name).toBe("coda0");
   });
@@ -62,6 +63,7 @@ describe("brandFor", () => {
     expect(brandFor("example.com")).toEqual({
       name: "Open Artifacts",
       wordmark: "OPEN ARTIFACTS",
+      tagline: "self-hosted artifact viewer",
     });
     expect(brandFor("open-artifacts.frad.workers.dev").name).toBe(
       "Open Artifacts",
@@ -154,6 +156,24 @@ describe("OG card wordmark", () => {
       hostname: "example.com",
     });
     expect(svg).toContain(">OPEN ARTIFACTS<");
+  });
+
+  it("carries a call-to-action pill on the real card", () => {
+    const svg = ogCardSvg({
+      title: "x",
+      description: "y",
+      hostname: "coda0.com",
+    });
+    expect(svg).toContain(">Open →<");
+  });
+
+  it("carries the call-to-action on the fallback card too", () => {
+    const svg = ogCardSvg({
+      title: "Пример",
+      description: "",
+      hostname: "coda0.com",
+    });
+    expect(svg).toContain(">Open →<");
   });
 
   it("draws CJK titles on the real card via the Noto Sans SC face", () => {

@@ -39,7 +39,9 @@ describe("OpenGraph metadata", () => {
     expect(html).toContain(
       '<meta property="og:site_name" content="Open Artifacts">',
     );
-    expect(html).toContain("<title>OG Test · Open Artifacts</title>");
+    expect(html).toContain(
+      "<title>OG Test · Open Artifacts — self-hosted artifact viewer</title>",
+    );
     expect(html).toContain('<meta property="og:title" content="OG Test">');
     expect(html).toContain(
       '<meta property="og:description" content="A shareable report on Q3 metrics.">',
@@ -181,7 +183,9 @@ describe("OpenGraph metadata", () => {
     expect(html).toContain(
       '<meta property="og:site_name" content="Open Artifacts">',
     );
-    expect(html).toContain("<title>OG Test · Open Artifacts</title>");
+    expect(html).toContain(
+      "<title>OG Test · Open Artifacts — self-hosted artifact viewer</title>",
+    );
     expect(html).toContain(
       '<meta property="og:description" content="encrypted desc">',
     );
