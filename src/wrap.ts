@@ -221,11 +221,14 @@ const OG_BRAND_D = BRAND_SVG.match(/ d="([^"]+)"/)?.[1] ?? "";
 const OG_HEAD = `<svg xmlns="http://www.w3.org/2000/svg" width="${OG_CARD_W}" height="${OG_CARD_H}" viewBox="0 0 ${OG_CARD_W} ${OG_CARD_H}">
 <rect width="${OG_CARD_W}" height="${OG_CARD_H}" fill="#131316"/>`;
 
-// Codepoint ranges covered by the embedded Inter subsets (Latin + punctuation).
-// Text outside them (CJK, Cyrillic, emoji, ...) has no glyph and no fallback
-// face, so resvg would draw it blank; such artifacts get a text-light branded
+// Codepoint ranges covered by the embedded faces: Inter (Latin + punctuation)
+// and the Noto Sans SC subset (GB2312 hanzi, kana, and CJK/fullwidth
+// punctuation). Text outside them (Cyrillic, Hangul, Arabic, emoji, ...) has no
+// glyph, so resvg would draw it blank; such artifacts get a text-light branded
 // card instead, and their real title/description still reach viewers through
-// the og:title/og:description meta tags.
+// the og:title/og:description meta tags. The CJK ranges are accepted whole even
+// though the subset is GB2312-scoped — a rare ideograph outside it shows one
+// missing-glyph box rather than dropping the entire title to the fallback card.
 function isRenderable(text: string): boolean {
   for (const ch of text) {
     const cp = ch.codePointAt(0) ?? 0;
@@ -236,6 +239,9 @@ function isRenderable(text: string): boolean {
       (cp >= 0x2190 && cp <= 0x2193) ||
       cp === 0x2212 ||
       cp === 0x2215 ||
+      (cp >= 0x3000 && cp <= 0x30ff) ||
+      (cp >= 0x4e00 && cp <= 0x9fff) ||
+      (cp >= 0xff00 && cp <= 0xffef) ||
       cp === 0xfeff ||
       cp === 0xfffd;
     if (!ok) return false;
@@ -252,19 +258,63 @@ function fallbackCardSvg(brand: Brand): string {
 </svg>`;
 }
 
-// Greedily wrap text to at most `maxChars` per line and `maxLines` lines,
-// escaping each line for XML. resvg draws no automatic line breaks, so the
-// card lays every line out explicitly.
-function wrapLines(text: string, maxChars: number, maxLines: number): string[] {
-  const words = text.split(/\s+/).filter(Boolean);
+// Double-width glyph ranges (CJK ideographs, kana, CJK/fullwidth punctuation)
+// drawn by the Noto Sans SC subset. They cost two width units and, unlike
+// Latin, may break between any two characters — Chinese carries no spaces.
+function isWideCodepoint(cp: number): boolean {
+  return (
+    (cp >= 0x3000 && cp <= 0x30ff) ||
+    (cp >= 0x4e00 && cp <= 0x9fff) ||
+    (cp >= 0xff00 && cp <= 0xffef)
+  );
+}
+
+// Greedily wrap to a width budget (Latin char = 1 unit, CJK = 2) across at most
+// `maxLines`, escaping each line for XML. resvg draws no automatic line breaks,
+// so the card lays every line out explicitly. Latin words never split; CJK
+// breaks between characters, and author spaces are preserved.
+function wrapLines(text: string, budget: number, maxLines: number): string[] {
+  interface Unit {
+    text: string;
+    width: number;
+    spaceBefore: boolean;
+  }
+  const units: Unit[] = [];
+  let word = "";
+  let pendingSpace = false;
+  const flushWord = () => {
+    if (!word) return;
+    units.push({ text: word, width: word.length, spaceBefore: pendingSpace });
+    word = "";
+    pendingSpace = false;
+  };
+  for (const ch of text) {
+    const cp = ch.codePointAt(0) ?? 0;
+    if (/\s/.test(ch)) {
+      flushWord();
+      pendingSpace = true;
+    } else if (isWideCodepoint(cp)) {
+      flushWord();
+      units.push({ text: ch, width: 2, spaceBefore: pendingSpace });
+      pendingSpace = false;
+    } else {
+      word += ch;
+    }
+  }
+  flushWord();
+
   const lines: string[] = [];
   let line = "";
-  for (const w of words) {
-    if (`${line} ${w}`.trim().length > maxChars && line) {
+  let width = 0;
+  for (const u of units) {
+    const gap = line && u.spaceBefore ? 1 : 0;
+    if (line && width + gap + u.width > budget) {
       lines.push(line);
-      line = w;
+      line = u.text;
+      width = u.width;
     } else {
-      line = `${line} ${w}`.trim();
+      line += (gap ? " " : "") + u.text;
+      width += gap + u.width;
     }
   }
   if (line) lines.push(line);
@@ -341,16 +391,18 @@ document.getElementById("oa-content").innerHTML=marked.parse(${jsonForInlineScri
 </script>`
       : content;
 
+  const brand = brandFor(hostname);
   const ogDescription = description || title;
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${escapeHtml(title)}</title>
+<title>${escapeHtml(title)} · ${escapeHtml(brand.name)}</title>
 <meta name="description" content="${escapeHtml(ogDescription)}">
 <link rel="icon" href="${faviconDataUri(favicon)}">
 <meta property="og:type" content="article">
+<meta property="og:site_name" content="${escapeHtml(brand.name)}">
 <meta property="og:title" content="${escapeHtml(title)}">
 <meta property="og:description" content="${escapeHtml(ogDescription)}">
 <meta property="og:url" content="${escapeHtml(url)}">
@@ -475,16 +527,18 @@ form.addEventListener("submit",async function(event){
 input.focus();
 `;
 
+  const brand = brandFor(hostname);
   const ogDescription = description || title;
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${escapeHtml(title)}</title>
+<title>${escapeHtml(title)} · ${escapeHtml(brand.name)}</title>
 <meta name="description" content="${escapeHtml(ogDescription)}">
 <link rel="icon" href="${faviconDataUri(favicon)}">
 <meta property="og:type" content="article">
+<meta property="og:site_name" content="${escapeHtml(brand.name)}">
 <meta property="og:title" content="${escapeHtml(title)}">
 <meta property="og:description" content="${escapeHtml(ogDescription)}">
 <meta property="og:url" content="${escapeHtml(url)}">

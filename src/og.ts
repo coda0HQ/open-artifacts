@@ -6,6 +6,7 @@ import resvgWasm from "@resvg/resvg-wasm/index_bg.wasm";
 import {
   INTER_REGULAR_TTF_BASE64,
   INTER_SEMIBOLD_TTF_BASE64,
+  NOTO_SANS_SC_TTF_BASE64,
 } from "./generated/fonts";
 import { ogCardSvg } from "./wrap";
 
@@ -16,9 +17,13 @@ function decodeBase64(b64: string): Uint8Array {
   return bytes;
 }
 
+// Inter draws Latin; Noto Sans SC is the fallback face resvg reaches for when a
+// glyph (CJK, kana, fullwidth punctuation) is absent from Inter, so mixed and
+// fully-CJK titles rasterize instead of dropping to the brand-only card.
 const FONT_BUFFERS = [
   decodeBase64(INTER_REGULAR_TTF_BASE64),
   decodeBase64(INTER_SEMIBOLD_TTF_BASE64),
+  decodeBase64(NOTO_SANS_SC_TTF_BASE64),
 ];
 
 // initWasm throws if called more than once, so memoize the first call and
