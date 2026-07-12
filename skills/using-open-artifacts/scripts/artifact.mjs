@@ -1030,6 +1030,18 @@ function migrateHtmlSource(source, canvas) {
     join(SKILL_ROOT, "references/tokens.css"),
     "utf8",
   ).trim();
+  // A legacy non-canvas HTML page may ship with only identity tokens and no
+  // measure cap — exactly the bare-page defect the L1 guard now blocks. The
+  // guard would then refuse the migrated build, locking the artifact out of
+  // any future update. Migration is a mechanical conversion, not a design
+  // review: if the source has no width constraint anywhere, wrap it in the
+  // prose baseline so the migrated recipe validates and the page renders with
+  // a measure cap and padding instead of at 100% width.
+  if (!canvas && !/max-width\s*:/i.test(styles) && !/\boa-prose\b/.test(body)) {
+    // Strip a bare outer <main> so we don't nest main-in-main when wrapping.
+    body = body.replace(/<\/?main\b[^>]*>/gi, "").trim();
+    body = `<main class="oa-prose">\n${body}\n</main>`;
+  }
   return {
     body: body.trim(),
     theme:

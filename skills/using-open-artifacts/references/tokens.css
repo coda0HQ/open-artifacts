@@ -180,6 +180,51 @@ body {
   line-height: var(--leading-body);
 }
 
+/* Bridge the viewer chrome to the artifact's identity tokens. The service
+   header, theme toggle, brand chip, and focus ring read --oa-* variables
+   (defined by the viewer skeleton with service defaults). Here we re-point
+   each chrome token at the matching identity token with the service default
+   as fallback, so the chrome automatically follows the page's palette and
+   accent — without every artifact hand-overriding --oa-*. Markdown and
+   legacy artifacts that define no identity tokens keep the viewer defaults.
+   Unlayered and after the body bind: it must beat the skeleton's unlayered
+   --oa-* defaults by source order. */
+:root {
+  --oa-bg: var(--bg, #ffffff);
+  --oa-fg: var(--fg, #18181b);
+  --oa-muted: var(--muted, #71717a);
+  --oa-border: var(--border, #e4e4e7);
+  --oa-surface: var(--surface, #f8f8f8);
+  --oa-accent: var(--accent, #6457f0);
+  --oa-danger: var(--danger, #b42318);
+  --oa-focus-ring: 0 0 0 2px var(--oa-bg), 0 0 0 4px var(--oa-accent);
+}
+/* Explicit light block matches the viewer skeleton's own
+   :root[data-theme="light"] specificity (0,1,0). Without it the skeleton's
+   unlayered explicit-light block — which sets --oa-accent to the service
+   default — wins over the bare :root bridge by specificity, and the chrome
+   stays purple even when the artifact defines --accent. Unlayered + after the
+   skeleton by source order, so same-specificity ties still break our way. */
+:root[data-theme="light"] {
+  --oa-bg: var(--bg, #ffffff);
+  --oa-fg: var(--fg, #18181b);
+  --oa-muted: var(--muted, #71717a);
+  --oa-border: var(--border, #e4e4e7);
+  --oa-surface: var(--surface, #f8f8f8);
+  --oa-accent: var(--accent, #6457f0);
+  --oa-danger: var(--danger, #b42318);
+  --oa-focus-ring: 0 0 0 2px var(--oa-bg), 0 0 0 4px var(--oa-accent);
+}
+:root[data-theme="dark"] {
+  --oa-bg: var(--bg, #131316);
+  --oa-fg: var(--fg, #e7e7ea);
+  --oa-muted: var(--muted, #9a9aa2);
+  --oa-border: var(--border, #2e2e33);
+  --oa-surface: var(--surface, #1c1c21);
+  --oa-accent: var(--accent, #8d82f5);
+  --oa-danger: var(--danger, #ff8f85);
+}
+
 /* Opt-in prose baseline for level 1 HTML documents. Mirrors the .oa-md
    skeleton the viewer gives markdown artifacts, so an authored HTML doc
    does not ship at 100% width with browser-default spacing just because

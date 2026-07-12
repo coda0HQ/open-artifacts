@@ -135,11 +135,15 @@ it as `artifact.level: 1|2|3` in the Recipe:
 
 - **Level 1 — simple:** typography-led documents (reports, articles, API
   references, notes). No flashy hero, minimal JS. Default for "read once"
-  content.
+  content. Wrap the body in `<main class="oa-prose">` — the contract's prose
+  baseline (measure cap, padding, heading/code styling) — so a doc that
+  defines tokens but forgets structure does not ship bare.
 - **Level 2 — interactive:** dashboards, docs sites, demos, prototypes.
   Stateful in-memory JS, navigation, copy buttons, expandable sections,
-  subtle transitions. Default when unsure. Before building L2+, read
-  `${CLAUDE_SKILL_DIR}/references/interaction.md` for the eight-state
+  subtle transitions. Default when unsure **and the brief is interactive** —
+  if the brief is mostly text to read, level 1 is the safer pick (it carries a
+  structure baseline; L2's structure is author-supplied). Before building L2+,
+  read `${CLAUDE_SKILL_DIR}/references/interaction.md` for the eight-state
   contract, focus visibility, hit targets, form patterns, and waiting states.
 - **Level 3 — rich:** landing/marketing pages, product showcases. Orchestrated
   motion — load sequences, scroll reveals, view transitions — **all native
@@ -179,7 +183,19 @@ images, fetch/XHR/WebSockets):
 - Put the concise title in `artifact.title`.
 - Support both themes. The builder injects `references/tokens.css`; author a
   theme fragment with an unlayered `:root` block (light) plus a
-  `:root[data-theme="dark"]` block, both mandatory.
+  `:root[data-theme="dark"]` block, both mandatory. The token contract only
+  supplies *variables* — it does not style your elements. For a level 1 HTML
+  document, wrap the body in `<main class="oa-prose">` to pick up the prose
+  baseline (measure cap, page padding, heading scale, `code`/`pre`/`table`
+  styling) the contract ships. `validate` fails an L1 non-canvas page with no
+  measure cap, since the default is a full-width doc with browser-default
+  spacing. Markdown needs nothing — the viewer wraps it in `.oa-md`
+  automatically. The viewer chrome (service header, theme toggle, brand chip,
+  focus ring) is injected by the harness at serve time — never hand-author it.
+  It follows your identity palette automatically via the token contract's
+  chrome bridge, so do **not** override `--oa-*` viewer tokens in the theme
+  fragment. L2/L3 may be full-bleed by design; author their structure
+  explicitly.
 - Responsive: no horizontal body scroll; wide tables/code get their own
   `overflow-x: auto` container.
 - Markdown files (`.md`) are rendered client-side; HTML is best for anything

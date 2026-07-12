@@ -33,8 +33,11 @@ interaction budget, and motion budget, not just "how much animation."
 | Dashboard, docs site, interactive demo, app prototype, anything explored | **2 interactive** |
 | Landing page, marketing page, product showcase, anything that must wow | **3 rich** |
 
-When unsure, default to **2**. Don't gold-plate a doc as L3; don't ship a
-landing page as L1.
+When unsure, default to **1** if the brief is mostly text to read, **2**
+only if it is genuinely interactive. Level 1 carries a structure baseline
+(`.oa-prose`); level 2's structure is author-supplied and may be full-bleed,
+so a confused L2 pick ships bare more easily than a confused L1. Don't
+gold-plate a doc as L3; don't ship a landing page as L1.
 
 **Canvas is orthogonal to level.** `artifact.canvas: true` selects an infinite
 spatial shell (pan/zoom frames) instead of a scrolling document; it composes
@@ -216,7 +219,20 @@ visual posture. Never redefine spacing, type scale, motion, or interaction
 state mechanics per direction, and never wrap overrides in `@layer`. The
 contract's closing `body` rule binds
 `--bg`/`--fg`/`--font-body` to the canvas so a direction actually repaints
-the page — don't delete it. The tokens are also your consistency locks: **one accent for the
+the page — don't delete it. The contract also bridges the **viewer chrome**
+to your identity: the service header, theme toggle, brand chip, and focus
+ring read `--oa-*` variables, and the contract re-points each at the
+matching identity token (`--oa-accent`→`--accent`, `--oa-bg`→`--bg`, etc.)
+with the service default as fallback. So your identity palette and accent
+**automatically repaint the chrome** — do **not** hand-override `--oa-*`
+tokens in the theme fragment; that is the viewer's extension point and the
+bridge already covers it. Markdown and legacy artifacts that define no
+identity tokens keep the service chrome defaults. The chrome's markup is
+harness-owned and namespaced (`oa-header`, `oa-header-title`, `oa-header-fav`,
+`oa-brand`, `oa-theme-toggle`): you supply only its **data** — the title and
+favicon from the recipe — so your own classes, even a natural `.oa-title`
+masthead, never reach it. The tokens are also your
+consistency locks: **one accent for the
 whole page** (semantic colors are not accents), **one radius scale** (don't
 mix pill buttons with sharp cards unless the mix is a stated system), **one
 easing vocabulary**.
