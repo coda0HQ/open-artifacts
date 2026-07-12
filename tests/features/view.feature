@@ -22,6 +22,12 @@ Feature: View an artifact
     Then the page responds to prefers-color-scheme
     And a data-theme attribute on the root element overrides the OS scheme
 
+  Scenario: Service header chrome is isolated from author CSS
+    Given a published HTML artifact whose own CSS styles the ".oa-title" class
+    When I GET /a/:id
+    Then the resident service header names its title with a reserved class
+    So the generator only supplies data and cannot restyle the header
+
   Scenario: Unknown artifact id
     When I GET /a/doesnotexist
     Then the response status is 404

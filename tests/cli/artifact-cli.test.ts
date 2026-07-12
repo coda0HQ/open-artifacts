@@ -914,6 +914,27 @@ describe("Recipe publishing", () => {
     expect(requests[1].body.content).toContain("Published");
   });
 
+  it("migrates a legacy bare-L1 page by wrapping it in the prose baseline", async () => {
+    seedLegacyManifest({ level: 1, canvas: false });
+    nextRaw = {
+      contentType: "text/plain; charset=utf-8",
+      body: '<title>Bare</title><style>:root{--accent:blue}:root[data-theme="dark"]{--accent:cyan}</style><main><h1>Bare</h1><p>No measure cap.</p></main>',
+    };
+
+    await run(["update", "testid123456"]);
+
+    const state = manifest();
+    expect(state.manifestVersion).toBe(2);
+    const recipePath = join(projectDir, state.artifacts[0].recipe ?? "");
+    const recipe = readJson<TestRecipe>(recipePath);
+    const bodyPath = join(
+      dirname(recipePath),
+      recipe.document.fragments.body[0],
+    );
+    expect(readFileSync(bodyPath, "utf8")).toContain('class="oa-prose"');
+    expect(requests[1].body.content).toContain("oa-prose");
+  });
+
   it("migrates nested legacy Canvas controls without duplicating the runtime", async () => {
     seedLegacyManifest({ canvas: true, level: 2 });
     nextRaw = {

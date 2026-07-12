@@ -131,6 +131,31 @@ describe("GET /a/:id (plain HTML)", () => {
     expect(html).toContain("Switch to dark theme");
   });
 
+  it("names its title with a reserved class author CSS cannot match", async () => {
+    // The service header is inlined into the same document as HTML artifact
+    // content. If both used ".oa-title", an artifact styling its own masthead
+    // (a natural class name) would restyle the header through the shared
+    // cascade. The resident chrome owns a reserved namespace instead, so the
+    // generator supplies only data (title, favicon) and can never match the
+    // header element. A bare ".oa-title" in content stays out of the header.
+    const created = await create({
+      content:
+        '<style>.oa-title{font-size:2.5rem;line-height:1.05;margin:0 0 1.5rem}</style><h1 class="oa-title">Author masthead</h1>',
+    });
+    const html = await (
+      await exports.default.fetch(`${BASE}/a/${created.id}`)
+    ).text();
+    // The header element carries the reserved class, not the generic one.
+    expect(html).toContain('<span class="oa-header-title">');
+    expect(html).not.toContain('<span class="oa-title">');
+    // And the resident chrome describes its own type scale explicitly.
+    const rule =
+      html.match(/\.oa-header \.oa-header-title\{[^}]*\}/)?.[0] ?? "";
+    expect(rule).toContain("font-size:.8rem");
+    expect(rule).toContain("line-height:");
+    expect(rule).toContain("margin:0");
+  });
+
   it("404s for an unknown artifact", async () => {
     const res = await exports.default.fetch(`${BASE}/a/nonexistent00`);
     expect(res.status).toBe(404);

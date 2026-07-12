@@ -40,3 +40,11 @@ Feature: Build validation catches silent layout defects
     Given an HTML recipe at level 2 that defines no max-width anywhere
     When the agent runs the artifact script with validate
     Then the build succeeds because the measure-cap guard only applies to level 1
+
+  Scenario: Migrating a legacy bare-L1 page wraps it in the prose baseline
+    Given a legacy level 1 non-canvas artifact whose published content has identity
+      tokens but no measure cap and no .oa-prose wrapper
+    When the agent runs the artifact script with update to migrate it to a Recipe
+    Then the build succeeds because migration wraps the body in main.oa-prose
+    And the migrated body fragment contains class="oa-prose"
+    And the artifact is not locked out of future updates
