@@ -69,8 +69,8 @@
       "updatedAt": "2026-07-12T07:57:04.117Z"
     },
     {
-      "id": "DmNQLnuZNMKR",
-      "url": "https://coda0.com/a/DmNQLnuZNMKR",
+      "id": "vnxhUKWvGBKA",
+      "url": "https://coda0.com/a/vnxhUKWvGBKA",
       "version": 1,
       "recipe": ".artifacts/recipes/open-artifacts-architecture-overview.recipe.json",
       "recipeHash": "sha256:ec8e3d03e81cbc13e5ef193b88a695000d135e6e30e99f7297a379559e1fccf8",
@@ -87,10 +87,10 @@
         "src/domain.ts": "e5a261d1c99ecdcf9c88f453d9e78d00b5f29057692cdc8d5c0946fd4cb70ce6",
         "src/index.ts": "17990528b446551ae45d6e3bde21a167b55a396336a17df626d64cd112bfa885",
         "src/store.ts": "3c963a0ff1aad26c43c2da30a69c972b6933064c022e5427280fea55df25b074",
-        "src/wrap.ts": "60e82a067754878a6fed96f772f7ebb7892e7ac4e14ac7656060a8a61d77c1be",
+        "src/wrap.ts": "4507d678a9a582c701c1cfdd55bb818581e4f72ef34b1ba4a262345a1ad2122e",
         "wrangler.jsonc": "870a14d7bcf752797ea7417d223918de78806e038e7fa8e625a04a56734e9b74"
       },
-      "updatedAt": "2026-07-12T09:32:49.090Z"
+      "updatedAt": "2026-07-12T10:16:52.666Z"
     }
   ]
 }
