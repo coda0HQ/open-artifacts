@@ -1,0 +1,53 @@
+{
+  "$schema": "../../skills/using-open-artifacts/references/recipe.schema.json",
+  "version": 1,
+  "artifact": {
+    "title": "Open Artifacts 架构总览",
+    "description": "open-artifacts 的技术架构：Cloudflare Worker (Hono + D1 + R2)、严格 CSP 沙箱、Recipe + fragment 组装流水线、viewer chrome。面向想理解或自托管的开发者。",
+    "favicon": "🧭",
+    "format": "html",
+    "level": 2,
+    "canvas": false,
+    "channel": "architecture-overview",
+    "scope": "open-artifacts 架构总览：Worker/D1/R2、CSP 沙箱、Recipe 流水线、viewer chrome、绑定与限制、开发工作流。DESIGN DIRECTION LOCKED: Modern minimal (Linear/Vercel) — engineering teal accent; refresh content only, never change direction.",
+    "watch": [
+      "docs/architecture.md",
+      "docs/saas-design.md",
+      "PRODUCT.md",
+      "src/wrap.ts",
+      "src/index.ts",
+      "src/api.ts",
+      "src/store.ts",
+      "src/domain.ts",
+      "wrangler.jsonc",
+      "CLAUDE.md"
+    ],
+    "local": false,
+    "autoUpdate": false
+  },
+  "document": {
+    "language": "zh-Hans",
+    "theme": "modern-minimal-engineering",
+    "fragments": {
+      "theme": [
+        "../fragments/open-artifacts-architecture-overview/theme.css"
+      ],
+      "styles": [
+        "../fragments/open-artifacts-architecture-overview/styles.css"
+      ],
+      "body": [
+        "../fragments/open-artifacts-architecture-overview/body.html"
+      ],
+      "scripts": [
+        "../fragments/open-artifacts-architecture-overview/behavior.js"
+      ]
+    }
+  },
+  "security": {
+    "encrypted": false,
+    "passwordCredential": null
+  },
+  "build": {
+    "strategy": "auto"
+  }
+}

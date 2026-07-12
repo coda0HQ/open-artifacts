@@ -1,0 +1,334 @@
+<nav class="oa-nav" aria-label="架构导航">
+  <div class="oa-nav-inner">
+    <span class="oa-nav-brand">🧭 架构总览</span>
+    <ul class="oa-nav-list">
+      <li><a href="#overview" class="oa-nav-link" data-target="overview">概览</a></li>
+      <li><a href="#data-flow" class="oa-nav-link" data-target="data-flow">数据流</a></li>
+      <li><a href="#csp" class="oa-nav-link" data-target="csp">CSP 沙箱</a></li>
+      <li><a href="#routing" class="oa-nav-link" data-target="routing">路由</a></li>
+      <li><a href="#storage" class="oa-nav-link" data-target="storage">存储</a></li>
+      <li><a href="#recipe" class="oa-nav-link" data-target="recipe">Recipe 流水线</a></li>
+      <li><a href="#viewer" class="oa-nav-link" data-target="viewer">Viewer chrome</a></li>
+      <li><a href="#limits" class="oa-nav-link" data-target="limits">限制与绑定</a></li>
+      <li><a href="#dev" class="oa-nav-link" data-target="dev">开发工作流</a></li>
+    </ul>
+  </div>
+</nav>
+
+<main class="oa-main">
+  <header class="oa-mast">
+    <p class="oa-kicker">Open Artifacts · self-hosted Claude Code Artifacts</p>
+    <h1 class="oa-title">架构总览</h1>
+    <p class="oa-standfirst">一个开源的 Claude Code Artifacts 克隆，完全跑在 Cloudflare 上：agent skill 创作 Recipe 加有序 fragments，Worker（Hono + D1 + R2）在内存里组装成最终字节，封进一个带严格 CSP 的 sandbox iframe 里服务。本文讲清楚每一层怎么搭，以及自托管时需要知道的事。</p>
+    <div class="oa-meta-row">
+      <span class="oa-chip">Cloudflare Worker</span>
+      <span class="oa-chip">Hono 4.12</span>
+      <span class="oa-chip">D1 + R2</span>
+      <span class="oa-chip">MIT</span>
+      <span class="oa-chip">coda0.com</span>
+    </div>
+  </header>
+
+  <section id="overview" class="oa-section">
+    <div class="oa-section-head">
+      <h2>概览</h2>
+      <p class="oa-section-sub">三个角色，一条直线。</p>
+    </div>
+    <div class="oa-prose">
+      <p>整个系统只有三部分：<strong>agent skill</strong>（在用户项目里创作页面源）、<strong>Cloudflare Worker</strong>（Hono，存元数据到 D1、存内容到 R2、serve 时把内容包进带 reset 和主题切换的骨架）、以及一个<strong>沙箱 viewer</strong>（严格 CSP，opaque origin，无外部请求、无存储）。</p>
+      <p>关键张力是：要服务<strong>不可信的 HTML</strong>，又不能让它逃逸。open-artifacts 的答案是 CSP <code>sandbox</code> 指令——它给文档一个 opaque origin，artifact 脚本读不到 serving origin 的 cookie 和 storage，也不能 fetch 外部。<code>connect-src 'none'</code> 和 <code>default-src 'none'</code> 堵死所有外发。workerd 的 <code>workers.dev</code> 在 Public Suffix List 上，实例之间互相隔离。</p>
+      <p>存储选型上，KV 被否了：跨 colo 最终一致最多 60s、1 write/s/key、免费层 1000 writes/day——对频繁更新的 artifact 不合适。D1 强一致（元数据、指针），R2 binding 强一致 read-after-write（内容体）。D1 的 2MB 行上限也让 HTML 不能放 D1。</p>
+    </div>
+  </section>
+
+  <section id="data-flow" class="oa-section">
+    <div class="oa-section-head">
+      <h2>数据流</h2>
+      <p class="oa-section-sub">一个请求从 agent 到浏览器。</p>
+    </div>
+    <figure class="oa-flow" aria-labelledby="flow-caption">
+      <svg viewBox="0 0 720 320" role="img" aria-label="数据流：agent skill 经 Worker 到 D1 与 R2，再 wrap 进沙箱" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 z" fill="currentColor" />
+          </marker>
+        </defs>
+        <g fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="16" y="24" width="150" height="56" rx="8" />
+          <rect x="285" y="24" width="150" height="56" rx="8" />
+          <rect x="285" y="130" width="150" height="56" rx="8" />
+          <rect x="555" y="24" width="150" height="56" rx="8" />
+          <rect x="555" y="130" width="150" height="56" rx="8" />
+          <rect x="285" y="240" width="150" height="56" rx="8" />
+          <rect x="555" y="240" width="150" height="56" rx="8" />
+        </g>
+        <g font-family="ui-monospace, monospace" font-size="13" fill="currentColor">
+          <text x="91" y="50" text-anchor="middle">agent skill</text>
+          <text x="91" y="68" text-anchor="middle" font-size="11" opacity="0.7">Recipe + fragments</text>
+          <text x="360" y="50" text-anchor="middle">Worker (Hono)</text>
+          <text x="360" y="68" text-anchor="middle" font-size="11" opacity="0.7">src/index.ts</text>
+          <text x="360" y="156" text-anchor="middle">wrapDocument()</text>
+          <text x="360" y="174" text-anchor="middle" font-size="11" opacity="0.7">reset + theme + OG</text>
+          <text x="630" y="50" text-anchor="middle">D1 (DB)</text>
+          <text x="630" y="68" text-anchor="middle" font-size="11" opacity="0.7">metadata + versions</text>
+          <text x="630" y="156" text-anchor="middle">R2 (CONTENT)</text>
+          <text x="630" y="174" text-anchor="middle" font-size="11" opacity="0.7">content/&lt;id&gt;/&lt;v&gt;</text>
+          <text x="360" y="266" text-anchor="middle">sandboxed iframe</text>
+          <text x="360" y="284" text-anchor="middle" font-size="11" opacity="0.7">opaque origin</text>
+          <text x="630" y="266" text-anchor="middle">浏览器</text>
+          <text x="630" y="284" text-anchor="middle" font-size="11" opacity="0.7">/a/&lt;id&gt;</text>
+        </g>
+        <g fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)">
+          <path d="M166 52 L285 52" />
+          <path d="M360 80 L360 130" />
+          <path d="M435 52 L555 52" />
+          <path d="M435 158 L555 158" />
+          <path d="M360 186 L360 240" />
+          <path d="M435 268 L555 268" />
+        </g>
+        <g font-family="ui-monospace, monospace" font-size="10" fill="currentColor" opacity="0.7">
+          <text x="225" y="44" text-anchor="middle">POST /api</text>
+          <text x="225" y="118" text-anchor="middle">serve-time wrap</text>
+          <text x="495" y="44" text-anchor="middle">元数据</text>
+          <text x="495" y="150" text-anchor="middle">内容体</text>
+          <text x="495" y="260" text-anchor="middle">HTML + CSP</text>
+        </g>
+      </svg>
+      <figcaption id="flow-caption" class="oa-flow-caption">创建：agent POST 到 Worker，元数据入 D1，内容入 R2。查看：Worker 从 D1 取记录、从 R2 取内容，<code>wrapDocument()</code> 包骨架，以严格 CSP 响应。</figcaption>
+    </figure>
+  </section>
+
+  <section id="csp" class="oa-section">
+    <div class="oa-section-head">
+      <h2>CSP 沙箱</h2>
+      <p class="oa-section-sub">不可信 HTML，封死。</p>
+    </div>
+    <div class="oa-prose">
+      <p>每个 user-content 响应（viewer 页和 <code>/raw</code>）都带这组头。核心是 <code>sandbox allow-scripts allow-modals allow-forms allow-popups</code>——它给文档一个 opaque origin（等价于 iframe sandbox 的响应头版）：artifact 脚本读不到 serving origin 的 cookie / localStorage，也不能用 ambient credentials 调 API。<code>connect-src 'none'</code> 和 <code>default-src 'none'</code> 堵死所有外发。<code>X-Content-Type-Options: nosniff</code> 和 <code>Referrer-Policy: no-referrer</code> 补齐。</p>
+    </div>
+    <div class="oa-code-block" data-copyable>
+      <div class="oa-code-head">
+        <span class="oa-code-label">src/wrap.ts · contentSecurityPolicy()</span>
+        <button type="button" class="oa-copy" data-copy aria-label="复制 CSP 指令">
+          <svg class="oa-ic" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M7 4V2H17V4H20.0066C20.5552 4 21 4.44495 21 4.9934V21.0066C21 21.5552 20.5551 22 20.0066 22H3.9934C3.44476 22 3 21.5551 3 21.0066V4.9934C3 4.44476 3.44495 4 3.9934 4H7ZM7 6H5V20H19V6H17V8H7V6ZM9 4V6H15V4H9Z"/></svg>
+          <span class="oa-copy-text">复制</span>
+        </button>
+      </div>
+      <pre><code>Content-Security-Policy: sandbox allow-scripts allow-modals allow-forms allow-popups;
+  default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline';
+  img-src data: blob:; font-src data:; media-src data: blob:;
+  connect-src 'none'; form-action 'none'; base-uri 'none'
+X-Content-Type-Options: nosniff
+Referrer-Policy: no-referrer</code></pre>
+    </div>
+    <div class="oa-callout">
+      <p>沙箱内<strong>无 localStorage、无 fetch、无外部子资源</strong>。任何 viewer 端数据（版本选择器、token）必须在 serve 时由 Worker 内联——运行时拿不到。</p>
+    </div>
+  </section>
+
+  <section id="routing" class="oa-section">
+    <div class="oa-section-head">
+      <h2>路由与 run_worker_first</h2>
+      <p class="oa-section-sub"><code>public/</code> 不是原样直出。</p>
+    </div>
+    <div class="oa-prose">
+      <p><code>wrangler.jsonc</code> 对 <code>/</code>、<code>/api/*</code>、<code>/a/*</code>、<code>/og/*</code> 设了 <code>run_worker_first</code>——Worker 先于静态资源跑，拦截这些路由做 coda0 rebrand 和动态路径。landing page 是 <code>public/</code> 里的静态资源，但 Worker 在托管主机（coda0.com）上用 <code>HTMLRewriter</code> 把品牌 token 重写成 "coda0"（<code>src/home.ts</code>，服务端改 HTML，crawler 和 no-JS 访客也看到 SaaS 身份）；其他 deploy 原样返回 asset。</p>
+    </div>
+    <div class="oa-code-block" data-copyable>
+      <div class="oa-code-head">
+        <span class="oa-code-label">wrangler.jsonc</span>
+        <button type="button" class="oa-copy" data-copy aria-label="复制 wrangler 配置">
+          <svg class="oa-ic" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M7 4V2H17V4H20.0066C20.5552 4 21 4.44495 21 4.9934V21.0066C21 21.5552 20.5551 22 20.0066 22H3.9934C3.44476 22 3 21.5551 3 21.0066V4.9934C3 4.44476 3.44495 4 3.9934 4H7ZM7 6H5V20H19V6H17V8H7V6ZM9 4V6H15V4H9Z"/></svg>
+          <span class="oa-copy-text">复制</span>
+        </button>
+      </div>
+      <pre><code>{
+  "main": "src/index.ts",
+  "assets": { "directory": "./public", "binding": "ASSETS",
+              "run_worker_first": ["/", "/api/*", "/a/*", "/og/*"] },
+  "d1_databases": [{ "binding": "DB", "database_name": "open-artifacts" }],
+  "r2_buckets": [{ "binding": "CONTENT", "bucket_name": "open-artifacts-content" }]
+}</code></pre>
+    </div>
+    <div class="oa-route-table-wrap">
+      <table class="oa-route-table">
+        <thead>
+          <tr><th scope="col">方法</th><th scope="col">路径</th><th scope="col">用途</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>POST</code></td><td><code>/api/artifacts</code></td><td>创建（D1 + R2）</td></tr>
+          <tr><td><code>PUT</code></td><td><code>/api/artifacts/:id</code></td><td>更新（<code>baseVersion</code> 冲突 → 409，<code>force: true</code> 覆盖）</td></tr>
+          <tr><td><code>GET</code></td><td><code>/api/artifacts/:id</code></td><td>元数据</td></tr>
+          <tr><td><code>GET</code></td><td><code>/api/artifacts/:id/raw</code></td><td>原始内容</td></tr>
+          <tr><td><code>DELETE</code></td><td><code>/api/artifacts/:id</code></td><td>删除</td></tr>
+          <tr><td><code>GET</code></td><td><code>/a/:id</code></td><td>viewer 页（<code>?v=N</code> 取历史版本）</td></tr>
+          <tr><td><code>GET</code></td><td><code>/og/:id</code></td><td>1200×630 PNG 预览卡（resvg 渲染）</td></tr>
+          <tr><td><code>GET</code></td><td><code>/</code></td><td>landing（托管主机上 HTMLRewriter 重品牌）</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="storage" class="oa-section">
+    <div class="oa-section-head">
+      <h2>存储：D1 + R2</h2>
+      <p class="oa-section-sub">元数据强一致，内容体 read-after-write。</p>
+    </div>
+    <div class="oa-prose">
+      <p>绑定：D1 = <code>DB</code>，R2 = <code>CONTENT</code>。D1 存元数据、token 哈希、版本索引；R2 存内容体，object key 是 <code>content/&lt;id&gt;/&lt;version&gt;</code>。加密 artifact 存的是一个 JSON envelope（<code>v</code>、<code>alg</code>、<code>kdf</code>、<code>iterations</code>、<code>salt</code>、<code>iv</code>、<code>ciphertext</code>，全 base64）。</p>
+      <p><strong>D1 schema 首请求自动应用</strong>——<code>CREATE TABLE IF NOT EXISTS</code>，按 isolate 记忆化，没有单独的 migration 步骤。对自托管者意味着零步骤 deploy，对 vitest miniflare 测试也零配置。</p>
+    </div>
+    <div class="oa-code-block" data-copyable>
+      <div class="oa-code-head">
+        <span class="oa-code-label">D1 表结构（概念）</span>
+        <button type="button" class="oa-copy" data-copy aria-label="复制 schema">
+          <svg class="oa-ic" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M7 4V2H17V4H20.0066C20.5552 4 21 4.44495 21 4.9934V21.0066C21 21.5552 20.5551 22 20.0066 22H3.9934C3.44476 22 3 21.5551 3 21.0066V4.9934C3 4.44476 3.44495 4 3.9934 4H7ZM7 6H5V20H19V6H17V8H7V6ZM9 4V6H15V4H9Z"/></svg>
+          <span class="oa-copy-text">复制</span>
+        </button>
+      </div>
+      <pre><code>artifacts(id, token_hash, title, description, favicon, format,
+           encrypted, current_version, created_at, updated_at)
+versions(artifact_id, version, label, size, created_at)
+-- R2: content/&lt;id&gt;/&lt;v&gt;  明文或加密 envelope</code></pre>
+    </div>
+    <details class="oa-details">
+      <summary>身份与鉴权（无账号）</summary>
+      <div class="oa-prose">
+        <p>Artifact id：12 字符 crypto-random，base58-like 字母表（不可猜、默认不列出）。Write token：<code>wt_</code> + 32 random bytes base64url，<code>create</code> 时返回一次；只存 SHA-256(token)，用 <code>crypto.subtle.timingSafeEqual</code> 比较。可选实例门：<code>CREATE_TOKEN</code> secret 设了，<code>POST /api/artifacts</code> 需要它作 bearer；没设 = 开放实例（仅限流）。可选 canonical 域：<code>PUBLIC_URL</code>（如 <code>https://coda0.com</code>）是每个生成链接的 base。</p>
+      </div>
+    </details>
+    <details class="oa-details">
+      <summary>密码保护（零知识）</summary>
+      <div class="oa-prose">
+        <p>服务端永远看不到密码或明文。skill CLI 在本地加密：PBKDF2-HMAC-SHA256，600,000 次迭代，16-byte salt → AES-256-GCM，每版本新 12-byte IV。Viewer：Worker 服务一个可信 unlock shell（严格 CSP，ciphertext envelope 内联——<code>connect-src 'none'</code> 仍成立）；浏览器派生密钥、解密、用同一骨架模板包明文，注入 <code>&lt;iframe sandbox="allow-scripts allow-modals" srcdoc&gt;</code>。密码错 = AES-GCM auth 失败 → 错误信息，无内容。workerd 把 PBKDF2 上限设 100,000 次且免费 CPU 10ms，服务端做不到。</p>
+      </div>
+    </details>
+  </section>
+
+  <section id="recipe" class="oa-section">
+    <div class="oa-section-head">
+      <h2>Recipe + fragment 流水线</h2>
+      <p class="oa-section-sub">发布从不直接吃 HTML/Markdown。</p>
+    </div>
+    <div class="oa-prose">
+      <p>作者写一个严格 Recipe（版本化 JSON）加有序 fragments。本地 builder 验证并在内存里确定性组装成最终 HTML 或 Markdown，然后一次发布。Worker serve 时把发布体包进 doctype/head/body 骨架（minimal reset、emoji favicon、viewport meta、主题支持）。</p>
+      <p>Recipe 声明 <code>title</code>、<code>favicon</code>、<code>level</code>（1 simple / 2 interactive / 3 rich）、<code>canvas</code>、<code>channel</code>（固定 URL 的 kebab-case 名）、<code>scope</code>、<code>watch</code>（glob）、<code>local</code>、<code>autoUpdate</code>，以及有序 fragments：<code>theme</code>（CSS）、<code>styles</code>（CSS）、<code>body</code>（HTML 或 Markdown）、<code>scripts</code>（JS）。Manifest v2 只记发布状态和 SHA-256 哈希（Recipe、有序输入、最终输出各一个）。</p>
+      <p>builder 拒绝：未知 Recipe 键、项目/symlink 逃逸、重复或超大 fragment、CSP 不兼容资源和 API、畸形脚本、全文档 markup 在 body fragment 里、输出超服务上限。它注入 tokens（HTML），Canvas 构建额外注入 vendored CSS/JS。小构建直接组装，大构建用本地 structure/detail 两遍，两条路最后都只发一个发布请求。</p>
+    </div>
+    <div class="oa-code-block" data-copyable>
+      <div class="oa-code-head">
+        <span class="oa-code-label">Recipe 结构（简）</span>
+        <button type="button" class="oa-copy" data-copy aria-label="复制 Recipe 结构">
+          <svg class="oa-ic" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M7 4V2H17V4H20.0066C20.5552 4 21 4.44495 21 4.9934V21.0066C21 21.5552 20.5551 22 20.0066 22H3.9934C3.44476 22 3 21.5551 3 21.0066V4.9934C3 4.44476 3.44495 4 3.9934 4H7ZM7 6H5V20H19V6H17V8H7V6ZM9 4V6H15V4H9Z"/></svg>
+          <span class="oa-copy-text">复制</span>
+        </button>
+      </div>
+      <pre><code>{
+  "version": 1,
+  "artifact": {
+    "favicon": "🧭", "format": "html", "level": 2, "canvas": false,
+    "channel": "architecture-overview", "scope": "...", "watch": [...],
+    "local": false, "autoUpdate": false
+  },
+  "document": { "language": "zh-Hans", "theme": "...",
+    "fragments": { "theme": [...], "body": [...], "scripts": [...] } },
+  "security": { "encrypted": false, "passwordCredential": null },
+  "build": { "strategy": "auto" }
+}</code></pre>
+    </div>
+  </section>
+
+  <section id="viewer" class="oa-section">
+    <div class="oa-section-head">
+      <h2>Viewer chrome</h2>
+      <p class="oa-section-sub"><code>wrap.ts</code> 的四个块。</p>
+    </div>
+    <div class="oa-prose">
+      <p><code>src/wrap.ts</code> 服务时给每个 artifact 包骨架。四个关键块：<strong><code>RESET_CSS</code></strong>（reset + <code>--oa-*</code> token + <code>.oa-header</code> sticky + <code>.oa-md</code> markdown prose 基线）、<strong><code>THEME_SCRIPT</code></strong>（localStorage 存主题——这是外层 viewer 页，不是沙箱 iframe 内，opaque origin 时 try/catch 容错）、<strong><code>LAYOUT_SCRIPT</code></strong>（测 header 高度写到 <code>--oa-header-h</code>，把作者自写的 sticky 元素顶到 header 下方）、<strong><code>ogCardSvg</code></strong>（resvg 渲 PNG，无系统字体所以有 <code>isRenderable</code> fallback 对 CJK 等返回品牌锁型卡）。</p>
+      <p>sticky header ≈3rem，高度测成 <code>--oa-header-h</code> 暴露给页面。作者的 sticky 元素设 <code>top: var(--oa-header-h, 2.5rem)</code> 更可靠。viewer 的主题切换盖 <code>prefers-color-scheme</code> 双向。</p>
+    </div>
+    <div class="oa-callout">
+      <p>OpenGraph：每个 viewer 响应带 OG + Twitter 标签。<code>og:image</code> 指向 <code>GET /og/:id</code>，返回 1200×630 <strong>PNG</strong>（不是 SVG——Facebook、X、LinkedIn、Slack、iMessage、Discord 都拒渲 SVG <code>og:image</code>）。卡是自包含 SVG，<code>@resvg/resvg-wasm</code> 栅格化。emoji favicon 故意省略（resvg 渲不了彩色 emoji）。</p>
+    </div>
+  </section>
+
+  <section id="limits" class="oa-section">
+    <div class="oa-section-head">
+      <h2>限制与绑定</h2>
+      <p class="oa-section-sub">免费层友好的硬边界。</p>
+    </div>
+    <div class="oa-grid-2">
+      <div class="oa-stat">
+        <span class="oa-stat-num">4 MiB</span>
+        <span class="oa-stat-label">内容上限（加密后 post-base64）</span>
+      </div>
+      <div class="oa-stat">
+        <span class="oa-stat-num">20/min</span>
+        <span class="oa-stat-label">create 限流（per-colo per-IP）</span>
+      </div>
+      <div class="oa-stat">
+        <span class="oa-stat-num">60/min</span>
+        <span class="oa-stat-label">update 限流（per-colo per-id）</span>
+      </div>
+      <div class="oa-stat">
+        <span class="oa-stat-num">D1 / R2</span>
+        <span class="oa-stat-label">绑定 DB / CONTENT</span>
+      </div>
+    </div>
+    <div class="oa-prose">
+      <p>免费层余量：Workers 100k req/day，R2 1M writes/mo，D1 100k row writes/day。本地 dev 状态在 <code>.wrangler/state</code>。</p>
+    </div>
+  </section>
+
+  <section id="dev" class="oa-section">
+    <div class="oa-section-head">
+      <h2>开发工作流</h2>
+      <p class="oa-section-sub">两层 typecheck / test，别混。</p>
+    </div>
+    <div class="oa-prose">
+      <p><code>tsconfig.json</code> + <code>tests/worker/</code> 针对 Worker（cloudflare vitest pool，workerd）。<code>tsconfig.cli.json</code> + <code>tests/cli/</code> 针对 skill CLI（node env，Node16 resolution）。两组不可互换——<code>pnpm test</code> 跑 worker，<code>pnpm test:cli</code> 跑 CLI。<code>pnpm typecheck</code> 跑两套，都要过。</p>
+    </div>
+    <div class="oa-code-block" data-copyable>
+      <div class="oa-code-head">
+        <span class="oa-code-label">常用命令</span>
+        <button type="button" class="oa-copy" data-copy aria-label="复制命令">
+          <svg class="oa-ic" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M7 4V2H17V4H20.0066C20.5552 4 21 4.44495 21 4.9934V21.0066C21 21.5552 20.5551 22 20.0066 22H3.9934C3.44476 22 3 21.5551 3 21.0066V4.9934C3 4.44476 3.44495 4 3.9934 4H7ZM7 6H5V20H19V6H17V8H7V6ZM9 4V6H15V4H9Z"/></svg>
+          <span class="oa-copy-text">复制</span>
+        </button>
+      </div>
+      <pre><code>pnpm dev          # wrangler dev — 本地状态在 .wrangler/state
+pnpm test         # Worker 集成测试（cloudflare pool, workerd）
+pnpm test:cli     # skill CLI 测试（plain node vitest）
+pnpm typecheck    # 跑两套 tsconfig，都要过
+pnpm check        # biome check .（lint + format）
+pnpm run deploy   # wrangler deploy — 直上 prod，先 review PR</code></pre>
+    </div>
+    <div class="oa-code-block" data-copyable>
+      <div class="oa-code-head">
+        <span class="oa-code-label">artifact.mjs 命令</span>
+        <button type="button" class="oa-copy" data-copy aria-label="复制 CLI 命令">
+          <svg class="oa-ic" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M7 4V2H17V4H20.0066C20.5552 4 21 4.44495 21 4.9934V21.0066C21 21.5552 20.5551 22 20.0066 22H3.9934C3.44476 22 3 21.5551 3 21.0066V4.9934C3 4.44476 3.44495 4 3.9934 4H7ZM7 6H5V20H19V6H17V8H7V6ZM9 4V6H15V4H9Z"/></svg>
+          <span class="oa-copy-text">复制</span>
+        </button>
+      </div>
+      <pre><code>node skills/using-open-artifacts/scripts/artifact.mjs validate &lt;recipe&gt;
+node skills/using-open-artifacts/scripts/artifact.mjs create &lt;recipe&gt;
+node skills/using-open-artifacts/scripts/artifact.mjs update &lt;id&gt; [--label]
+node skills/using-open-artifacts/scripts/artifact.mjs migrate &lt;id&gt;
+node skills/using-open-artifacts/scripts/artifact.mjs show &lt;id&gt;
+node skills/using-open-artifacts/scripts/artifact.mjs list
+node skills/using-open-artifacts/scripts/artifact.mjs status [--hook]
+node skills/using-open-artifacts/scripts/artifact.mjs ack &lt;id&gt;
+node skills/using-open-artifacts/scripts/artifact.mjs auto-update &lt;id&gt; on|off
+node skills/using-open-artifacts/scripts/artifact.mjs install-hook</code></pre>
+    </div>
+    <div class="oa-prose">
+      <p>状态在用户项目里：<code>.artifacts/manifest.json</code>（Manifest v2，可提交，记 id、URL、版本、Recipe 路径、各 SHA-256、build strategy、watch snapshot）。<code>.artifacts/recipes.local/</code>、<code>.artifacts/fragments.local/</code>、<code>manifest.local.json</code>、previews、credentials 都 gitignored。<code>.artifacts/credentials.json</code> 存 write/channel token 和命名密码。</p>
+    </div>
+  </section>
+
+  <footer class="oa-footer">
+    <p>开源 · MIT · 托管 <a href="https://coda0.com" target="_blank" rel="noopener noreferrer">coda0.com</a> · 源码 <a href="https://github.com/coda0HQ/open-artifacts" target="_blank" rel="noopener noreferrer">coda0HQ/open-artifacts</a></p>
+    <p class="oa-footer-sub">本文由 Recipe + fragments 组装，沙箱内服务。CSP：<code>sandbox allow-scripts</code>，<code>default-src 'none'</code>。</p>
+  </footer>
+</main>
