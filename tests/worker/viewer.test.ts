@@ -70,7 +70,7 @@ describe("GET /a/:id (plain HTML)", () => {
     expect(res.headers.get("content-type")).toContain("text/html");
     const html = await res.text();
     expect(html).toMatch(/^<!doctype html>/i);
-    expect(html).toContain("<title>Viewer Test</title>");
+    expect(html).toContain("<title>Viewer Test · Open Artifacts</title>");
     expect(html).toContain('rel="icon"');
     expect(html).toContain("data:image/svg+xml");
     expect(html).toContain("box-sizing");

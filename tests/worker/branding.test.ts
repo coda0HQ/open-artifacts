@@ -156,12 +156,28 @@ describe("OG card wordmark", () => {
     expect(svg).toContain(">OPEN ARTIFACTS<");
   });
 
-  it("brands the non-Latin fallback card the same way", () => {
+  it("draws CJK titles on the real card via the Noto Sans SC face", () => {
     const svg = ogCardSvg({
       title: "开源自托管",
+      description: "任意编码 agent 都能发布可分享的页面",
+      hostname: "coda0.com",
+    });
+    // The title and description are laid out as text (not the wordmark-only
+    // fallback), and the brand footer is still present.
+    expect(svg).toContain("开源自托管");
+    expect(svg).toContain("任意编码 agent");
+    expect(svg).toContain(">CODA0<");
+  });
+
+  it("brands the fallback card for scripts with no embedded glyphs", () => {
+    // Cyrillic is covered by neither Inter nor the Noto Sans SC subset, so the
+    // card drops to the brand lockup and the title text is omitted.
+    const svg = ogCardSvg({
+      title: "Пример заголовка",
       description: "",
       hostname: "coda0.com",
     });
     expect(svg).toContain(">CODA0<");
+    expect(svg).not.toContain("Пример");
   });
 });

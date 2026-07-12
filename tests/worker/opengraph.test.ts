@@ -36,6 +36,10 @@ describe("OpenGraph metadata", () => {
       await exports.default.fetch(`${BASE}/a/${created.id}`)
     ).text();
     expect(html).toContain('<meta property="og:type" content="article">');
+    expect(html).toContain(
+      '<meta property="og:site_name" content="Open Artifacts">',
+    );
+    expect(html).toContain("<title>OG Test · Open Artifacts</title>");
     expect(html).toContain('<meta property="og:title" content="OG Test">');
     expect(html).toContain(
       '<meta property="og:description" content="A shareable report on Q3 metrics.">',
@@ -120,9 +124,10 @@ describe("OpenGraph metadata", () => {
     expect(isPng(new Uint8Array(await res.arrayBuffer()))).toBe(true);
   });
 
-  it("renders a valid PNG for non-Latin titles via the branded fallback", async () => {
-    // The embedded fonts are Latin-only; a CJK title must not throw or produce
-    // a broken image — it falls back to the branded card.
+  it("rasterizes CJK titles as real headlines via the Noto Sans SC face", async () => {
+    // The embedded Noto Sans SC subset covers Simplified Chinese, so a CJK
+    // title renders as a real card headline (not the brand-only fallback) and
+    // still produces a valid PNG.
     const created = await create({
       title: "开源自托管的 Claude Code Artifacts",
       content: "<h1>x</h1>",
@@ -131,6 +136,18 @@ describe("OpenGraph metadata", () => {
     const res = await exports.default.fetch(`${BASE}/og/${created.id}`);
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toBe("image/png");
+    expect(isPng(new Uint8Array(await res.arrayBuffer()))).toBe(true);
+  });
+
+  it("still produces a valid PNG for scripts with no embedded glyphs", async () => {
+    // Cyrillic is in neither embedded face; the card drops to the branded
+    // fallback rather than throwing or emitting a broken image.
+    const created = await create({
+      title: "Пример заголовка артефакта",
+      content: "<h1>x</h1>",
+    });
+    const res = await exports.default.fetch(`${BASE}/og/${created.id}`);
+    expect(res.status).toBe(200);
     expect(isPng(new Uint8Array(await res.arrayBuffer()))).toBe(true);
   });
 
@@ -161,6 +178,10 @@ describe("OpenGraph metadata", () => {
       await exports.default.fetch(`${BASE}/a/${created.id}`)
     ).text();
     expect(html).toContain('<meta property="og:title" content="OG Test">');
+    expect(html).toContain(
+      '<meta property="og:site_name" content="Open Artifacts">',
+    );
+    expect(html).toContain("<title>OG Test · Open Artifacts</title>");
     expect(html).toContain(
       '<meta property="og:description" content="encrypted desc">',
     );
