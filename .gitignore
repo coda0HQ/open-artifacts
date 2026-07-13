@@ -9,3 +9,5 @@ dist/
 .artifacts/previews/
 .artifacts/recipes.local/
 .artifacts/fragments.local/
+
+.claude/
