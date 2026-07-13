@@ -619,7 +619,7 @@ visible product palette.
 :root{
   --bg:oklch(99% 0.002 240); --surface:oklch(100% 0 0);
   --fg:oklch(18% 0.012 250); --muted:oklch(54% 0.012 250);
-  --border:oklch(92% 0.005 250); --accent:oklch(58% 0.18 255);
+  --border:oklch(92% 0.005 250); --accent:oklch(56% 0.18 255);
   --font-display:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
   --font-body:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
 }
@@ -641,7 +641,7 @@ consumer tools, marketplaces, education, indie SaaS.
 :root{
   --bg:oklch(98% 0.004 240); --surface:oklch(100% 0 0);
   --fg:oklch(20% 0.02 240); --muted:oklch(50% 0.018 240);
-  --border:oklch(90% 0.006 240); --accent:oklch(56% 0.12 170);
+  --border:oklch(90% 0.006 240); --accent:oklch(54% 0.12 170);
   --font-display:'Seravek','Gill Sans Nova','Gill Sans','Avenir Next',-apple-system,system-ui,sans-serif;
   --font-body:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
 }
@@ -663,7 +663,7 @@ operators who want information per square inch, not vibes.
 :root{
   --bg:oklch(98% 0.005 250); --surface:oklch(100% 0 0);
   --fg:oklch(22% 0.02 240); --muted:oklch(50% 0.018 240);
-  --border:oklch(90% 0.008 240); --accent:oklch(58% 0.16 145);
+  --border:oklch(90% 0.008 240); --accent:oklch(54% 0.16 145);
   --font-display:-apple-system,BlinkMacSystemFont,'Inter','Segoe UI',system-ui,sans-serif;
   --font-body:-apple-system,BlinkMacSystemFont,'Inter','Segoe UI',system-ui,sans-serif;
   --font-mono:'JetBrains Mono','IBM Plex Mono',ui-monospace,Menlo,monospace;
@@ -686,7 +686,7 @@ ugliness as confidence. For art, indie, agency, manifesto pages.
 :root{
   --bg:oklch(98% 0.004 240); --surface:oklch(100% 0 0);
   --fg:oklch(15% 0.02 100); --muted:oklch(40% 0.02 100);
-  --border:oklch(15% 0.02 100); --accent:oklch(60% 0.22 25);
+  --border:oklch(15% 0.02 100); --accent:oklch(58% 0.22 25);
   --font-display:'Times New Roman','Iowan Old Style',Georgia,serif;
   --font-body:ui-monospace,'IBM Plex Mono','JetBrains Mono',Menlo,monospace;
 }
@@ -772,9 +772,15 @@ not loop on renders, and do not publish with a failing P0.
       authored `--fg`/`--bg`/`--muted`/`--surface`/`--accent` overrides (hex,
       oklch, rgb, hsl literals only — `color-mix()` and `var()` references
       can't be resolved statically and are skipped), so a too-similar pair
-      fails the build before publish. But do not skip the manual check for
-      text *you* author on derived backgrounds (e.g. `--accent-soft`) the
-      validator doesn't track.
+      fails the build before publish. The checked pairs are `--fg`/`--bg`,
+      `--muted`/`--bg`, `--muted`/`--surface`, `--accent`/`--bg`, and
+      `--accent-on`/`--accent` — so your accent must read as text on `--bg`
+      (link/accent text), not only as a button fill; if you use the accent
+      purely as a fill, the label is `--accent-on` and that pair is what
+      carries legibility, but the accent-still-on-bg pair still has to clear
+      4.5:1 because accent text on the page background is a common usage. Do
+      not skip the manual check for text *you* author on derived backgrounds
+      (e.g. `--accent-soft`) the validator doesn't track.
 - [ ] 360px: no horizontal scroll, no heading overflow, hit targets ≥ 44px.
 - [ ] Body width is constrained — an L1 non-canvas page has a measure cap
       (`max-width` on `body`/`<main>` or via `.oa-prose`); `validate` fails
