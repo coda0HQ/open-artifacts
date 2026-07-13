@@ -821,6 +821,18 @@ Two passes is normal. Then publish.
 
 ## Hard constraints (will break the page if ignored)
 
+The viewer serves artifacts under a sandboxed iframe with two layers of
+restriction. The **CSP directive** is
+`default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'`
+(also `img-src`/`font-src` allow `data:` for embedded assets): inline
+`<style>` and inline `<script>` are allowed, but `<link>` stylesheets, web
+fonts, remote `<img>`/`<video>`/`<source>` src, and every `fetch`/XHR/
+WebSocket/EventSource are blocked by `default-src 'none'`. Separately, the
+iframe `sandbox` attribute (no `allow-same-origin`) blocks
+`localStorage`/`sessionStorage`/cookies — the opaque origin also means
+`location.hash` inside the iframe is independent of the parent URL (see
+`canvas.md`'s encrypted-canvas deep-link caveat).
+
 - **No external requests of any kind** — the strict CSP blocks all CDN
   scripts, web fonts, remote images, fetch/XHR/WebSockets. Inline all CSS
   and JS; embed images and fonts as `data:` URIs. Use installed-font stacks

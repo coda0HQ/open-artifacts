@@ -198,8 +198,29 @@ images, fetch/XHR/WebSockets):
   explicitly.
 - Responsive: no horizontal body scroll; wide tables/code get their own
   `overflow-x: auto` container.
-- Markdown files (`.md`) are rendered client-side; HTML is best for anything
-  interactive or designed.
+
+### Authoring Markdown
+
+Most of the hard constraints above are **HTML-specific and do not apply to
+Markdown**. A Markdown Recipe publishes the body `.md` **verbatim** — the
+builder does not inject `references/tokens.css`, does not wrap the content in
+a `<style>` block, and runs none of the HTML validation gates (no theme
+fragment, no `:root`/`[data-theme="dark"]` requirement, no contrast check, no
+L1 measure-cap, no banned-trope grep). The viewer wraps the raw Markdown in
+`.oa-md` and renders it client-side with the viewer's default tokens, so:
+
+- `document.theme`, `document.fragments.theme`/`styles`/`scripts` are all
+  ignored — supply `document.fragments.body` with one or more `.md` files only.
+- You cannot theme, style, or script a Markdown artifact; if you need
+  interaction, identity tokens, or a measure cap beyond the default, author it
+  as HTML instead.
+- `artifact.title` still drives the page title and OG card; the first `#`
+  heading is also extracted as a fallback title.
+- Both-themes support is automatic (the viewer's `.oa-md` shell reads light/dark
+  tokens); nothing for you to author.
+
+Markdown files (`.md`) are rendered client-side; HTML is best for anything
+interactive or designed.
 
 **Avoid AI-slop tropes** (`design.md` has the full match-and-refuse list):
 side-stripe accent borders, gradient text (`background-clip: text`), decorative
