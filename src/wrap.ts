@@ -76,15 +76,15 @@ img,video,canvas{max-width:100%}
    need the offset. */
 :root{--oa-header-h:2.5rem}
 [id]{scroll-margin-top:calc(var(--oa-header-h) + .5rem)}
-.oa-header{position:sticky;top:0;z-index:2147483646;display:flex;align-items:center;gap:.75rem;padding:.5rem 1rem;background:color-mix(in oklab,var(--oa-bg),transparent 8%);backdrop-filter:blur(10px);border-bottom:1px solid var(--oa-border);font-size:.8rem}
+.oa-header{position:sticky;top:0;z-index:2147483646;display:flex;align-items:center;gap:.6rem;padding:.375rem 1rem;background:color-mix(in oklab,var(--oa-bg),transparent 8%);backdrop-filter:blur(10px);border-bottom:1px solid var(--oa-border);font-size:.8rem}
 .oa-header .oa-header-title{flex:1;min-width:0;font-size:.8rem;font-weight:600;line-height:1.5;letter-spacing:normal;margin:0;color:var(--oa-fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .oa-header .oa-header-title .oa-header-fav{margin-right:.4rem;font-size:1em}
-.oa-header #oa-theme-toggle{position:relative;width:32px;height:32px;border-radius:8px;border:1px solid var(--oa-border);background:var(--oa-surface);color:var(--oa-fg);font-size:14px;line-height:1;cursor:pointer;opacity:.8;transition:opacity .15s,border-color .15s,background .15s;flex-shrink:0}
+.oa-header #oa-theme-toggle{position:relative;width:28px;height:28px;border-radius:6px;border:1px solid var(--oa-border);background:var(--oa-surface);color:var(--oa-fg);font-size:13px;line-height:1;cursor:pointer;opacity:.8;transition:opacity .15s,border-color .15s,background .15s;flex-shrink:0}
 .oa-header #oa-theme-toggle::before{content:"";position:absolute;inset:-6px}
 .oa-header #oa-theme-toggle:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 .oa-header #oa-theme-toggle:active{transform:translateY(1px)}
 .oa-header #oa-theme-toggle svg{display:block}
-.oa-brand{position:relative;display:inline-flex;align-items:center;gap:.35rem;min-height:32px;text-decoration:none;color:var(--oa-muted);font-size:.75rem;flex-shrink:0;padding:.25rem .5rem;border-radius:8px;transition:color .15s,background .15s}
+.oa-brand{position:relative;display:inline-flex;align-items:center;gap:.35rem;min-height:28px;text-decoration:none;color:var(--oa-muted);font-size:.75rem;flex-shrink:0;padding:.2rem .5rem;border-radius:6px;transition:color .15s,background .15s}
 .oa-brand::before{content:"";position:absolute;inset:-6px 0}
 .oa-brand:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 .oa-brand:active{transform:translateY(1px)}
