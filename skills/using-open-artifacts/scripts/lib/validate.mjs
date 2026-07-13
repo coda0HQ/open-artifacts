@@ -189,7 +189,7 @@ function validateCanvas(content) {
 const CONTAINER_SELECTOR = /(^|[^-\w])\.([A-Za-z_][\w-]*)\s*\{/g;
 const MEASURE_PATTERN = /max-width\s*:/i;
 
-function validateContainer(authoredStyles, authoredBody) {
+function validateContainer(authoredStyles, authoredBody, authoredScripts) {
   const stripped = authoredStyles.replace(/\/\*[\s\S]*?\*\//g, "");
   const defined = new Set();
   for (const match of stripped.matchAll(CONTAINER_SELECTOR)) {
@@ -204,17 +204,33 @@ function validateContainer(authoredStyles, authoredBody) {
         : stripped.slice(blockStart, blockEnd);
     if (MEASURE_PATTERN.test(block)) defined.add(className);
   }
+  // Strip comments from the scripts before scanning for class references, so a
+  // `// no .duration-bar` comment does not count as applying the class. Only
+  // live code is searched.
+  const liveScripts = authoredScripts
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/(^|[^:"'])\/\/[^\n]*/g, "$1");
   for (const className of defined) {
+    const escaped = className.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     // The body applies a class via class="a b c". A class is "applied" if it
     // appears as a whole token in some class attribute, anchored on word
     // boundaries so .foo does not match .foo-bar.
-    const applied = new RegExp(
-      `class\\s*=\\s*["'][^"']*\\b${className.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`,
+    const appliedInBody = new RegExp(
+      `class\\s*=\\s*["'][^"']*\\b${escaped}\\b`,
       "i",
     ).test(authoredBody);
-    if (!applied) {
+    // An L2/L3 page may render its body via JS, applying classes through
+    // classList.add / className = / innerHTML templates rather than static
+    // class="..." attributes. A class that appears as a quoted string token in
+    // the authored scripts counts as applied — the JS owns that surface, and
+    // the cap is real at runtime. Match the bare name as a quoted token
+    // ("duration-bar", 'duration-bar', `duration-bar`).
+    const appliedInScript = new RegExp(`["'\`]${escaped}["'\`]`, "i").test(
+      liveScripts,
+    );
+    if (!appliedInBody && !appliedInScript) {
       fail(
-        `CSS defines a container class ".${className}" with max-width, but the body fragment never applies it; move the constraint onto an element that exists in the body (or body itself), or wrap the body in <div class="${className}">`,
+        `CSS defines a container class ".${className}" with max-width, but the body fragment never applies it; move the constraint onto an element that exists in the body (or body itself), wrap the body in <div class="${className}">, or apply the class via JS (reference it as a quoted string in a script fragment)`,
       );
     }
   }
@@ -361,7 +377,11 @@ export function validateBuild(loaded, composed) {
     } catch (error) {
       fail(`inline JavaScript syntax error: ${error.message}`);
     }
-    validateContainer(composed.authoredStyles, composed.authoredBody);
+    validateContainer(
+      composed.authoredStyles,
+      composed.authoredBody,
+      composed.authoredScripts,
+    );
     validateMeasureCap(loaded, composed);
   }
   if (artifact.canvas) validateCanvas(composed.authoredBody);

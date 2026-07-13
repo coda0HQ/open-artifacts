@@ -1327,13 +1327,26 @@ No decorative spaghetti.
 **Place notes in the gutters, not over frames.** A note's `--x/--y` is its
 top-left while expanded and its center while collapsed; `max-width: 28ch`
 counter-scales to ~3× at low overview zoom, so a note whose box intersects a
-frame body lands *on top of* that frame's content.
-Before placing a note, compute its right edge (`--x + ~22ch ≈ --x + 360 world
-px`) and bottom edge (`--y + ~120 world px`) and confirm neither crosses a
-frame's `--x..--x+--w` / `--y..--y+--h` rectangle. The gutter between two
-1440-wide frames at 120 px gap is only 120 px wide — too narrow for a 22ch note
-at low zoom; place such notes in the row-gap (between row 1 and row 2), centered
-on the connector, where vertical space is free.
+frame body lands *on top of* that frame's content. A note is ~22ch wide and
+~120 world px tall expanded, so before placing one compute its right edge
+(`--x + ~22ch ≈ --x + 360 world px`) and bottom edge (`--y + ~120 world px`)
+and confirm neither crosses a frame's `--x..--x+--w` / `--y..--y+--h`
+rectangle.
+
+Gutters are not guaranteed — a single row of mobile frames with a 120 px
+gap has no vertical gutter beside any frame, only the row-gap above/below.
+Pick the placement by what space actually exists:
+
+| Layout                      | Safe note placement                            |
+|-----------------------------|------------------------------------------------|
+| Two columns with a wide gutter between them | In the vertical gutter, centered on the connector |
+| Single row, tight gap       | Row-gap below the frames (above the next row), centered on the connector |
+| Single frame, full-width    | Above or below the frame, never overlapping it |
+| Grid with row gaps          | Row-gap between rows, never inside a frame box |
+
+If no placement clears all frame rectangles, move the note further out or
+drop it — a note overlapping a frame body reads as a bug at overview zoom.
+
 
 At overview zoom (`--k < 0.5`) the runtime collapses each note to a small
 accent chip (the vendored Remix `ri-edit` glyph, masked so it inherits
