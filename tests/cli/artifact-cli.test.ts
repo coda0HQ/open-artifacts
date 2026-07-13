@@ -605,6 +605,28 @@ describe("Recipe builder", () => {
     expect(requests).toHaveLength(0);
   });
 
+  it("passes a CSP-forbidden API name mentioned only in a script string", async () => {
+    const scriptsDir = join(projectDir, "string-csp-fragments");
+    mkdirSync(scriptsDir, { recursive: true });
+    writeFileSync(
+      join(scriptsDir, "behavior.js"),
+      'const note = "fetch(/refresh) is documented here but never called";\nconsole.log(note);\n',
+    );
+    const recipe = writeRecipe("string-csp", {
+      mutate: (r) => {
+        r.artifact.level = 2;
+        r.document.fragments.scripts = ["../string-csp-fragments/behavior.js"];
+      },
+      body: "<main><h1>Docs</h1></main>\n",
+    });
+    writeFileSync(
+      recipe.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n',
+    );
+    const result = await run(["validate", recipe.recipePath]);
+    expect(result.code).toBe(0);
+  });
+
   it("validates a Markdown recipe that omits document.theme", async () => {
     const recipe = writeRecipe("no-theme-markdown", {
       format: "markdown",

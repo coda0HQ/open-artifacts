@@ -326,14 +326,28 @@ export function validateBuild(loaded, composed) {
     }
     // The CSP external-request scan matches tokens (fetch(, WebSocket, module
     // import, etc.) against the composed content. A token that appears only in
-    // a comment is not executable, so scanning the raw content false-positives
-    // on prose like `// no fetch (CSP blocks it)` or `<!-- uses @import -->`.
-    // Strip HTML comments, JS line comments, and JS/CSS block comments before
-    // scanning. Only the live code surface reaches the checks.
-    const scanned = content
-      .replace(/<!--[\s\S]*?-->/g, "")
-      .replace(/\/\*[\s\S]*?\*\//g, "")
-      .replace(/(^|[^:"'])\/\/[^\n]*/g, "$1");
+    // a comment or a string literal inside a <script> is not executable, so
+    // scanning the raw content false-positives on prose like `// no fetch`,
+    // `<!-- uses @import -->`, or `const note = "fetch('/refresh')"` displayed
+    // as documentation. Strategy: strip comments from the whole content, then
+    // for each <script> body additionally strip quoted string literals (the
+    // only place string-quoted API names cause false positives). HTML text and
+    // event-handler attributes (on*="...") are scanned verbatim so a real
+    // `onclick="fetch('/x')"` is still caught.
+    const stripComments = (s) =>
+      s
+        .replace(/<!--[\s\S]*?-->/g, "")
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/(^|[^:"'])\/\/[^\n]*/g, "$1");
+    const stripStrings = (s) =>
+      s
+        .replace(/"(?:[^"\\]|\\.)*"/g, '""')
+        .replace(/'(?:[^'\\]|\\.)*'/g, "''")
+        .replace(/`(?:[^`\\]|\\.)*`/g, "``");
+    const scanned = stripComments(content).replace(
+      /<script\b[^>]*>([\s\S]*?)<\/script>/gi,
+      (_m, body) => `<script>${stripStrings(stripComments(body))}</script>`,
+    );
     for (const [pattern, label] of externalChecks) {
       if (pattern.test(scanned)) fail(`${label} is incompatible with the CSP`);
     }
