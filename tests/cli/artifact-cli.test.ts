@@ -961,6 +961,53 @@ describe("Recipe publishing", () => {
     );
   });
 
+  it("reports the fragments.local rule and ../traversal for a local Recipe with misplaced fragments", async () => {
+    // Local Recipe correctly placed, but fragments referenced outside fragments.local/.
+    const shared = writeRecipe("misplaced-fragments", { local: true });
+    const recipe = readJson<TestRecipe>(shared.recipePath);
+    // Point fragments at a committed (shared) fragments dir, not fragments.local/.
+    // The Recipe sits in .artifacts/recipes.local/, so ../fragments reaches
+    // .artifacts/fragments/ — create those real files so fragment resolution
+    // passes and the private-source placement check is what fails.
+    recipe.document.fragments.theme = ["../fragments/theme.css"];
+    recipe.document.fragments.body = ["../fragments/body.html"];
+    mkdirSync(join(projectDir, ".artifacts", "fragments"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(projectDir, ".artifacts", "fragments", "theme.css"),
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n',
+    );
+    writeFileSync(
+      join(projectDir, ".artifacts", "fragments", "body.html"),
+      '<main class="oa-prose"><h1>Misplaced</h1></main>\n',
+    );
+    writeJson(shared.recipePath, recipe);
+
+    const result = await run(["validate", shared.recipePath], {
+      expectFailure: true,
+    });
+    expect(result.stderr).toContain("fragments.local");
+    expect(result.stderr).toContain("../fragments.local/");
+    expect(requests).toHaveLength(0);
+  });
+
+  it("reports both the recipes.local and fragments.local rules in one message when both are misplaced", async () => {
+    // A local Recipe whose file AND fragments both live in shared locations.
+    const shared = writeRecipe("misplaced-both");
+    const recipe = readJson<TestRecipe>(shared.recipePath);
+    recipe.artifact.local = true;
+    writeJson(shared.recipePath, recipe);
+
+    const result = await run(["validate", shared.recipePath], {
+      expectFailure: true,
+    });
+    expect(result.stderr).toContain("recipes.local");
+    expect(result.stderr).toContain("fragments.local");
+    expect(result.stderr).toContain("../fragments.local/");
+    expect(requests).toHaveLength(0);
+  });
+
   it("reads Recipe watch metadata for status and ack", async () => {
     const built = writeRecipe("watched", { watch: ["src/**"] });
     await run(["create", built.recipePath]);

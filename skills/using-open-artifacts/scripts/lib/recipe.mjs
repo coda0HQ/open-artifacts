@@ -392,15 +392,11 @@ export function loadRecipe(recipePath, options = {}) {
   const privateRecipePath = normalizedRecipePath.startsWith(
     ".artifacts/recipes.local/",
   );
-  if (recipe.artifact.local || recipe.security.encrypted) {
-    if (!privateRecipePath) {
-      fail(
-        "local or encrypted recipes must live under .artifacts/recipes.local/",
-      );
-    }
-  } else if (privateRecipePath) {
-    fail("shared Recipes cannot live under .artifacts/recipes.local/");
-  }
+  const isPrivate = recipe.artifact.local || recipe.security.encrypted;
+  // Shared/private path rules are enforced after fragment resolution below, so
+  // a local Recipe whose fragments are also misplaced surfaces BOTH rules in a
+  // single error instead of forcing the author through two separate attempts
+  // (move the Recipe, re-run, then learn the fragments must also move).
   const watchFiles = resolveWatchFiles(recipe.artifact.watch, projectRoot);
 
   const descriptors = [];
@@ -423,24 +419,46 @@ export function loadRecipe(recipePath, options = {}) {
   if (descriptors.length > BUILD_LIMITS.maxFragments) {
     fail(`fragment count exceeds ${BUILD_LIMITS.maxFragments}`);
   }
-  const isPrivate = recipe.artifact.local || recipe.security.encrypted;
-  for (const descriptor of descriptors) {
-    const resolvedProjectPath = relative(projectRoot, descriptor.real)
-      .split(sep)
-      .join("/");
-    const privateFragment = resolvedProjectPath.startsWith(
-      ".artifacts/fragments.local/",
+  // Collect the misplaced fragments so the error names every one and both rules.
+  const misplacedPrivate = isPrivate
+    ? descriptors
+        .filter((descriptor) => {
+          const resolvedProjectPath = relative(projectRoot, descriptor.real)
+            .split(sep)
+            .join("/");
+          return !resolvedProjectPath.startsWith(".artifacts/fragments.local/");
+        })
+        .map((descriptor) => descriptor.source)
+    : [];
+  const misplacedShared = !isPrivate
+    ? descriptors
+        .filter((descriptor) => {
+          const resolvedProjectPath = relative(projectRoot, descriptor.real)
+            .split(sep)
+            .join("/");
+          return resolvedProjectPath.startsWith(".artifacts/fragments.local/");
+        })
+        .map((descriptor) => descriptor.source)
+    : [];
+  if (isPrivate && (!privateRecipePath || misplacedPrivate.length > 0)) {
+    const parts = [];
+    if (!privateRecipePath) {
+      parts.push("the Recipe must live under .artifacts/recipes.local/");
+    }
+    if (misplacedPrivate.length > 0) {
+      parts.push(
+        `fragments must live under .artifacts/fragments.local/ (reference them as ../fragments.local/... from the Recipe): ${misplacedPrivate.join(", ")}`,
+      );
+    }
+    fail(`local or encrypted Recipes are private sources: ${parts.join("; ")}`);
+  }
+  if (!isPrivate && privateRecipePath) {
+    fail("shared Recipes cannot live under .artifacts/recipes.local/");
+  }
+  if (misplacedShared.length > 0) {
+    fail(
+      `shared Recipes cannot reference private fragments: ${misplacedShared.join(", ")}`,
     );
-    if (isPrivate && !privateFragment) {
-      fail(
-        `local or encrypted Recipe fragments must live under .artifacts/fragments.local/: ${descriptor.source}`,
-      );
-    }
-    if (!isPrivate && privateFragment) {
-      fail(
-        `shared Recipes cannot reference private fragments: ${descriptor.source}`,
-      );
-    }
   }
   const aggregateBytes = descriptors.reduce(
     (total, descriptor) => total + descriptor.size,

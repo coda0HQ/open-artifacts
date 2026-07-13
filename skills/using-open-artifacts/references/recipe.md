@@ -95,6 +95,34 @@ live under `.artifacts/recipes.local/`, and all of its fragments must live under
 `.artifacts/fragments.local/`. These directories, credentials, and
 `.artifacts/previews/` are gitignored.
 
+Because fragment paths resolve against the **Recipe file's own directory**, a
+local Recipe at `.artifacts/recipes.local/report.recipe.json` reaches its
+fragments via `../fragments.local/...`. The local layout is:
+
+```
+.artifacts/
+  recipes.local/
+    report.recipe.json          # fragment paths here use ../fragments.local/
+  fragments.local/
+    report/
+      theme.css
+      body.html
+      behavior.js
+```
+
+with the Recipe referencing them as:
+
+```json
+"fragments": {
+  "theme": ["../fragments.local/report/theme.css"],
+  "body": ["../fragments.local/report/body.html"],
+  "scripts": ["../fragments.local/report/behavior.js"]
+}
+```
+
+If a local Recipe is misplaced, validation reports both rules at once — the
+Recipe path and every fragment that must also move under `fragments.local/`.
+
 Encrypted Recipes name a local password credential:
 
 ```json

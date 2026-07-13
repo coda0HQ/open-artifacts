@@ -29,3 +29,18 @@ Feature: Password-protected artifacts
   Scenario: Raw endpoint of an encrypted artifact never returns plaintext
     When I GET /api/artifacts/:id/raw for an encrypted artifact
     Then the response is the ciphertext envelope, not HTML
+
+  Scenario: A local Recipe with misplaced fragments reports both rules at once
+    Given a local Recipe placed correctly under .artifacts/recipes.local/ but
+      whose fragments live outside .artifacts/fragments.local/
+    When the agent runs the artifact script with validate
+    Then the build fails naming the fragments.local/ rule and the ../fragments.local/
+      traversal in a single message
+    And no publish request is made
+
+  Scenario: A local Recipe misplaced alongside its fragments reports both rules at once
+    Given a local Recipe whose file and fragments both live outside the .artifacts/
+      private source directories
+    When the agent runs the artifact script with validate
+    Then the build fails naming both the recipes.local/ rule and the fragments.local/
+      rule in a single message, so the author moves everything in one attempt
