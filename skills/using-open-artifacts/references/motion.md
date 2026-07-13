@@ -212,9 +212,30 @@ as it paints, even if siblings are still animating in.
 
 ## Scroll-triggered reveals
 
+**Read this before copying the snippets below:** a reveal must enhance an
+already-visible default. Transitions pause on hidden tabs and in headless
+renderers — and artifacts get rendered in exactly those contexts — so an
+`opacity: 0` that only clears on `.in` can ship the section blank. Use **both**
+gates together, not one or the other:
+
+1. **`.js` capability class** (the primary gate): set the initial hidden state
+   behind `.js [data-reveal]` (add `.js` to `<html>` as the first thing your
+   script does). A viewer with JS off, or a headless renderer, never gets
+   `.js`, so the static default is full visibility.
+2. **`@media (prefers-reduced-motion: reduce)` override** (additive): inside
+   that media query, force `.js [data-reveal]` to `opacity: 1` so a
+   reduced-motion user with JS on still sees full content immediately, never
+   the transition.
+
+The reduced-motion override is **additive to** the `.js` gate, not a
+substitute for it. Using only the media query still hides content on a JS-on,
+reduced-motion-unset renderer that has not yet stamped the `.js` class.
+
 `IntersectionObserver` + a class toggle. No scroll listeners, no jank.
 
 ```js
+// Add the .js capability class to <html> as the FIRST thing your script does.
+document.documentElement.classList.add('js');
 const io = new IntersectionObserver((entries) => {
   for (const e of entries) {
     if (e.isIntersecting) {
@@ -230,25 +251,12 @@ document.querySelectorAll('[data-reveal]').forEach((el) => io.observe(el));
 /* Gate the hidden state on a capability class, never on the transition alone. */
 .js [data-reveal] { opacity: 0; transform: translateY(24px); transition: opacity .7s var(--ease-out-expo), transform .7s var(--ease-out-expo); }
 .js [data-reveal].in { opacity: 1; transform: none; }
+/* Additive reduced-motion override: a reduced-motion user with JS on sees full content. */
+@media (prefers-reduced-motion: reduce) {
+  .js [data-reveal] { opacity: 1; transform: none; transition: none; }
+}
 ```
 
-**Reveals must enhance an already-visible default.** Transitions pause on
-hidden tabs and in headless renderers — and artifacts get rendered in exactly
-those contexts — so an `opacity: 0` that only clears on `.in` can ship the
-section blank. Use **both** gates together, not one or the other:
-
-1. **`.js` capability class** (the primary gate): set the initial hidden state
-   behind `.js [data-reveal]` (add `.js` to `<html>` as the first thing your
-   script does). A viewer with JS off, or a headless renderer, never gets
-   `.js`, so the static default is full visibility.
-2. **`@media (prefers-reduced-motion: reduce)` override** (additive): inside
-   that media query, force `.js [data-reveal]` to `opacity: 1` so a
-   reduced-motion user with JS on still sees full content immediately, never
-   the transition.
-
-The reduced-motion override is **additive to** the `.js` gate, not a substitute
-for it. Using only the media query still hides content on a JS-on,
-reduced-motion-unset renderer that has not yet stamped the `.js` class.
 
 
 **Stagger a list; don't stamp the page.** Staggering the items within one list

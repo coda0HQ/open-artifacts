@@ -47,7 +47,12 @@ Visual constants:
 
 Tour attribute: `data-tour="n"` on frames, sequential integer starting at 1.
 
-Override any constant for a specific composition, but name why.
+These constants live inside the vendored runtime IIFE the builder injects;
+they are **not overridable** from a fragment (there is no config hook, and
+copying the runtime into a fragment is forbidden). The defaults are tuned for
+the common case; if a composition genuinely needs different physics, that is a
+runtime change, not an authoring one — raise it as a runtime issue rather than
+working around it in markup.
 
 ## The shell: three hard constraints
 
@@ -1264,15 +1269,20 @@ Frames are first-class: a real `<section>`, a `<button>` label that is the
 keyboard entry point, a bounded body. Size to real device or slide dimensions
 (390×844, 1440×900, 1600×900), but **mix sizes** — five identical 1440×900
 frames span a ~3000×3060 bounding rect that pushes the initial fit to ~0.25×,
-drowning the composition in whitespace. Prefer 390×844 mobile frames beside one
-or two 1440×900 screens, and **keep the overall bounding rect under ~2× the
-smallest *frame* dimension** (the narrowest frame in the set, e.g. 390 for a
-mobile-width frame) so overview zoom lands at ≥ ~0.5×. A wide spread of
-disparate sizes (small mobile frames beside a wide desktop) breaks this ratio
-— group comparable widths, or trim the desktop frame down. Gutter ≥ 120 world
-px so counter-scaled labels never collide at low zoom, but no wider — a 200+ px
-gap is dead space the fit must shrink past. Lay frames out with intent — a row
-is a flow, a grid is a set of variants — not scattered across empty pixels.
+drowning the composition in whitespace.
+
+The overview fit ratio is `k ≈ viewportW / boundingW` (the runtime fits the
+bounding rect into the viewport, minus `PAD`). To land overview zoom at
+`≥ ~0.5×` — the `CHIP_K` threshold below which notes collapse to chips —
+**keep the overall bounding rect under ~2× the viewport width** (≈2560 for a
+1280-px viewport), not 2× the smallest *frame*. Five 1440×900 frames in a row
+span ~3000px and overshoot; three 390-wide mobile frames beside one
+1440×900 screen span ~1900px and stay under. If you need a wide desktop frame,
+pair it with mobile frames stacked vertically (not a second wide frame beside
+it) so the bounding *width* stays small. Gutter ≥ 120 world px so
+counter-scaled labels never collide at low zoom, but no wider — a 200+ px gap
+is dead space the fit must shrink past. Lay frames out with intent — a row is
+a flow, a grid is a set of variants — not scattered across empty pixels.
 
 Unfocused frame bodies carry `inert`, which removes them from hit-testing *and*
 the tab order in one move. `pointer-events: none` would do neither job: it
