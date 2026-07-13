@@ -70,6 +70,18 @@ Feature: Build validation catches silent layout defects
     When the agent runs the artifact script with validate
     Then the build succeeds because document.theme is an optional label with no runtime effect
 
+  Scenario: An authored dark --muted below 4.5:1 contrast fails validation
+    Given an HTML recipe whose dark theme block overrides --muted to a color whose contrast
+      against --bg falls under 4.5:1
+    When the agent runs the artifact script with validate
+    Then the build fails naming the failing pair and its ratio and the 4.5:1 minimum
+    And no publish request is made
+
+  Scenario: An authored dark --muted at or above 4.5:1 contrast passes validation
+    Given an HTML recipe whose dark theme block overrides --muted to a sufficiently light gray
+    When the agent runs the artifact script with validate
+    Then the build succeeds
+
   Scenario: Migrating a legacy bare-L1 page wraps it in the prose baseline
     Given a legacy level 1 non-canvas artifact whose published content has identity
       tokens but no measure cap and no .oa-prose wrapper

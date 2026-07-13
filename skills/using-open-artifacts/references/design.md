@@ -768,7 +768,13 @@ not loop on renders, and do not publish with a failing P0.
 
 **2. P0 checklist** (all must pass):
 - [ ] Contrast: body ≥ 4.5:1 in BOTH themes — check `--muted` on `--surface`
-      too, in both blocks.
+      too, in both blocks. `validate` enforces this automatically against the
+      authored `--fg`/`--bg`/`--muted`/`--surface`/`--accent` overrides (hex,
+      oklch, rgb, hsl literals only — `color-mix()` and `var()` references
+      can't be resolved statically and are skipped), so a too-similar pair
+      fails the build before publish. But do not skip the manual check for
+      text *you* author on derived backgrounds (e.g. `--accent-soft`) the
+      validator doesn't track.
 - [ ] 360px: no horizontal scroll, no heading overflow, hit targets ≥ 44px.
 - [ ] Body width is constrained — an L1 non-canvas page has a measure cap
       (`max-width` on `body`/`<main>` or via `.oa-prose`); `validate` fails
@@ -783,7 +789,12 @@ not loop on renders, and do not publish with a failing P0.
       `interaction.md`'s eight-state contract (L2+); keyboard path works;
       hit targets >= 44px.
 - [ ] Motion (if any) wrapped for `prefers-reduced-motion`, and content
-      visible without JS (no opacity-0 that only JS clears).
+      visible without JS. For scroll reveals this means gating the hidden
+      `opacity: 0` state behind a JS-added `.js` capability class (see
+      `motion.md`'s "Scroll-triggered reveals" section) so the static default
+      is full visibility — a bare `opacity: 0` cleared only by JS, or cleared
+      only via the `prefers-reduced-motion` media query, ships a blank page to
+      headless renderers and reduced-motion users.
 - [ ] Copy self-audit done: no lorem, no invented stats/names/logos, no
       filler verbs, quotes ≤ 3 lines.
 - [ ] `artifact.title` exists and names the artifact.

@@ -1,3 +1,4 @@
+import { checkContrast } from "./contrast.mjs";
 import { readFragment } from "./recipe.mjs";
 
 const MAX_CONTENT_BYTES = 4 * 1024 * 1024;
@@ -263,6 +264,18 @@ function validateTheme(loaded) {
   }
   if (!/:root\s*\[\s*data-theme\s*=\s*["']dark["']\s*\]\s*\{/i.test(theme)) {
     fail('theme fragments require an unlayered :root[data-theme="dark"] block');
+  }
+  // design.md P0 mandates body text ≥ 4.5:1 in BOTH themes, but the ship-gate
+  // was manual — a too-similar --muted/--surface pair could publish unless the
+  // author computed ratios by hand. Resolve the authored overrides (concrete
+  // hex/oklch/rgb/hsl only; var()/color-mix() can't be checked statically) and
+  // fail any pair under 4.5:1. Contract defaults already pass, so only tokens
+  // the author overrode are checked.
+  const { failures } = checkContrast(theme);
+  for (const failure of failures) {
+    fail(
+      `contrast P0: ${failure.pair} in ${failure.theme} theme is ${failure.ratio}:1, below the 4.5:1 minimum — raise the foreground lightness (or darken the background in a light theme)`,
+    );
   }
 }
 

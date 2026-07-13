@@ -615,6 +615,39 @@ describe("Recipe builder", () => {
     expect(result.code).toBe(0);
   });
 
+  it("rejects a dark --muted below 4.5:1 contrast against --bg", async () => {
+    const lowContrast = writeRecipe("low-contrast-dark", {
+      mutate: (recipe) => {
+        recipe.artifact.level = 2;
+      },
+    });
+    writeFileSync(
+      lowContrast.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan;--muted:#3a3a40}\n',
+    );
+    const result = await run(["validate", lowContrast.recipePath], {
+      expectFailure: true,
+    });
+    expect(result.stderr).toContain("contrast P0");
+    expect(result.stderr).toContain("--muted");
+    expect(result.stderr).toContain("4.5:1");
+    expect(requests).toHaveLength(0);
+  });
+
+  it("passes a dark --muted at or above 4.5:1 contrast", async () => {
+    const okContrast = writeRecipe("ok-contrast-dark", {
+      mutate: (recipe) => {
+        recipe.artifact.level = 2;
+      },
+    });
+    writeFileSync(
+      okContrast.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan;--muted:#9a9aa2}\n',
+    );
+    const result = await run(["validate", okContrast.recipePath]);
+    expect(result.code).toBe(0);
+  });
+
   it("rejects unknown Recipe keys and CSP-incompatible APIs", async () => {
     const unknown = writeRecipe("unknown", {
       mutate: (recipe) => {
@@ -777,7 +810,9 @@ describe("Recipe builder", () => {
     });
     const missingLabelResult = await run(
       ["validate", missingLabel.recipePath],
-      { expectFailure: true },
+      {
+        expectFailure: true,
+      },
     );
     expect(missingLabelResult.stderr).toContain(
       "requires one button.oa-frame-label",
@@ -792,7 +827,9 @@ describe("Recipe builder", () => {
     });
     const missingInertResult = await run(
       ["validate", missingInert.recipePath],
-      { expectFailure: true },
+      {
+        expectFailure: true,
+      },
     );
     expect(missingInertResult.stderr).toContain(
       "requires one inert div.oa-frame-body",

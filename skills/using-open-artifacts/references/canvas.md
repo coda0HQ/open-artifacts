@@ -1393,6 +1393,15 @@ under reduced-motion). Clicking or tabbing to a frame updates the hash via
 frames). Returning to overview clears the hash. A `hashchange` listener
 handles external navigation (shared links, bookmarks).
 
+**Encrypted canvases can't deep-link.** A plain canvas renders its content
+directly in the viewer document, so `location.hash` is the page's own hash and
+deep links work as described. An *encrypted* canvas renders inside the viewer's
+sandboxed `srcdoc` iframe, which has an opaque origin — its `location.hash` is
+independent of the parent URL, so `#frame-id` in the shareable URL does not
+reach `applyHash()` and the canvas opens at overview, not at the linked frame.
+There is no cross-origin bridge; if you need deep links into an encrypted
+canvas, drop encryption or accept overview-on-open.
+
 **Spotlight is driven by hover and focus**, never applied decoratively.
 Hovering a frame (gated behind `@media (hover: hover) and (pointer: fine)`)
 or focusing a frame label via keyboard both activate spotlight on that frame
