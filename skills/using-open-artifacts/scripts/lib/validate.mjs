@@ -313,14 +313,15 @@ export function validateBuild(loaded, composed) {
     // keep only the first occurrence, so the second value is dropped without an
     // error. `style` is the common casualty (e.g. `style="--i:1"` authored next
     // to a later `style="margin-top:..."`), and the loss is invisible until a
-    // reviewer re-reads the source. Fail any start tag carrying `style=` twice.
-    // The scan runs across fragments, so it also catches one fragment's start
-    // tag reopened in a later fragment.
-    const dupStyleStart =
-      /<[a-z][\w-]*\b[^>]*\bstyle\s*=\s*["'][^"']*["'][^>]*\bstyle\s*=/i;
-    if (dupStyleStart.test(composed.authoredBody)) {
+    // reviewer re-reads the source. Fail any start tag carrying `style=` twice
+    // and echo the offending tag so the author can find it without a grep.
+    const dupStyleRe =
+      /<[a-z][\w-]*\b[^>]*\bstyle\s*=\s*["'][^"']*["'][^>]*\bstyle\s*=[^>]*>/i;
+    const dupStyleMatch = composed.authoredBody.match(dupStyleRe);
+    if (dupStyleMatch) {
+      const tag = dupStyleMatch[0].slice(0, 80);
       fail(
-        'a start tag may carry style= only once — HTML parsers keep only the first when it repeats, silently dropping the later value (merge both into one style="..." attribute)',
+        `a start tag may carry style= only once — HTML parsers keep only the first when it repeats, silently dropping the later value. Merge both into one style="..." attribute. Offending tag: ${tag}`,
       );
     }
     // The CSP external-request scan matches tokens (fetch(, WebSocket, module

@@ -541,6 +541,7 @@ describe("Recipe builder", () => {
     });
     expect(result.stderr).toContain("style=");
     expect(result.stderr).toContain("only once");
+    expect(result.stderr).toContain('style="--i:1"');
     expect(requests).toHaveLength(0);
   });
 

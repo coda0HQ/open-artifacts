@@ -13,9 +13,13 @@ schema ships inside the skill at `references/recipe.schema.json`; the
 you edit against (a path relative to the Recipe, or a published URL). `validate`
 does not fetch or enforce `$schema`; it is editor-only.
 
-`artifact.favicon` must be one or two emoji characters (a single grapheme
-cluster is fine) — plain text or symbols like `CB` or `◢` are rejected. Keep the
-favicon stable across versions.
+`artifact.favicon` must be one or two **emoji** characters — specifically
+characters in the Unicode `Extended_Pictographic` or `Regional_Indicator`
+properties (a flag like `🇯🇵` counts as one, since both Regional Indicators
+form one grapheme cluster). Plain text, letters, and geometric/dingbat
+symbols like `CB`, `◢`, `⌥`, or `◷` are rejected even though they are single
+graphemes. If unsure, use any colorful emoji from your system picker. Keep
+the favicon stable across versions.
 
 ```json
 {
