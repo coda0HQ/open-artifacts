@@ -7,7 +7,15 @@ request with the final bytes.
 
 ## Recipe v1
 
-Use `recipe.schema.json` for editor validation. Unknown keys are errors.
+Use `recipe.schema.json` for editor validation. Unknown keys are errors. The
+schema ships inside the skill at `references/recipe.schema.json`; the
+`$schema` value below is an example placeholder — point it at the schema copy
+you edit against (a path relative to the Recipe, or a published URL). `validate`
+does not fetch or enforce `$schema`; it is editor-only.
+
+`artifact.favicon` must be one or two emoji characters (a single grapheme
+cluster is fine) — plain text or symbols like `CB` or `◢` are rejected. Keep the
+favicon stable across versions.
 
 ```json
 {
@@ -46,9 +54,18 @@ Use `recipe.schema.json` for editor validation. Unknown keys are errors.
 }
 ```
 
-Fragment paths are relative to the Recipe, ordered, unique, and must resolve
-inside the project root. Symlinks cannot escape the root. HTML Recipes require
-at least one theme fragment. Markdown Recipes accept body fragments only.
+Fragment paths are relative to the **Recipe file's own directory**, not the
+current working directory — the resolver runs `resolve(recipeDir, path)`, so
+`fragments/theme.css` means "next to the Recipe", regardless of where you run
+the CLI from. Paths must be project-relative (no absolute paths, no `//` or
+scheme-prefixed URLs), ordered, unique, and must resolve inside the project
+root. Symlinks cannot escape the root. HTML Recipes require at least one theme
+fragment. Markdown Recipes accept body fragments only.
+
+`document.theme` is an optional label for the design direction (shown in the
+recipe comment, no runtime effect). HTML theme comes from theme fragments and
+Markdown from the viewer's default `.oa-md` shell, so a Markdown Recipe may omit
+`document.theme` entirely (or set it to `null`) — it carries no styling.
 
 ## Composition
 

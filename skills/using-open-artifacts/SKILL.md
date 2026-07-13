@@ -334,6 +334,13 @@ non-sensitive.
 
 ## Reading back
 
+Raw content lives under the **API path only** —
+`GET <instance>/api/artifacts/<id>/raw`. The viewer path
+`GET <instance>/a/<id>` serves the rendered viewer page (HTML), not the raw
+bytes; `/a/<id>/raw` is not a route and returns 404. Don't confuse the two:
+`/a/<id>` = the page a browser renders, `/api/artifacts/<id>/raw` = the stored
+content as published.
+
 `GET <instance>/api/artifacts/<id>` returns metadata and version history;
 `GET <instance>/api/artifacts/<id>/raw` returns the stored content
 (`?v=N` for older versions). For a non-encrypted artifact that is the page

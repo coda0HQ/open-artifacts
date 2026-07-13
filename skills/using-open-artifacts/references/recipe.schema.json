@@ -41,10 +41,10 @@
     "document": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["language", "theme", "fragments"],
+      "required": ["language", "fragments"],
       "properties": {
         "language": { "type": "string", "minLength": 1 },
-        "theme": { "type": "string", "minLength": 1 },
+        "theme": { "type": ["string", "null"], "minLength": 1 },
         "fragments": {
           "type": "object",
           "additionalProperties": false,
