@@ -619,7 +619,7 @@ visible product palette.
 :root{
   --bg:oklch(99% 0.002 240); --surface:oklch(100% 0 0);
   --fg:oklch(18% 0.012 250); --muted:oklch(54% 0.012 250);
-  --border:oklch(92% 0.005 250); --accent:oklch(56% 0.18 255);
+  --border:oklch(92% 0.005 250); --accent:oklch(50% 0.18 255);
   --font-display:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
   --font-body:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
 }
@@ -641,7 +641,7 @@ consumer tools, marketplaces, education, indie SaaS.
 :root{
   --bg:oklch(98% 0.004 240); --surface:oklch(100% 0 0);
   --fg:oklch(20% 0.02 240); --muted:oklch(50% 0.018 240);
-  --border:oklch(90% 0.006 240); --accent:oklch(54% 0.12 170);
+  --border:oklch(90% 0.006 240); --accent:oklch(50% 0.12 170);
   --font-display:'Seravek','Gill Sans Nova','Gill Sans','Avenir Next',-apple-system,system-ui,sans-serif;
   --font-body:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
 }
@@ -663,7 +663,7 @@ operators who want information per square inch, not vibes.
 :root{
   --bg:oklch(98% 0.005 250); --surface:oklch(100% 0 0);
   --fg:oklch(22% 0.02 240); --muted:oklch(50% 0.018 240);
-  --border:oklch(90% 0.008 240); --accent:oklch(54% 0.16 145);
+  --border:oklch(90% 0.008 240); --accent:oklch(50% 0.16 145);
   --font-display:-apple-system,BlinkMacSystemFont,'Inter','Segoe UI',system-ui,sans-serif;
   --font-body:-apple-system,BlinkMacSystemFont,'Inter','Segoe UI',system-ui,sans-serif;
   --font-mono:'JetBrains Mono','IBM Plex Mono',ui-monospace,Menlo,monospace;
