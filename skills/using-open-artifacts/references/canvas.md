@@ -1324,6 +1324,29 @@ frame ids.** A connector without these attributes cannot participate in spotligh
 highlighting, and likely represents a decorative line rather than a real relation.
 No decorative spaghetti.
 
+**Connector path `d` is in the same world-px coordinate space as frame
+`--x/--y/--w/--h`.** The runtime renders whatever path you author, so a
+mis-aimed connector is silent — aim it at the frame edges you want it to
+touch. Compute edge midpoints from each frame's box:
+
+- right-edge midpoint of frame A `(Ax, Ay, Aw, Ah)` = `(Ax+Aw, Ay+Ah/2)`
+- left-edge midpoint of frame B = `(Bx, By+Bh/2)`
+- top/bottom-edge midpoints = `(x+w/2, y)` and `(x+w/2, y+h)` for vertical flow
+
+A horizontal A→B connector from A's right edge to B's left edge:
+
+```svg
+<path d="M ${Ax+Aw} ${Ay+Ah/2} C ${(Ax+Aw+Bx)/2} ${Ay+Ah/2}, ${(Ax+Aw+Bx)/2} ${By+Bh/2}, ${Bx} ${By+Bh/2}"
+      data-from="A" data-to="B"/>
+```
+
+The two control points sit on the vertical midline between the frames so the
+cubic bezier enters and leaves horizontally — a clean S-curve. For a vertical
+flow (A bottom → B top), swap to `M ${Ax+Aw/2} ${Ay+Ah}` with control points on
+the horizontal midline. Round to integers; the runtime counter-scales stroke
+width so sub-pixel precision is not needed.
+
+
 **Place notes in the gutters, not over frames.** A note's `--x/--y` is its
 top-left while expanded and its center while collapsed; `max-width: 28ch`
 counter-scales to ~3× at low overview zoom, so a note whose box intersects a
