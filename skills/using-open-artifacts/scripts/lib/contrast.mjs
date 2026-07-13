@@ -47,6 +47,17 @@ const PAIRS = [
   ["--accent-on", "--accent"],
 ];
 
+// Contrast direction depends on the theme: in a dark theme the background is
+// dark, so a failing (too-dark) foreground needs more lightness; in a light
+// theme the background is light, so a failing (too-light) foreground needs
+// less lightness. This lets the failure message tell the author which way to
+// move instead of always saying "raise."
+function contrastDirection(themeName) {
+  return themeName === "dark"
+    ? "raise the foreground lightness (or darken the background)"
+    : "lower the foreground lightness (or lighten the background)";
+}
+
 const MIN_CONTRAST = 4.5;
 
 function parseBlockDeclarations(block) {
@@ -272,6 +283,7 @@ export function checkContrast(themeSource) {
           theme: themeName,
           pair: `${fgName} (${fgValue}) on ${bgName} (${bgValue})`,
           ratio: Number(ratio.toFixed(2)),
+          hint: contrastDirection(themeName),
         });
       }
     }

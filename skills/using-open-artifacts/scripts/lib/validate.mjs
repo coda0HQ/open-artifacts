@@ -274,7 +274,7 @@ function validateTheme(loaded) {
   const { failures } = checkContrast(theme);
   for (const failure of failures) {
     fail(
-      `contrast P0: ${failure.pair} in ${failure.theme} theme is ${failure.ratio}:1, below the 4.5:1 minimum — raise the foreground lightness (or darken the background in a light theme)`,
+      `contrast P0: ${failure.pair} in ${failure.theme} theme is ${failure.ratio}:1, below the 4.5:1 minimum — ${failure.hint}`,
     );
   }
 }

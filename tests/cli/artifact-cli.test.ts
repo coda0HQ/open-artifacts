@@ -631,6 +631,29 @@ describe("Recipe builder", () => {
     expect(result.stderr).toContain("contrast P0");
     expect(result.stderr).toContain("--muted");
     expect(result.stderr).toContain("4.5:1");
+    // dark theme: background is dark, so the hint tells the author to RAISE foreground.
+    expect(result.stderr).toContain("raise the foreground lightness");
+    expect(requests).toHaveLength(0);
+  });
+
+  it("hints to lower foreground lightness for a light-theme contrast failure", async () => {
+    // A too-light accent on a near-white light background: raising L would
+    // lower contrast further, so the hint must say "lower", not "raise".
+    const lightLow = writeRecipe("low-contrast-light", {
+      mutate: (recipe) => {
+        recipe.artifact.level = 2;
+      },
+    });
+    writeFileSync(
+      lightLow.themePath,
+      ':root{--bg:#fff;--accent:oklch(78% 0.16 255)}\n:root[data-theme="dark"]{--accent:cyan}\n',
+    );
+    const result = await run(["validate", lightLow.recipePath], {
+      expectFailure: true,
+    });
+    expect(result.stderr).toContain("contrast P0");
+    expect(result.stderr).toContain("light");
+    expect(result.stderr).toContain("lower the foreground lightness");
     expect(requests).toHaveLength(0);
   });
 
