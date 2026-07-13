@@ -185,7 +185,7 @@ function parseArtifact(raw) {
 function parseDocument(raw) {
   if (!isObject(raw)) fail("document must be an object");
   rejectUnknown(raw, DOCUMENT_KEYS, "document");
-  requireKeys(raw, ["language", "theme", "fragments"], "document");
+  requireKeys(raw, ["language", "fragments"], "document");
   if (!isObject(raw.fragments)) fail("document.fragments must be an object");
   rejectUnknown(raw.fragments, FRAGMENT_KEYS, "document.fragments");
   const fragments = {};
@@ -198,9 +198,17 @@ function parseDocument(raw) {
   if (fragments.body.length === 0) {
     fail("document.fragments.body must contain at least one file");
   }
+  // document.theme is the design direction label, shown in the recipe comment
+  // and read by the author. It carries no runtime effect — HTML theme comes
+  // from theme fragments, Markdown from the viewer default — so it is optional
+  // and may be null (a Markdown Recipe with no direction omits it entirely).
+  const theme =
+    raw.theme === null || raw.theme === undefined
+      ? null
+      : requireString(raw.theme, "document.theme");
   return {
     language: requireString(raw.language ?? "en", "document.language"),
-    theme: requireString(raw.theme, "document.theme"),
+    theme,
     fragments,
   };
 }
@@ -256,14 +264,22 @@ function resolveProjectFile(projectRoot, recipeDir, fragmentPath) {
   if (rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
     fail(`fragment escapes the project root: ${fragmentPath}`);
   }
+  // Echo the project-relative path the resolver actually tried alongside the
+  // authored path, so a wrong fragment path points at the on-disk location
+  // rather than the (possibly CWD-relative) string the author typed.
+  const resolvedRel = rel.split(sep).join("/");
   let info;
   try {
     info = lstatSync(absolute);
   } catch {
-    fail(`fragment does not exist: ${fragmentPath}`);
+    fail(
+      `fragment does not exist: ${fragmentPath} (resolved to ${resolvedRel})`,
+    );
   }
   if (!info.isFile() && !info.isSymbolicLink()) {
-    fail(`fragment is not a file: ${fragmentPath}`);
+    fail(
+      `fragment is not a file: ${fragmentPath} (resolved to ${resolvedRel})`,
+    );
   }
   const real = realpathSync(absolute);
   const realRel = relative(projectRoot, real);
@@ -274,8 +290,12 @@ function resolveProjectFile(projectRoot, recipeDir, fragmentPath) {
   ) {
     fail(`fragment symlink escapes the project root: ${fragmentPath}`);
   }
-  if (!statSync(real).isFile()) fail(`fragment is not a file: ${fragmentPath}`);
-  return { absolute, real, projectPath: rel.split(sep).join("/") };
+  if (!statSync(real).isFile()) {
+    fail(
+      `fragment is not a file: ${fragmentPath} (resolved to ${resolvedRel})`,
+    );
+  }
+  return { absolute, real, projectPath: resolvedRel };
 }
 
 export function resolveWatchFiles(patterns, projectRoot = process.cwd()) {

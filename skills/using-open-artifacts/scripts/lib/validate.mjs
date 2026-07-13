@@ -296,8 +296,32 @@ export function validateBuild(loaded, composed) {
         "HTML body fragments cannot contain document wrappers, style, or script elements",
       );
     }
+    // A repeated attribute on one start tag is silent data loss: HTML parsers
+    // keep only the first occurrence, so the second value is dropped without an
+    // error. `style` is the common casualty (e.g. `style="--i:1"` authored next
+    // to a later `style="margin-top:..."`), and the loss is invisible until a
+    // reviewer re-reads the source. Fail any start tag carrying `style=` twice.
+    // The scan runs across fragments, so it also catches one fragment's start
+    // tag reopened in a later fragment.
+    const dupStyleStart =
+      /<[a-z][\w-]*\b[^>]*\bstyle\s*=\s*["'][^"']*["'][^>]*\bstyle\s*=/i;
+    if (dupStyleStart.test(composed.authoredBody)) {
+      fail(
+        'a start tag may carry style= only once — HTML parsers keep only the first when it repeats, silently dropping the later value (merge both into one style="..." attribute)',
+      );
+    }
+    // The CSP external-request scan matches tokens (fetch(, WebSocket, module
+    // import, etc.) against the composed content. A token that appears only in
+    // a comment is not executable, so scanning the raw content false-positives
+    // on prose like `// no fetch (CSP blocks it)` or `<!-- uses @import -->`.
+    // Strip HTML comments, JS line comments, and JS/CSS block comments before
+    // scanning. Only the live code surface reaches the checks.
+    const scanned = content
+      .replace(/<!--[\s\S]*?-->/g, "")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/(^|[^:"'])\/\/[^\n]*/g, "$1");
     for (const [pattern, label] of externalChecks) {
-      if (pattern.test(content)) fail(`${label} is incompatible with the CSP`);
+      if (pattern.test(scanned)) fail(`${label} is incompatible with the CSP`);
     }
     try {
       const scripts = [

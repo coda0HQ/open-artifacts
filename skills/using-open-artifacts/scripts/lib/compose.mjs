@@ -91,9 +91,10 @@ function escapeHtmlComment(value) {
 }
 
 function directionComment(artifact, document) {
+  const direction = document.theme ?? "unspecified";
   return `<!--
   Open Artifacts recipe
-  Direction: ${escapeHtmlComment(document.theme)}
+  Direction: ${escapeHtmlComment(direction)}
   Level: ${artifact.level ?? "unspecified"}
   Canvas: ${artifact.canvas ? "yes" : "no"}
 -->`;

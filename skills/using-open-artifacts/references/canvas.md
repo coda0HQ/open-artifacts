@@ -1265,11 +1265,14 @@ keyboard entry point, a bounded body. Size to real device or slide dimensions
 (390×844, 1440×900, 1600×900), but **mix sizes** — five identical 1440×900
 frames span a ~3000×3060 bounding rect that pushes the initial fit to ~0.25×,
 drowning the composition in whitespace. Prefer 390×844 mobile frames beside one
-or two 1440×900 screens, and **keep the bounding rect under ~2× the smallest
-viewport dimension** so overview zoom lands at ≥ ~0.5×. Gutter ≥ 120 world px so
-counter-scaled labels never collide at low zoom, but no wider — a 200+ px gap is
-dead space the fit must shrink past. Lay frames out with intent — a row is a
-flow, a grid is a set of variants — not scattered across empty pixels.
+or two 1440×900 screens, and **keep the overall bounding rect under ~2× the
+smallest *frame* dimension** (the narrowest frame in the set, e.g. 390 for a
+mobile-width frame) so overview zoom lands at ≥ ~0.5×. A wide spread of
+disparate sizes (small mobile frames beside a wide desktop) breaks this ratio
+— group comparable widths, or trim the desktop frame down. Gutter ≥ 120 world
+px so counter-scaled labels never collide at low zoom, but no wider — a 200+ px
+gap is dead space the fit must shrink past. Lay frames out with intent — a row
+is a flow, a grid is a set of variants — not scattered across empty pixels.
 
 Unfocused frame bodies carry `inert`, which removes them from hit-testing *and*
 the tab order in one move. `pointer-events: none` would do neither job: it
