@@ -470,6 +470,48 @@ describe("Recipe builder", () => {
     expect(result.code).toBe(0);
   });
 
+  it("passes a max-width class applied only via JS (L2 rendered body)", async () => {
+    const scriptsDir = join(projectDir, "js-container-fragments");
+    mkdirSync(scriptsDir, { recursive: true });
+    writeFileSync(
+      join(scriptsDir, "behavior.js"),
+      'const cell = document.createElement("div"); cell.className = "dur-bar";\ndocument.querySelector("main").append(cell);\n',
+    );
+    const recipe = writeRecipe("js-container", {
+      mutate: (r) => {
+        r.artifact.level = 2;
+        r.document.fragments.scripts = [
+          "../js-container-fragments/behavior.js",
+        ];
+      },
+      body: "<main><h1>JS render</h1></main>\n",
+    });
+    writeFileSync(
+      recipe.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n.dur-bar{max-width:96px}\n',
+    );
+    const result = await run(["validate", recipe.recipePath]);
+    expect(result.code).toBe(0);
+  });
+
+  it("fails a max-width class defined but never applied even in scripts", async () => {
+    const orphan = writeRecipe("orphan-js-shell", {
+      mutate: (r) => {
+        r.artifact.level = 2;
+      },
+      body: "<main><h1>No shell</h1></main>\n",
+    });
+    writeFileSync(
+      orphan.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n.shell{max-width:880px}\n',
+    );
+    const result = await run(["validate", orphan.recipePath], {
+      expectFailure: true,
+    });
+    expect(result.stderr).toContain('container class ".shell"');
+    expect(requests).toHaveLength(0);
+  });
+
   it("passes when max-width is set on body, not a class", async () => {
     const bodyContainer = writeRecipe("body-container", {
       body: "<main><h1>Body measure</h1></main>\n",

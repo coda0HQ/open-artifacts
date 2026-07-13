@@ -18,6 +18,19 @@ Feature: Build validation catches silent layout defects
     When the agent runs the artifact script with validate
     Then the build succeeds
 
+  Scenario: A max-width class applied only via JS passes validation
+    Given an HTML recipe at level 2 whose styles define .dur-bar with a max-width but
+      the body fragment never applies it statically — the script injects the class at runtime
+    When the agent runs the artifact script with validate
+    Then the build succeeds because a class referenced as a quoted string in a script counts as applied
+
+  Scenario: A max-width class defined but never applied even in scripts fails validation
+    Given an HTML recipe at level 2 whose styles define .shell with a max-width but neither
+      the body fragment nor any script references .shell
+    When the agent runs the artifact script with validate
+    Then the build fails with a message naming the unapplied container class
+    And no publish request is made
+
   Scenario: A bare body element used as the container passes validation
     Given an HTML recipe whose styles set max-width on body itself rather than a class
     When the agent runs the artifact script with validate
