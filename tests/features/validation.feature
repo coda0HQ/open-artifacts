@@ -41,6 +41,35 @@ Feature: Build validation catches silent layout defects
     When the agent runs the artifact script with validate
     Then the build succeeds because the measure-cap guard only applies to level 1
 
+  Scenario: A start tag carrying style= twice fails validation
+    Given an HTML recipe whose body fragment authors a single start tag with two
+      style attributes, so the second value is silently dropped by the HTML parser
+    When the agent runs the artifact script with validate
+    Then the build fails with a message telling the author to merge both into one style attribute
+    And no publish request is made
+
+  Scenario: A start tag with a single style attribute passes validation
+    Given an HTML recipe whose body fragment uses one style attribute per element
+    When the agent runs the artifact script with validate
+    Then the build succeeds
+
+  Scenario: A CSP-forbidden token appearing only inside a comment passes validation
+    Given an HTML recipe whose script fragment mentions a CSP-forbidden API like fetch()
+      solely in a comment, with no real call in executable code
+    When the agent runs the artifact script with validate
+    Then the build succeeds because comments are not executable
+
+  Scenario: A real CSP-forbidden call in executable code fails validation
+    Given an HTML recipe whose body fragment calls a forbidden API in executable code
+    When the agent runs the artifact script with validate
+    Then the build fails naming the forbidden API as incompatible with the CSP
+    And no publish request is made
+
+  Scenario: A Markdown recipe without a document.theme field passes validation
+    Given a Markdown recipe that omits document.theme entirely
+    When the agent runs the artifact script with validate
+    Then the build succeeds because document.theme is an optional label with no runtime effect
+
   Scenario: Migrating a legacy bare-L1 page wraps it in the prose baseline
     Given a legacy level 1 non-canvas artifact whose published content has identity
       tokens but no measure cap and no .oa-prose wrapper

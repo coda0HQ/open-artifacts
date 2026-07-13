@@ -45,7 +45,7 @@ interface TestRecipe {
   artifact: Record<string, unknown>;
   document: {
     language: string;
-    theme: string;
+    theme: string | null;
     fragments: {
       theme: string[];
       styles: string[];
@@ -522,6 +522,96 @@ describe("Recipe builder", () => {
       ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n',
     );
     const result = await run(["validate", bareL2.recipePath]);
+    expect(result.code).toBe(0);
+  });
+
+  it("rejects a start tag carrying style= twice and tells the author to merge", async () => {
+    const dupStyle = writeRecipe("dup-style", {
+      mutate: (recipe) => {
+        recipe.artifact.level = 2;
+      },
+      body: '<main><h1 style="--i:1" style="margin-top:2rem">Cascade</h1></main>\n',
+    });
+    writeFileSync(
+      dupStyle.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n',
+    );
+    const result = await run(["validate", dupStyle.recipePath], {
+      expectFailure: true,
+    });
+    expect(result.stderr).toContain("style=");
+    expect(result.stderr).toContain("only once");
+    expect(requests).toHaveLength(0);
+  });
+
+  it("passes a start tag with a single style attribute", async () => {
+    const singleStyle = writeRecipe("single-style", {
+      mutate: (recipe) => {
+        recipe.artifact.level = 2;
+      },
+      body: '<main><h1 style="--i:1">Cascade</h1></main>\n',
+    });
+    writeFileSync(
+      singleStyle.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n',
+    );
+    const result = await run(["validate", singleStyle.recipePath]);
+    expect(result.code).toBe(0);
+  });
+
+  it("passes a CSP-forbidden token mentioned only in a comment", async () => {
+    const scriptsDir = join(projectDir, "comment-csp-fragments");
+    mkdirSync(scriptsDir, { recursive: true });
+    writeFileSync(
+      join(scriptsDir, "behavior.js"),
+      "// no fetch (CSP blocks it anyway) and no WebSocket in this file\nconsole.log('safe');\n",
+    );
+    const recipe = writeRecipe("comment-csp", {
+      mutate: (r) => {
+        r.artifact.level = 2;
+        r.document.fragments.scripts = ["../comment-csp-fragments/behavior.js"];
+      },
+      body: "<main><h1>Comment CSP</h1></main>\n",
+    });
+    writeFileSync(
+      recipe.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n',
+    );
+    const result = await run(["validate", recipe.recipePath]);
+    expect(result.code).toBe(0);
+  });
+
+  it("rejects a real fetch() call in executable code", async () => {
+    const scriptsDir = join(projectDir, "real-csp-fragments");
+    mkdirSync(scriptsDir, { recursive: true });
+    writeFileSync(join(scriptsDir, "behavior.js"), "fetch('/secret');\n");
+    const recipe = writeRecipe("real-csp", {
+      mutate: (r) => {
+        r.artifact.level = 2;
+        r.document.fragments.scripts = ["../real-csp-fragments/behavior.js"];
+      },
+      body: "<main><h1>Real CSP</h1></main>\n",
+    });
+    writeFileSync(
+      recipe.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n',
+    );
+    const result = await run(["validate", recipe.recipePath], {
+      expectFailure: true,
+    });
+    expect(result.stderr).toContain("fetch()");
+    expect(result.stderr).toContain("CSP");
+    expect(requests).toHaveLength(0);
+  });
+
+  it("validates a Markdown recipe that omits document.theme", async () => {
+    const recipe = writeRecipe("no-theme-markdown", {
+      format: "markdown",
+      mutate: (r) => {
+        r.document.theme = null;
+      },
+    });
+    const result = await run(["validate", recipe.recipePath]);
     expect(result.code).toBe(0);
   });
 
