@@ -605,7 +605,7 @@ large serif headlines, restrained neutral paper + ink + one accent.
 :root[data-theme="dark"]{
   --bg:oklch(20% 0.006 95); --surface:oklch(24% 0.006 95);
   --fg:oklch(92% 0.01 95); --muted:oklch(64% 0.01 95);
-  --border:oklch(34% 0.008 95); --accent:oklch(64% 0.12 28);
+  --border:oklch(34% 0.008 95); --accent:oklch(64% 0.12 28); --accent-on:oklch(20% 0.02 28);
 }
 ```
 Posture: no shadows, no rounded cards — borders + whitespace do the work;
@@ -626,7 +626,7 @@ visible product palette.
 :root[data-theme="dark"]{
   --bg:oklch(15% 0.002 250); --surface:oklch(19% 0.004 250);
   --fg:oklch(95% 0.004 250); --muted:oklch(64% 0.008 250);
-  --border:oklch(28% 0.004 250); --accent:oklch(68% 0.16 255);
+  --border:oklch(28% 0.004 250); --accent:oklch(68% 0.16 255); --accent-on:oklch(22% 0.02 255);
 }
 ```
 Posture: tight letter-spacing on display (-0.02em); hairline borders, no
@@ -648,7 +648,7 @@ consumer tools, marketplaces, education, indie SaaS.
 :root[data-theme="dark"]{
   --bg:oklch(18% 0.004 240); --surface:oklch(22% 0.006 240);
   --fg:oklch(94% 0.004 240); --muted:oklch(62% 0.008 240);
-  --border:oklch(30% 0.006 240); --accent:oklch(68% 0.12 170);
+  --border:oklch(30% 0.006 240); --accent:oklch(68% 0.12 170); --accent-on:oklch(22% 0.02 170);
 }
 ```
 Posture: comfortable radii (`--radius-md`/`--radius-lg`) with crisp grid
@@ -671,7 +671,7 @@ operators who want information per square inch, not vibes.
 :root[data-theme="dark"]{
   --bg:oklch(16% 0.005 250); --surface:oklch(20% 0.006 250);
   --fg:oklch(92% 0.006 250); --muted:oklch(62% 0.01 250);
-  --border:oklch(32% 0.008 250); --accent:oklch(68% 0.15 145);
+  --border:oklch(32% 0.008 250); --accent:oklch(68% 0.15 145); --accent-on:oklch(20% 0.02 145);
 }
 ```
 Posture: tabular numerics everywhere, mono for code/IDs/hashes; dense tables
@@ -693,7 +693,7 @@ ugliness as confidence. For art, indie, agency, manifesto pages.
 :root[data-theme="dark"]{
   --bg:oklch(15% 0.02 100); --surface:oklch(20% 0.02 100);
   --fg:oklch(92% 0.004 100); --muted:oklch(60% 0.01 100);
-  --border:oklch(92% 0.004 100); --accent:oklch(68% 0.22 25);
+  --border:oklch(92% 0.004 100); --accent:oklch(68% 0.22 25); --accent-on:oklch(20% 0.02 25);
 }
 ```
 Posture: display serif at extreme sizes (`clamp(80px,12vw,200px)` — the one
