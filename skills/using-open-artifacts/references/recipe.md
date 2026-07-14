@@ -127,6 +127,15 @@ with the Recipe referencing them as:
 If a local Recipe is misplaced, validation reports both rules at once — the
 Recipe path and every fragment that must also move under `fragments.local/`.
 
+**Run `validate`/`create` from the project root with a project-relative Recipe
+path** (e.g. `node artifact.mjs validate artifacts/report.recipe.json`, not
+`validate /abs/path/report.recipe.json`). The project root is your current
+working directory; an absolute Recipe path, or a path whose real location
+resolves outside the cwd, fails with `recipe must live inside the project
+root` — even when the file is genuinely under the project tree, if your cwd
+isn't that tree's root. `cd` into the project first.
+
+
 Encrypted Recipes name a local password credential:
 
 ```json

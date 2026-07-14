@@ -1263,6 +1263,25 @@ The builder appends the zoom cluster. When at least one frame has `data-tour`,
 it also appends the tour controls. Authored controls with these classes or IDs
 fail validation.
 
+### Required DOM contract (what the runtime expects)
+
+The runtime looks up these elements by id; your body fragment **must** supply
+the canvas/plane/frames and **must not** supply the controls (the builder
+injects those):
+
+| Element              | Who authors it | Notes                                            |
+|----------------------|----------------|--------------------------------------------------|
+| `#canvas`             | you            | one `.oa-canvas` container with `role="group"`   |
+| `#plane`              | you            | one `.oa-plane` inside `#canvas`, holds frames   |
+| `.oa-frame` sections | you            | each a `<section>` with kebab `id`, `--x/--y/--w/--h` |
+| `.oa-note`            | you (optional) | freeform notes, see the freeform contract        |
+| `svg.oa-connectors`   | you (optional) | one inline SVG in world coords                    |
+| `#zoom-in`/`#zoom-out`/`#zoom-fit`/`#zoom-pct` | builder | do not author these ids            |
+| `#tour-prev`/`#tour-next`/`#tour-status`     | builder | do not author; only present when a frame has `data-tour` |
+
+If your markup omits `#canvas` or `#plane`, or nests `#plane` outside
+`#canvas`, validation fails before publish.
+
 ## The frame contract
 
 Frames are first-class: a real `<section>`, a `<button>` label that is the
@@ -1355,6 +1374,23 @@ cubic bezier enters and leaves horizontally — a clean S-curve. For a vertical
 flow (A bottom → B top), swap to `M ${Ax+Aw/2} ${Ay+Ah}` with control points on
 the horizontal midline. Round to integers; the runtime counter-scales stroke
 width so sub-pixel precision is not needed.
+
+For a **diagonal** flow (A bottom-mid in one row → B top-mid in a row below
+and to the side), aim each control at a point on the midline *perpendicular to
+the entry/exit edge* — the bezier then enters A's bottom edge vertically and
+leaves B's top edge vertically, bending across both axes between. From A's
+bottom midpoint `(Ax+Aw/2, Ay+Ah)` to B's top midpoint `(Bx+Bw/2, By)`:
+
+```svg
+<path d="M ${Ax+Aw/2} ${Ay+Ah}
+         C ${Ax+Aw/2} ${(Ay+Ah+By)/2}, ${Bx+Bw/2} ${(Ay+Ah+By)/2}, ${Bx+Bw/2} ${By}"
+      data-from="A" data-to="B"/>
+```
+
+The two control points share the vertical midline between the two frames'
+rows (`y = (Ay+Ah+By)/2`), so the curve drops straight out of A and rises
+straight into B, sweeping sideways in between — a clean S that reads as flow
+even at overview zoom.
 
 
 **Place notes in the gutters, not over frames.** A note's `--x/--y` is its
