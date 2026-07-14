@@ -170,3 +170,29 @@ Feature: Build validation catches silent layout defects
     Given a canvas recipe with a .oa-note whose chip center is in a gutter between frames
     When the agent runs the artifact script with validate
     Then the build succeeds
+
+  Scenario: A decorative side-stripe border-left > 1px fails validation
+    Given an HTML recipe whose styles define a border-left:3px accent on a card class
+    When the agent runs the artifact script with validate
+    Then the build fails naming the side-stripe trope and the offending selector
+    And no publish request is made
+
+  Scenario: A blockquote quote-bar border-left passes validation
+    Given an HTML recipe whose styles define border-left:3px on a blockquote selector
+    When the agent runs the artifact script with validate
+    Then the build succeeds because a quote bar is not a decorative accent
+
+  Scenario: A gradient-text combo fails validation
+    Given an HTML recipe whose styles combine background-clip:text with a linear-gradient
+    When the agent runs the artifact script with validate
+    Then the build fails naming the gradient-text trope
+
+  Scenario: A decorative backdrop-filter fails validation
+    Given an HTML recipe whose styles use backdrop-filter on a card (not a floating bar)
+    When the agent runs the artifact script with validate
+    Then the build fails naming the glassmorphism trope
+
+  Scenario: A sanctioned floating bar backdrop-filter passes validation
+    Given an HTML recipe whose styles use backdrop-filter on a position:sticky toolbar
+    When the agent runs the artifact script with validate
+    Then the build succeeds because a floating bar over scrolling content is sanctioned

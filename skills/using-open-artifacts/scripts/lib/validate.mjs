@@ -383,6 +383,103 @@ function validateContainer(authoredStyles, authoredBody, authoredScripts) {
 const MEASURE_CAP_PATTERN = /max-width\s*:/i;
 const OA_PROSE_PATTERN = /\boa-prose\b/;
 
+// The AI-slop tropes (design.md "Banned tropes") are the tells a model
+// hallucinates by default — gradient heroes, glassmorphism cards, side-stripe
+// accents. They are banned in prose, but prose is honor-system: this gate
+// enforces them structurally on authoredStyles (theme+styles slots only —
+// tokens.css and the canvas runtime are structurally excluded by compose.mjs,
+// so the contract's own sanctioned uses like .oa-prose blockquote border-left
+// and .oa-zoom backdrop-filter are never scanned). Conservative: only the
+// clear-tell signatures fail; the sanctioned exceptions (quote-bar on
+// blockquote, list-marker on li/ul/ol, hairline <=1px, floating bar via
+// position:fixed/sticky or a bar/toolbar/chrome selector name) pass.
+const TROPE_SIDE_STRIPE_RE =
+  /border-(left|right)\s*:\s*(?!.*\bthin\b)(?:(\d+(?:\.\d+)?)(?:px|rem|em|pt|vw|vh)?|medium|thick)\b[^;}]*/gi;
+const TROPE_LONGHAND_WIDTH_RE =
+  /border-(left|right)-width\s*:\s*(?!.*\bthin\b)(?:(\d+(?:\.\d+)?)(?:px|rem|em|pt|vw|vh)?|medium|thick)\b[^;}]*/gi;
+const TROPE_GRADIENT_CLIP_RE =
+  /background-clip\s*:\s*text\b|-webkit-background-clip\s*:\s*text\b/i;
+const TROPE_GRADIENT_FN_RE =
+  /(?:linear|radial|conic|repeating-linear|repeating-radial|repeating-conic)-gradient\s*\(/i;
+const TROPE_BACKDROP_RE = /(?:-webkit-)?backdrop-filter\s*:/i;
+const TROPE_FLOATING_POS_RE = /\bposition\s*:\s*(?:fixed|sticky)\b/i;
+const TROPE_FLOATING_NAME_RE =
+  /\b(?:bar|toolbar|chrome|controls?|zoom|dock|statusbar|status-bar|topbar|navbar|nav-bar|floatingbar|actionbar|action-bar|headerbar|header-bar)\b/i;
+
+function parseRules(css) {
+  const stripped = css.replace(/\/\*[\s\S]*?\*\//g, "");
+  const rules = [];
+  let i = 0;
+  while (i < stripped.length) {
+    const brace = stripped.indexOf("{", i);
+    if (brace === -1) break;
+    const selector = stripped.slice(i, brace).trim();
+    let depth = 1;
+    let j = brace + 1;
+    for (; j < stripped.length && depth > 0; j += 1) {
+      if (stripped[j] === "{") depth += 1;
+      else if (stripped[j] === "}") depth -= 1;
+    }
+    const decls = stripped.slice(brace + 1, j - 1);
+    rules.push({ selector, decls });
+    i = j;
+  }
+  return rules;
+}
+
+function validateTropes(authoredStyles) {
+  for (const { selector, decls } of parseRules(authoredStyles)) {
+    // Trope 1 — decorative side-stripe: border-left/right > 1px that is not a
+    // blockquote quote-bar or a list-marker surface. Hairlines (<=1px, `thin`)
+    // pass; `medium`/`thick` are >1px.
+    let stripeHit = null;
+    for (const re of [TROPE_SIDE_STRIPE_RE, TROPE_LONGHAND_WIDTH_RE]) {
+      re.lastIndex = 0;
+      let m;
+      while ((m = re.exec(decls)) !== null) {
+        const tok = (m[2] ?? "").toString();
+        const kw = tok.toLowerCase();
+        const widthNum = parseFloat(tok) || 0;
+        if (kw === "medium" || kw === "thick" || widthNum > 1) {
+          stripeHit = { side: m[1], width: tok };
+          break;
+        }
+      }
+      if (stripeHit) break;
+    }
+    if (stripeHit) {
+      const isQuoteBar = /(^|[>\s+~,])blockquote\b/i.test(selector);
+      const isListMarker = /(^|[>\s+~,])(?:li|ul|ol)\b/i.test(selector);
+      if (!isQuoteBar && !isListMarker) {
+        fail(
+          `banned trope — side-stripe: border-${stripeHit.side} ${stripeHit.width} on "${selector}" reads as a decorative accent. Rewrite with a full hairline (<=1px) border, a background tint, a leading number/icon, or nothing.`,
+        );
+      }
+    }
+    // Trope 2 — gradient text: background-clip:text + a gradient in the same
+    // rule. clip:text alone (solid color) is not the tell.
+    if (
+      TROPE_GRADIENT_CLIP_RE.test(decls) &&
+      TROPE_GRADIENT_FN_RE.test(decls)
+    ) {
+      fail(
+        `banned trope — gradient text: background-clip:text combined with a gradient on "${selector}". Use one solid color; emphasize via weight or size.`,
+      );
+    }
+    // Trope 3 — decorative glassmorphism: backdrop-filter not on a sanctioned
+    // floating bar (position:fixed/sticky, or a bar/toolbar/chrome selector).
+    if (TROPE_BACKDROP_RE.test(decls)) {
+      const floatingByPos = TROPE_FLOATING_POS_RE.test(decls);
+      const floatingByName = TROPE_FLOATING_NAME_RE.test(selector);
+      if (!floatingByPos && !floatingByName) {
+        fail(
+          `banned trope — glassmorphism: backdrop-filter on "${selector}" is decorative blur. backdrop-filter is sanctioned only for a bar floating over scrolling content (position:fixed/sticky, or a selector named bar/toolbar/controls/chrome); otherwise remove it.`,
+        );
+      }
+    }
+  }
+}
+
 function validateMeasureCap(loaded, composed) {
   const { artifact } = loaded.recipe;
   if (artifact.format === "markdown") return;
@@ -654,6 +751,7 @@ export function validateBuild(loaded, composed) {
       composed.authoredScripts,
     );
     validateScrollspy(composed.authoredScripts);
+    validateTropes(composed.authoredStyles);
     validateMeasureCap(loaded, composed);
   }
   if (artifact.canvas) validateCanvas(composed.authoredBody);

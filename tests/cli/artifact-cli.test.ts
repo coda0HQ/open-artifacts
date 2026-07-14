@@ -669,6 +669,86 @@ describe("Recipe builder", () => {
     expect(result.code).toBe(0);
   });
 
+  it("rejects a decorative side-stripe border-left > 1px", async () => {
+    const stripe = writeRecipe("side-stripe", {
+      mutate: (r) => {
+        r.artifact.level = 2;
+      },
+    });
+    writeFileSync(
+      stripe.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n.card{border-left:3px solid var(--accent)}\n',
+    );
+    const result = await run(["validate", stripe.recipePath], {
+      expectFailure: true,
+    });
+    expect(result.stderr).toContain("side-stripe");
+    expect(result.stderr).toContain("border-left");
+    expect(requests).toHaveLength(0);
+  });
+
+  it("passes a blockquote quote-bar border-left", async () => {
+    const quoteBar = writeRecipe("quote-bar", {
+      mutate: (r) => {
+        r.artifact.level = 2;
+      },
+    });
+    writeFileSync(
+      quoteBar.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\nblockquote{border-left:3px solid var(--border)}\n',
+    );
+    const result = await run(["validate", quoteBar.recipePath]);
+    expect(result.code).toBe(0);
+  });
+
+  it("rejects a gradient-text combo", async () => {
+    const gradText = writeRecipe("gradient-text", {
+      mutate: (r) => {
+        r.artifact.level = 2;
+      },
+    });
+    writeFileSync(
+      gradText.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n.h1-grad{background:linear-gradient(90deg,#fff,#000);-webkit-background-clip:text;background-clip:text;color:transparent}\n',
+    );
+    const result = await run(["validate", gradText.recipePath], {
+      expectFailure: true,
+    });
+    expect(result.stderr).toContain("gradient text");
+    expect(requests).toHaveLength(0);
+  });
+
+  it("rejects a decorative backdrop-filter on a card", async () => {
+    const glass = writeRecipe("glass-card", {
+      mutate: (r) => {
+        r.artifact.level = 2;
+      },
+    });
+    writeFileSync(
+      glass.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n.card{backdrop-filter:blur(10px);background:rgba(255,255,255,0.5)}\n',
+    );
+    const result = await run(["validate", glass.recipePath], {
+      expectFailure: true,
+    });
+    expect(result.stderr).toContain("glassmorphism");
+    expect(requests).toHaveLength(0);
+  });
+
+  it("passes a sanctioned floating-bar backdrop-filter", async () => {
+    const floatingBar = writeRecipe("floating-bar", {
+      mutate: (r) => {
+        r.artifact.level = 2;
+      },
+    });
+    writeFileSync(
+      floatingBar.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n.toolbar{position:sticky;top:0;backdrop-filter:blur(10px)}\n',
+    );
+    const result = await run(["validate", floatingBar.recipePath]);
+    expect(result.code).toBe(0);
+  });
+
   it("validates a Markdown recipe that omits document.theme", async () => {
     const recipe = writeRecipe("no-theme-markdown", {
       format: "markdown",
