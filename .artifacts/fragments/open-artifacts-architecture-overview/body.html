@@ -176,7 +176,7 @@ Referrer-Policy: no-referrer</code></pre>
     </div>
     <div class="oa-prose">
       <p>绑定：D1 = <code>DB</code>，R2 = <code>CONTENT</code>。D1 存元数据、token 哈希、版本索引；R2 存内容体，object key 是 <code>content/&lt;id&gt;/&lt;version&gt;</code>。加密 artifact 存的是一个 JSON envelope（<code>v</code>、<code>alg</code>、<code>kdf</code>、<code>iterations</code>、<code>salt</code>、<code>iv</code>、<code>ciphertext</code>，全 base64）。</p>
-      <p><strong>D1 schema 首请求自动应用</strong>——<code>CREATE TABLE IF NOT EXISTS</code>，按 isolate 记忆化，没有单独的 migration 步骤。对自托管者意味着零步骤 deploy，对 vitest miniflare 测试也零配置。</p>
+      <p><strong>D1 schema 首请求自动应用</strong>——<code>CREATE TABLE IF NOT EXISTS</code> 加一组 <code>ALTER TABLE</code>（channel_hash、versions 的 title/description/favicon/format/encrypted 列）和一条 <code>UNIQUE INDEX</code>，结果用一个 <code>WeakMap&lt;D1Database&gt;</code> 记忆化，失败的尝试清 memo 避免污染 isolate；没有单独的 migration 步骤。对自托管者意味着零步骤 deploy，对 vitest miniflare 测试也零配置。</p>
     </div>
     <div class="oa-code-block" data-copyable>
       <div class="oa-code-head">
@@ -246,11 +246,11 @@ versions(artifact_id, version, label, title, description, favicon, format,
       <p class="oa-section-sub"><code>wrap.ts</code> 的四个块。</p>
     </div>
     <div class="oa-prose">
-      <p><code>src/wrap.ts</code> 服务时给每个 artifact 包骨架。四个关键块：<strong><code>RESET_CSS</code></strong>（reset + <code>--oa-*</code> token + <code>.oa-header</code> sticky + <code>.oa-md</code> markdown prose 基线）、<strong><code>THEME_SCRIPT</code></strong>（localStorage 存主题——这是外层 viewer 页，不是沙箱 iframe 内，opaque origin 时 try/catch 容错）、<strong><code>LAYOUT_SCRIPT</code></strong>（测 header 高度写到 <code>--oa-header-h</code>，把作者自写的 sticky 元素顶到 header 下方；并把 header 钉到 viewport 顶部——若作者设了 <code>body { padding-top }</code>，会把该 padding 折进 header 首个兄弟节点的 <code>margin-top</code>，header 仍贴 y=0，作者的内容垂直偏移不丢）、<strong><code>ogCardSvg</code></strong>（resvg 渲 PNG，无系统字体所以有 <code>isRenderable</code> fallback 对 CJK 等返回品牌锁型卡）。</p>
+      <p><code>src/wrap.ts</code> 服务时给每个 artifact 包骨架。四个关键块：<strong><code>RESET_CSS</code></strong>（reset + <code>--oa-*</code> token + <code>.oa-header</code> sticky + <code>.oa-md</code> markdown prose 基线）、<strong><code>THEME_SCRIPT</code></strong>（localStorage 存主题——这是外层 viewer 页，不是沙箱 iframe 内，opaque origin 时 try/catch 容错）、<strong><code>LAYOUT_SCRIPT</code></strong>（测 header 高度写到 <code>--oa-header-h</code>，把作者自写的 sticky 元素顶到 header 下方；并把 header 钉到 viewport 顶部——若作者设了 <code>body { padding-top }</code>，会把该 padding 折进 header 首个兄弟节点的 <code>margin-top</code>，header 仍贴 y=0，作者的内容垂直偏移不丢）、<strong><code>ogCardSvg</code></strong>（自包含 SVG OG 卡，<code>src/og.ts</code> 用 <code>@resvg/resvg-wasm</code> 栅格化成 PNG；内嵌 Inter + Noto Sans SC 子集让 CJK 标题直接渲，只有西里尔/谚文/阿拉伯/emoji 等覆盖不到的字符才掉到 <code>isRenderable</code> 品牌锁型 fallback 卡）。</p>
       <p>sticky header 高度约 2.5rem（padding .375rem、toggle 28px，收紧到对齐设计规格），测成 <code>--oa-header-h</code> 暴露给页面。作者的 sticky 元素设 <code>top: var(--oa-header-h, 2.5rem)</code> 更可靠。viewer 的主题切换盖 <code>prefers-color-scheme</code> 双向。</p>
     </div>
     <div class="oa-callout">
-      <p>OpenGraph：每个 viewer 响应带 OG + Twitter 标签。<code>og:image</code> 指向 <code>GET /og/:id</code>，返回 1200×630 <strong>PNG</strong>（不是 SVG——Facebook、X、LinkedIn、Slack、iMessage、Discord 都拒渲 SVG <code>og:image</code>）。卡是自包含 SVG，<code>@resvg/resvg-wasm</code> 栅格化。emoji favicon 故意省略（resvg 渲不了彩色 emoji）。</p>
+      <p>OpenGraph：每个 viewer 响应带 OG + Twitter 标签。<code>og:image</code> 指向 <code>GET /og/:id</code>，返回 1200×630 <strong>PNG</strong>（不是 SVG——Facebook、X、LinkedIn、Slack、iMessage、Discord 都拒渲 SVG <code>og:image</code>）。卡是自包含 SVG，<code>@resvg/resvg-wasm</code> 栅格化，用 bundle 时编译进来的 wasm（Worker 运行时禁止运行时编译 wasm）。内嵌 Inter（Latin）+ Noto Sans SC 子集（GB2312 汉字、假名、CJK/全角标点），所以中英混排标题能直接栅格化，不会掉到 fallback 卡。<code>ogCardSvg()</code>（<code>src/wrap.ts</code>）里的 <code>isRenderable()</code> 只在西里尔/谚文/阿拉伯/emoji 等 Noto 子集覆盖不到的字符时返回品牌锁型 fallback 卡——此时真实标题仍通过 <code>og:title</code> meta 到达爬虫。emoji favicon 故意从 OG 卡省略（resvg 渲不了彩色 emoji），但仍作页面 favicon。</p>
     </div>
   </section>
 
@@ -262,15 +262,15 @@ versions(artifact_id, version, label, title, description, favicon, format,
     <div class="oa-grid-2">
       <div class="oa-stat">
         <span class="oa-stat-num">4 MiB</span>
-        <span class="oa-stat-label">内容上限（加密后 post-base64）</span>
+        <span class="oa-stat-label">内容上限（MAX_CONTENT_BYTES）</span>
       </div>
       <div class="oa-stat">
-        <span class="oa-stat-num">20/min</span>
-        <span class="oa-stat-label">create 限流（per-colo per-IP）</span>
+        <span class="oa-stat-num">200 / 1000 / 60</span>
+        <span class="oa-stat-label">title / description / label 字符上限</span>
       </div>
       <div class="oa-stat">
-        <span class="oa-stat-num">60/min</span>
-        <span class="oa-stat-label">update 限流（per-colo per-id）</span>
+        <span class="oa-stat-num">1k–10M</span>
+        <span class="oa-stat-label">PBKDF2 迭代区间（客户端校验）</span>
       </div>
       <div class="oa-stat">
         <span class="oa-stat-num">D1 / R2</span>
@@ -278,7 +278,7 @@ versions(artifact_id, version, label, title, description, favicon, format,
       </div>
     </div>
     <div class="oa-prose">
-      <p>免费层余量：Workers 100k req/day，R2 1M writes/mo，D1 100k row writes/day。本地 dev 状态在 <code>.wrangler/state</code>。</p>
+      <p>应用层<strong>没有限流</strong>——<code>src/api.ts</code> 里既无 per-IP/per-colo 速率计数也无 429 路径；唯一的应用层上限是 <code>MAX_CONTENT_BYTES</code>（4 MiB，<code>src/domain.ts</code>）和 <code>MAX_BODY_BYTES</code>（<code>MAX_CONTENT_BYTES * 1.5 + 16 KiB</code>，JSON 包络膨胀前先拒）。可选实例门 <code>CREATE_TOKEN</code> secret 设了才挡 <code>POST /api/artifacts</code>，否则创建完全开放。免费层余量：Workers 100k req/day，R2 1M writes/mo，D1 100k row writes/day。本地 dev 状态在 <code>.wrangler/state</code>。</p>
     </div>
   </section>
 

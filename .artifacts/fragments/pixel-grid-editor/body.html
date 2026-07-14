@@ -1,0 +1,92 @@
+<main class="app" id="pixel-grid-editor">
+  <header class="app__masthead">
+    <h1 class="app__title">Pixel Grid Editor</h1>
+    <p class="app__standfirst">Click or drag to paint. Keyboard: <kbd>P</kbd> paint, <kbd>E</kbd> eraser, <kbd>G</kbd> fill, <kbd>I</kbd> eyedropper, <kbd>Ctrl/Cmd+Z</kbd> undo, <kbd>Ctrl/Cmd+Shift+Z</kbd> redo.</p>
+  </header>
+
+  <section class="toolbar" id="toolbar" aria-label="Editor toolbar">
+    <div class="toolbar__group toolbar__group--tools" role="group" aria-label="Tools">
+      <button type="button" class="tool tool--active" id="tool-paint" data-tool="paint" aria-pressed="true" title="Paint (P)">
+        <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M14.5319 12.4681L21.0963 19.0325C21.6945 19.6307 21.6945 20.5957 21.0963 21.1939C20.4981 21.7921 19.5331 21.7921 18.9349 21.1939L12.3685 14.6275L14.5319 12.4681ZM7.61612 3.35959L9.09024 2.66253L10.4997 4.07197L5.07197 9.49968L3.66253 8.09024L2.29289 6.7161C2.10536 6.52857 2 6.27422 2 6.00901V4.5C2 3.67157 2.26863 3.4 2.59706 3.4H4.10613C4.37135 3.4 4.62569 3.50536 4.81323 3.69289L6.18737 5.06703L7.61612 3.35959ZM9.49968 5.07197L13.5323 9.10458L8.10458 14.5323L4.07197 10.4997L9.49968 5.07197Z"/></svg>
+        <span class="tool__label">Paint</span>
+      </button>
+      <button type="button" class="tool" id="tool-eraser" data-tool="eraser" aria-pressed="false" title="Eraser (E)">
+        <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M14.5319 3.5466L20.4534 9.4681C21.0516 10.0663 21.0516 11.0313 20.4534 11.6295L12.6471 19.4359C12.0489 20.0341 11.0839 20.0341 10.4857 19.4359L4.5466 13.4968C3.94842 12.8986 3.94842 11.9336 4.5466 11.3354L6.7641 9.1179L4.5466 11.3354L12.353 3.5466C12.9512 2.94842 13.9162 2.94842 14.5319 3.5466ZM13.0668 5.01353L5.2604 12.8199L11.1995 18.759L18.9894 10.9487L13.0668 5.01353Z"/></svg>
+        <span class="tool__label">Erase</span>
+      </button>
+      <button type="button" class="tool" id="tool-fill" data-tool="fill" aria-pressed="false" title="Fill (G)">
+        <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M3 3.4H5V2H7V3.4H17V2H19V3.4H21C21.5523 3.4 22 3.84772 22 4.4V11C22 11.5523 21.5523 12 21 12H19V10H17V12H7V10H5V12H3C2.44772 12 2 11.5523 2 11V4.4C2 3.84772 2.44772 3.4 3 3.4ZM3 5.4V10H5V8H7V10H17V8H19V10H21V5.4H3ZM5 14H7V16H5V14ZM3 18H5V20H3V18ZM5 18V20H7V18H5Z"/></svg>
+        <span class="tool__label">Fill</span>
+      </button>
+      <button type="button" class="tool" id="tool-eyedropper" data-tool="eyedropper" aria-pressed="false" title="Eyedropper (I)">
+        <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M20.4142 4.58522C21.1953 5.36627 21.1953 6.6326 20.4142 7.41364L18.2426 9.58522L18.8284 10.171L13.7929 15.2065L12.3787 13.7923L15.4142 10.7568L10.2426 5.58522L14.3787 1.4491L15.7929 2.86331L14.4142 4.24205L16.5858 6.41364L18.7574 4.24205L20.4142 4.58522Z"/></svg>
+        <span class="tool__label">Pick</span>
+      </button>
+    </div>
+
+    <div class="toolbar__group toolbar__group--sizes" role="group" aria-label="Grid size">
+      <button type="button" class="size" data-size="8" id="size-8">8×8</button>
+      <button type="button" class="size size--active" data-size="16" id="size-16" aria-pressed="true">16×16</button>
+      <button type="button" class="size" data-size="32" id="size-32">32×32</button>
+    </div>
+
+    <div class="toolbar__group toolbar__group--history" role="group" aria-label="History">
+      <button type="button" class="action" id="btn-undo" title="Undo (Ctrl/Cmd+Z)" aria-keyshortcuts="Control+Z Meta+Z">
+        <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M9 9H13.5C15.9853 9 18 11.0147 18 13.5C18 15.9853 15.9853 18 13.5 18H9V20H13.5C17.0899 20 20 17.0899 20 13.5C20 9.91015 17.0899 7 13.5 7H9V3L3 6L9 9Z"/></svg>
+        <span class="action__label">Undo</span>
+      </button>
+      <button type="button" class="action" id="btn-redo" title="Redo (Ctrl/Cmd+Shift+Z)" aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z">
+        <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M15 9H10.5C8.01472 9 6 11.0147 6 13.5C6 15.9853 8.01472 18 10.5 18H15V20H10.5C6.91015 20 4 17.0899 4 13.5C4 9.91015 6.91015 7 10.5 7H15V3L21 6L15 9Z"/></svg>
+        <span class="action__label">Redo</span>
+      </button>
+      <button type="button" class="action action--danger" id="btn-clear" title="Clear canvas">
+        <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M7 6V3C7 2.44772 7.44772 2 8 2H16C16.5523 2 17 2.44772 17 3V6H22V8H20V21C20 21.5523 19.5523 22 19 22H5C4.44772 22 4 21.5523 4 21V8H2V6H7ZM9 4V6H15V4H9Z"/></svg>
+        <span class="action__label">Clear</span>
+      </button>
+      <button type="button" class="action" id="btn-gridlines" title="Toggle gridlines" aria-pressed="true">
+        <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M3 3H21V21H3V3ZM10 5V10H5V5H10ZM12 5V10H19V5H12ZM10 12V19H5V12H10ZM12 12V19H19V12H12Z"/></svg>
+        <span class="action__label">Grid</span>
+      </button>
+    </div>
+  </section>
+
+  <section class="stage" id="stage" aria-label="Pixel canvas">
+    <div class="stage__frame">
+      <canvas class="stage__canvas" id="canvas" width="512" height="512" role="img" aria-label="Pixel editor canvas. Use toolbar buttons or keyboard shortcuts to paint."></canvas>
+      <div class="stage__hud" id="hud" aria-live="polite"><span class="stage__coord" id="coord">—</span><span class="stage__sep" aria-hidden="true">·</span><span class="stage__dim" id="dim">16×16</span></div>
+    </div>
+
+    <aside class="rail" id="rail" aria-label="Palette and preview">
+      <div class="rail__group">
+        <h2 class="rail__heading">Color</h2>
+        <div class="palette" id="palette" role="radiogroup" aria-label="Color palette"></div>
+        <div class="current" id="current-row">
+          <span class="current__swatch" id="current-swatch" aria-label="Active color"></span>
+          <span class="current__hex" id="current-hex" aria-label="Active color hex">#000000</span>
+        </div>
+      </div>
+
+      <div class="rail__group">
+        <h2 class="rail__heading">Preview</h2>
+        <div class="preview">
+          <canvas class="preview__canvas" id="preview-canvas" width="16" height="16" role="img" aria-label="Pixel art preview at native resolution"></canvas>
+          <p class="preview__note" id="preview-note">1px = 1px, scaled up.</p>
+        </div>
+      </div>
+
+      <div class="rail__group">
+        <h2 class="rail__heading">Export</h2>
+        <div class="export">
+          <button type="button" class="action action--primary" id="btn-copy" title="Copy PNG to clipboard">
+            <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M7 4V2H17V4H20.0066C20.5552 4 21 4.44495 21 4.9934V21.0066C21 21.5552 20.5551 22 20.0066 22H3.9934C3.44476 22 3 21.5551 3 21.0066V4.9934C3 4.44476 3.44495 4 3.9934 4H7ZM7 6H5V20H19V6H17V8H7V6ZM9 4V6H15V4H9Z"/></svg>
+            <span class="action__label">Copy PNG</span>
+          </button>
+          <a class="action action--ghost" id="btn-download" download="pixel-art.png" title="Download PNG">
+            <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M3 19H21V21H3V19ZM13 13.1716L19.0711 7.1005L20.4853 8.51472L12 17L3.51472 8.51472L4.92893 7.1005L11 13.1716V2H13V13.1716Z"/></svg>
+            <span class="action__label">Download</span>
+          </a>
+        </div>
+      </div>
+    </aside>
+  </section>
+</main>

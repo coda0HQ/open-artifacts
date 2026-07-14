@@ -31,7 +31,7 @@ describe evolves.
 │    GET  /                     landing (asset)│
 │  D1: metadata, token hashes, version index   │
 │  R2: content bodies content/<id>/<version>   │
-│  ratelimits binding: create/update abuse cap │
+│  Abuse: optional CREATE_TOKEN bearer gate   │
 └──────────────────────────────────────────────┘
 ```
 
@@ -61,7 +61,8 @@ vitest miniflare tests.
   Only SHA-256(token) is stored; compared with `crypto.subtle.timingSafeEqual`.
 - Optional instance gate: if the `CREATE_TOKEN` secret is set on the deploy,
   POST /api/artifacts requires it as a bearer token. Unset = open instance
-  (rate-limited only).
+  (no per-request rate limiting is applied — the bearer gate is the only
+  abuse guard).
 - Optional canonical domain: if `PUBLIC_URL` (e.g. `https://coda0.com`) is set
   on the deploy, it is the base of every generated link (the API `url`,
   `og:url`, `og:image`) regardless of the host the request arrived on — so the
@@ -223,6 +224,8 @@ CI/plain git are out of scope for v1 (documented).
 ## Limits
 
 - Content cap 4 MiB (post-base64 for encrypted) — fits free-tier envelope.
-- Rate limits (best-effort, per-colo): create 20/min/IP, update 60/min/id.
+- No per-request rate limiting is implemented; the optional `CREATE_TOKEN`
+  bearer gate is the only abuse guard. (Cloudflare's edge-level protections
+  sit in front of the Worker but are not configured by this project.)
 - Free tier headroom: Workers 100k req/day, R2 1M writes/mo, D1 100k row
   writes/day.

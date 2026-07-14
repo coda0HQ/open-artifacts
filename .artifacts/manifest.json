@@ -2,20 +2,50 @@
   "manifestVersion": 2,
   "artifacts": [
     {
+      "id": "AY7zYxNNzwgD",
+      "url": "https://coda0.com/a/AY7zYxNNzwgD",
+      "version": 1,
+      "recipe": ".artifacts/recipes/pixel-grid-editor.recipe.json",
+      "recipeHash": "sha256:bd1fcf825ec6a5e8484d580612ad2af1fd572e269868790deecdc8c7dc97ecce",
+      "inputHash": "sha256:31a24471432986cffe314feee4d9a31d87d79046e0b3ea5c8eb0cc722f0f8264",
+      "outputHash": "sha256:b934854f53457c8778976f6794a6b2f6b4d771401b616f4bacd206a576cf2948",
+      "strategy": "direct",
+      "autoUpdate": false,
+      "snapshot": {},
+      "updatedAt": "2026-07-14T10:50:56.438Z"
+    },
+    {
+      "id": "pg7zuNunQpo5",
+      "url": "https://coda0.com/a/pg7zuNunQpo5",
+      "version": 26,
+      "recipe": ".artifacts/recipes/open-artifacts-canvas-overview-pg7zuNun.recipe.json",
+      "recipeHash": "sha256:803466b96f479859404a7fb61dc0977df7b3f9680eea0edb8ca3a39d27487854",
+      "inputHash": "sha256:cd45954c80f92453b314fc410c434ee8c3b372857b9b1fd70635bdcd67c310eb",
+      "outputHash": "sha256:1aff1069d4dd1980b5be403a868ee4cb6f34ec265d2b930b1040a5d49a7c1a5b",
+      "strategy": "staged",
+      "autoUpdate": false,
+      "snapshot": {
+        "docs/architecture.md": "6aaa2b2deb9715e7b5745e3c64961ab87f468b6e945788b5b4f3ef1af8098709",
+        "README.md": "7d2ab4c7d1b159a5eafc57b4989cea9f8b867ff26b9e1ff9ef88550a59426bd7",
+        "skills/using-open-artifacts/references/canvas.md": "fa1eab76f7a739ce3108f2a125c64731327953232630d7733f372da5be91d3e0"
+      },
+      "updatedAt": "2026-07-14T11:02:38.647Z"
+    },
+    {
       "id": "tSXeJLyobwpY",
       "url": "https://coda0.com/a/tSXeJLyobwpY",
-      "version": 30,
+      "version": 31,
       "recipe": ".artifacts/recipes/open-artifacts-self-hosted-claude-code-a-tSXeJLyo.recipe.json",
       "recipeHash": "sha256:85d5d8b0f7ee2ecbbd29a88d6332fe5840a4c77717fadbf508b393fd619e0b2e",
-      "inputHash": "sha256:707bb4fd315c4fd8f27caeae038930f823cd7999a7bbdcbc8a6bcaf9e736b8de",
-      "outputHash": "sha256:40f93aa53e4d2d7c056924cf12306d047694133cd59e4a96da465b86ed1aed48",
+      "inputHash": "sha256:f1b49f49c059fa04bd9b16c4a43e93456517fb87098417f6f1d428fab0393b99",
+      "outputHash": "sha256:06b25d738f98b961ee8e612bde7e57c61dda44911bd35d1d35725334d8d0d2d5",
       "strategy": "direct",
       "autoUpdate": true,
       "snapshot": {
         "docs/architecture.md": "6aaa2b2deb9715e7b5745e3c64961ab87f468b6e945788b5b4f3ef1af8098709",
         "docs/saas-design.md": "30763d132614f0c2b81b9a4ca7d2c9234f50e8bc80d4c4af92a247e77dc1bad5",
-        "README.md": "8953aaf7d6e10d7181928ac83564a11c8d141e7247ccba4511a16f9594884703",
-        "README.zh-CN.md": "7cc1cacc6a3928bc4f0ccae833cb92bb62bc89fb0b703396ac99f2ec8678b7ee",
+        "README.md": "7d2ab4c7d1b159a5eafc57b4989cea9f8b867ff26b9e1ff9ef88550a59426bd7",
+        "README.zh-CN.md": "416a941617db963e3538e2f891a4ae0d12bc5974fac56541a270edf0e4644590",
         "skills/using-open-artifacts/examples/recipes/canvas/flow.recipe.json": "2a3b3930bca307dc69661e3db02c2ffe43103f946902a68709d67aadfa3af860",
         "skills/using-open-artifacts/examples/recipes/canvas/fragments/body.html": "45d1c4b410ec379ee29f164ad7774c2e254ef40962b60d963e1c40ee1767c04c",
         "skills/using-open-artifacts/examples/recipes/canvas/fragments/theme.css": "6e89479067b5c78028d541a5e6a6502dccf6697e16ac04c20262cb99d4435eae",
@@ -25,7 +55,7 @@
         "skills/using-open-artifacts/examples/recipes/document/report.recipe.json": "8ed1a44d7d80d0036a2c5613167ca74672ddb8db452b02d226f44f084ce66a9e",
         "skills/using-open-artifacts/examples/recipes/markdown/fragments/body.md": "8b995caa96a9811fbfe455dabb9136c8ffb3943a91f86397933cc58c0f7dbf0b",
         "skills/using-open-artifacts/examples/recipes/markdown/notes.recipe.json": "fdf5a9795bed3d27d37e414a346c6d84c22689a1d2527ac024d5790f412219e4",
-        "skills/using-open-artifacts/references/canvas.md": "ba132bbf4af65926a6607997fd992b92ea54648aa66358a01b2411548fc62a20",
+        "skills/using-open-artifacts/references/canvas.md": "fa1eab76f7a739ce3108f2a125c64731327953232630d7733f372da5be91d3e0",
         "skills/using-open-artifacts/references/deployment.md": "6893035c6b9c099c7ad26a3ea180ef3d153ed237da75f8e81bf03532d479ae2c",
         "skills/using-open-artifacts/references/design.md": "334edb5962372c4d7f2fc74cfe81d9707df896c1a7e5dc9d09fbb0ceafdce61e",
         "skills/using-open-artifacts/references/icons.md": "b6fa700da17590956a4feaf5f729583154597285dd51e194c2c3e59b319ca7c2",
@@ -39,7 +69,7 @@
         "skills/using-open-artifacts/scripts/lib/compose.mjs": "d5127c4d6015ec0dc90c42bbd724d23392df4b21665acd452f13f87b46f99cdb",
         "skills/using-open-artifacts/scripts/lib/contrast.mjs": "6a5761aa6a4859c5282d4228977a2ed577aadb0a4e8b87fda65b0f0ad9a18007",
         "skills/using-open-artifacts/scripts/lib/recipe.mjs": "9b1fc9f47849c783df020e1f329baa368569986c8a91bfb102bba20a6156d2c4",
-        "skills/using-open-artifacts/scripts/lib/validate.mjs": "d5df6247242b3073c6ce987eb2bdccffb9470354c85889fdd26332d7062d271f",
+        "skills/using-open-artifacts/scripts/lib/validate.mjs": "7117917cfb44c18e3f8c743eb0128f476eb43b608c9b92a81865fc3abcc189dc",
         "skills/using-open-artifacts/SKILL.md": "814cde87be7c81841217f9723d80aea4cf3d8278cd746faeb1ac49f626659ef7",
         "src/api.ts": "ddad91ff6aeae6a1b164b637800ebdb44366c9a4a6d1790cc53a8c62978b406e",
         "src/domain.ts": "e5a261d1c99ecdcf9c88f453d9e78d00b5f29057692cdc8d5c0946fd4cb70ce6",
@@ -50,16 +80,16 @@
         "src/wrap.ts": "a0ca26ddbdfdc2e3c153654dbacb80e58755277e5ea586f4ef3983c54d7d45b2",
         "wrangler.jsonc": "870a14d7bcf752797ea7417d223918de78806e038e7fa8e625a04a56734e9b74"
       },
-      "updatedAt": "2026-07-14T09:19:09.001Z"
+      "updatedAt": "2026-07-14T11:03:27.701Z"
     },
     {
       "id": "9bG94htMRttn",
       "url": "https://coda0.com/a/9bG94htMRttn",
-      "version": 4,
+      "version": 5,
       "recipe": ".artifacts/recipes/open-artifacts-architecture-overview.recipe.json",
       "recipeHash": "sha256:ec8e3d03e81cbc13e5ef193b88a695000d135e6e30e99f7297a379559e1fccf8",
-      "inputHash": "sha256:ebab95a1f9df04f733592c7409e34513e0e7fc1bf959257c6539bd7ac2246cc4",
-      "outputHash": "sha256:a409111ac3aecd02bf3de0870466f081342b03853ad8ccfdae37a358bc06490a",
+      "inputHash": "sha256:21909a6bf5c4ef8236e7cc84e9fca21d17ecde7bd26ed48075744af096216ca6",
+      "outputHash": "sha256:f13c9a0bbc287e89849781e0cebadd09dffe112616a8592cf6c889c71ae4d929",
       "strategy": "direct",
       "autoUpdate": false,
       "snapshot": {
@@ -74,24 +104,7 @@
         "src/wrap.ts": "a0ca26ddbdfdc2e3c153654dbacb80e58755277e5ea586f4ef3983c54d7d45b2",
         "wrangler.jsonc": "870a14d7bcf752797ea7417d223918de78806e038e7fa8e625a04a56734e9b74"
       },
-      "updatedAt": "2026-07-14T09:19:11.817Z"
-    },
-    {
-      "id": "pg7zuNunQpo5",
-      "url": "https://coda0.com/a/pg7zuNunQpo5",
-      "version": 25,
-      "recipe": ".artifacts/recipes/open-artifacts-canvas-overview-pg7zuNun.recipe.json",
-      "recipeHash": "sha256:803466b96f479859404a7fb61dc0977df7b3f9680eea0edb8ca3a39d27487854",
-      "inputHash": "sha256:6b2c1619b61251f8cd658c5387b1030ee5dc7c004b68d00e64834634ed1768ad",
-      "outputHash": "sha256:815f09b10cc6512eabd64e30f2b8a2c06e7a2fdc4921965320ac0e055a601141",
-      "strategy": "staged",
-      "autoUpdate": false,
-      "snapshot": {
-        "docs/architecture.md": "6aaa2b2deb9715e7b5745e3c64961ab87f468b6e945788b5b4f3ef1af8098709",
-        "README.md": "7d2ab4c7d1b159a5eafc57b4989cea9f8b867ff26b9e1ff9ef88550a59426bd7",
-        "skills/using-open-artifacts/references/canvas.md": "fa1eab76f7a739ce3108f2a125c64731327953232630d7733f372da5be91d3e0"
-      },
-      "updatedAt": "2026-07-14T10:33:14.174Z"
+      "updatedAt": "2026-07-14T11:03:30.048Z"
     }
   ]
 }
