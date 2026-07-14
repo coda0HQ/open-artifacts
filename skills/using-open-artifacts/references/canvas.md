@@ -1300,17 +1300,21 @@ keyboard entry point, a bounded body. Size to real device or slide dimensions
 frames span a ~3000×3060 bounding rect that pushes the initial fit to ~0.25×,
 drowning the composition in whitespace.
 
-The overview fit ratio is `k ≈ viewportW / boundingW` (the runtime fits the
+The overview fit ratio is `k ≈ viewport / bounding` (the runtime fits the
 bounding rect into the viewport, minus `PAD`). To land overview zoom at
 `≥ ~0.5×` — the `CHIP_K` threshold below which notes collapse to chips —
-**keep the overall bounding rect under ~2× the viewport width** (≈2560 for a
-1280-px viewport), not 2× the smallest *frame*. Five 1440×900 frames in a row
-span ~3000px and overshoot; three 390-wide mobile frames beside one
-1440×900 screen span ~1900px and stay under. If you need a wide desktop frame,
-pair it with mobile frames stacked vertically (not a second wide frame beside
-it) so the bounding *width* stays small. Gutter ≥ 120 world px so
-counter-scaled labels never collide at low zoom, but no wider — a 200+ px gap
-is dead space the fit must shrink past. Lay frames out with intent — a row is
+**keep BOTH bounding dimensions under the caps** the `validate` gate enforces:
+width ≤ 2880 world px (~2.25× a 1280-px viewport) and height ≤ 2560 world px
+(~2.5× a 1024-px viewport). The width cap clears the "three mobiles + one
+desktop" row (~2610–2970px) while still failing the five-1440-row anti-pattern
+(~7680); the height cap catches a long single column drowning in vertical
+whitespace — the same defect rotated. A legitimately large canvas breaks into a
+GRID that keeps both dims under the caps, not a wide row or a tall column. If
+you need a wide desktop frame, pair it with mobile frames stacked vertically
+(not a second wide frame beside it) so the bounding *width* stays small. Gutter
+≥ 120 world px so counter-scaled labels never collide at low zoom, but no wider
+— a 200+ px gap is dead space the fit must shrink past. Lay frames out with
+intent — a row is
 a flow, a grid is a set of variants — not scattered across empty pixels.
 
 Unfocused frame bodies carry `inert`, which removes them from hit-testing *and*

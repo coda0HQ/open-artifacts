@@ -1046,6 +1046,82 @@ describe("Recipe builder", () => {
     expect(tightGapResult.code).toBe(0);
   });
 
+  it("rejects a canvas whose bounding rect width exceeds 2880 world px", async () => {
+    // five 1440-wide frames in a row = 5*1440 = 7200 wide (with 0 gap, but
+    // 0 gap fails the min-gap gate first; space them 8px apart to isolate the
+    // bounding-width gate). boundingW = 5*1440 + 4*8 = 7232 > 2880.
+    const wide = writeRecipe("bounding-too-wide", {
+      canvas: true,
+      body: `<div class="oa-canvas" id="canvas"><div class="oa-plane" id="plane">${[
+        0, 1, 2, 3, 4,
+      ]
+        .map(
+          (i) =>
+            `<section class="oa-frame" id="f${i}" data-tour="${
+              i + 1
+            }" style="--x:${i * (1440 + 8)};--y:0;--w:1440;--h:900"><button class="oa-frame-label" type="button">F${i}</button><div class="oa-frame-body" inert>F${i}</div></section>`,
+        )
+        .join("")}</div></div>`,
+    });
+    const wideResult = await run(["validate", wide.recipePath], {
+      expectFailure: true,
+    });
+    expect(wideResult.stderr).toContain("bounding rect");
+    expect(wideResult.stderr).toContain("2880");
+    expect(requests).toHaveLength(0);
+  });
+
+  it("rejects a canvas whose bounding rect height exceeds 2560 world px", async () => {
+    // four 844-tall frames stacked 8px apart = 4*844 + 3*8 = 3400 tall > 2560.
+    const tall = writeRecipe("bounding-too-tall", {
+      canvas: true,
+      body: `<div class="oa-canvas" id="canvas"><div class="oa-plane" id="plane">${[
+        0, 1, 2, 3,
+      ]
+        .map(
+          (i) =>
+            `<section class="oa-frame" id="f${i}" data-tour="${
+              i + 1
+            }" style="--x:0;--y:${i * (844 + 8)};--w:390;--h:844"><button class="oa-frame-label" type="button">F${i}</button><div class="oa-frame-body" inert>F${i}</div></section>`,
+        )
+        .join("")}</div></div>`,
+    });
+    const tallResult = await run(["validate", tall.recipePath], {
+      expectFailure: true,
+    });
+    expect(tallResult.stderr).toContain("tall");
+    expect(tallResult.stderr).toContain("2560");
+  });
+
+  it("rejects a .oa-note whose chip center lands inside a frame", async () => {
+    const noteOnFrame = writeRecipe("note-on-frame", {
+      canvas: true,
+      body: `<div class="oa-canvas" id="canvas"><div class="oa-plane" id="plane">
+<section class="oa-frame" id="first" data-tour="1" style="--x:0;--y:0;--w:390;--h:844"><button class="oa-frame-label" type="button">First</button><div class="oa-frame-body" inert>First</div></section>
+<div class="oa-note" style="--x:200;--y:400">a note planted on the frame</div>
+</div></div>`,
+    });
+    const noteResult = await run(["validate", noteOnFrame.recipePath], {
+      expectFailure: true,
+    });
+    expect(noteResult.stderr).toContain(".oa-note");
+    expect(noteResult.stderr).toContain("inside frame");
+    expect(requests).toHaveLength(0);
+  });
+
+  it("passes a .oa-note placed in a gutter between frames", async () => {
+    const noteInGutter = writeRecipe("note-in-gutter", {
+      canvas: true,
+      body: `<div class="oa-canvas" id="canvas"><div class="oa-plane" id="plane">
+<section class="oa-frame" id="first" data-tour="1" style="--x:0;--y:0;--w:390;--h:844"><button class="oa-frame-label" type="button">First</button><div class="oa-frame-body" inert>First</div></section>
+<section class="oa-frame" id="second" data-tour="2" style="--x:0;--y:900;--w:390;--h:844"><button class="oa-frame-label" type="button">Second</button><div class="oa-frame-body" inert>Second</div></section>
+<div class="oa-note" style="--x:195;--y:872">a note in the row-gap gutter (center 195,872 is between frames)</div>
+</div></div>`,
+    });
+    const noteResult = await run(["validate", noteInGutter.recipePath]);
+    expect(noteResult.code).toBe(0);
+  });
+
   it("rejects incomplete Canvas frame and connector contracts", async () => {
     const divFrame = writeRecipe("div-frame", {
       canvas: true,

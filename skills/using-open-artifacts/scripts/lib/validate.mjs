@@ -210,6 +210,79 @@ function validateCanvas(content) {
       }
     }
   }
+  // GATE A — bounding rect too large. The overview fit ratio is k ≈
+  // viewport / bounding. Below ~0.5x (CHIP_K, where notes collapse to chips)
+  // the composition drowns in whitespace and reads as a bug. There is no
+  // viewport at build time, so the threshold is a fixed constant derived from
+  // the contract's 1280x1024 design-viewport assumption. BOTH width and height
+  // are gated: a wide row of frames AND a tall column of frames both drown at
+  // overview zoom. A legitimately large canvas stacks frames in a grid that
+  // keeps BOTH bounding dims under the cap; the doc's own guidance is to go
+  // vertically when wide, and a 20-frame-tall single column is the same
+  // whitespace-drowning defect rotated. (2880 ≈ 2.25x the 1280 design width —
+  // clears the doc-endorsed "three mobiles + one desktop" row ~2610-2970 while
+  // still failing the five-1440-row anti-pattern ~7680.)
+  const BOUNDING_W_MAX = 2880;
+  const BOUNDING_H_MAX = 2560;
+  const minX = Math.min(...rects.map((r) => r.x));
+  const maxXEnd = Math.max(...rects.map((r) => r.x + r.w));
+  const minY = Math.min(...rects.map((r) => r.y));
+  const maxYEnd = Math.max(...rects.map((r) => r.y + r.h));
+  const boundingW = maxXEnd - minX;
+  const boundingH = maxYEnd - minY;
+  if (boundingW > BOUNDING_W_MAX) {
+    fail(
+      `canvas bounding rect is ${boundingW} world px wide (frames span x=${minX}..${maxXEnd}); keep it under ${BOUNDING_W_MAX} world px (~2.25x a 1280-px viewport) so the overview fit stays >= ~0.5x — stack wide frames vertically or in a grid rather than side-by-side`,
+    );
+  }
+  if (boundingH > BOUNDING_H_MAX) {
+    fail(
+      `canvas bounding rect is ${boundingH} world px tall (frames span y=${minY}..${maxYEnd}); keep it under ${BOUNDING_H_MAX} world px (~2.5x a 1024-px viewport) so the overview fit stays >= ~0.5x — the same whitespace-drowning defect applies on the vertical axis; break a long column into a grid`,
+    );
+  }
+  // GATE B — a note whose collapsed-chip center lands ON a frame reads as a
+  // bug. A note's --x/--y is its top-left while expanded and its CENTER while
+  // collapsed; at overview zoom notes collapse to a small chip (the chip is
+  // ~24px), so the conservative static check is whether that center point
+  // falls inside a frame rect — the real defect (a chip on a frame body). The
+  // expanded box is NOT checked: it is a user-initiated transient state shown
+  // when the frame is focused at a different zoom, and expanded-box size is
+  // content-driven (no static bound), so checking it false-positives every
+  // note placed in a 120-px gutter (the expanded box is wider than the gutter).
+  const noteMatches = [...content.matchAll(/<([a-z][\w-]*)\b[^>]*>/gi)].filter(
+    (match) => {
+      const classes = match[0].match(/\bclass=["']([^"']+)["']/i)?.[1] ?? "";
+      return classes.split(/\s+/).includes("oa-note");
+    },
+  );
+  for (const match of noteMatches) {
+    const tag = match[0];
+    const hasProp = (p) =>
+      new RegExp(`${p}\\s*:\\s*-?\\d+(?:\\.\\d+)?`).test(tag);
+    if (!hasProp("--x") || !hasProp("--y")) {
+      fail(
+        "every .oa-note requires --x and --y (top-left expanded, center collapsed)",
+      );
+    }
+    const num = (p) =>
+      Number(
+        tag.match(new RegExp(`${p}\\s*:\\s*(-?\\d+(?:\\.\\d+)?)`))?.[1] ?? 0,
+      );
+    const noteX = num("--x");
+    const noteY = num("--y");
+    for (const frame of rects) {
+      if (
+        noteX > frame.x &&
+        noteX < frame.x + frame.w &&
+        noteY > frame.y &&
+        noteY < frame.y + frame.h
+      ) {
+        fail(
+          `a .oa-note at --x:${noteX} --y:${noteY} (collapsed-chip center) lands inside frame "${frame.id}" (x:${frame.x}..${frame.x + frame.w}, y:${frame.y}..${frame.y + frame.h}) — place notes in gutters, not over frame bodies`,
+        );
+      }
+    }
+  }
   const connectorSvgs = [
     ...content.matchAll(/<svg\b[^>]*\bclass=["']([^"']+)["'][^>]*>/gi),
   ].filter((match) => match[1].split(/\s+/).includes("oa-connectors"));

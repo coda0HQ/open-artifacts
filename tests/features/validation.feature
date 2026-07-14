@@ -143,3 +143,30 @@ Feature: Build validation catches silent layout defects
     Given a canvas recipe with two frames sharing no axis overlap (corner-touch only)
     When the agent runs the artifact script with validate
     Then the build succeeds
+
+  Scenario: A canvas bounding rect under the width+height caps passes validation
+    Given a canvas recipe whose frames span under 2880 world px wide and 2560 tall
+    When the agent runs the artifact script with validate
+    Then the build succeeds
+
+  Scenario: A canvas bounding rect wider than 2880 world px fails validation
+    Given a canvas recipe with five 1440-wide frames in a row (~7680 wide)
+    When the agent runs the artifact script with validate
+    Then the build fails naming the bounding width and the 2880 cap
+    And no publish request is made
+
+  Scenario: A canvas bounding rect taller than 2560 world px fails validation
+    Given a canvas recipe with frames stacked in a single column taller than 2560
+    When the agent runs the artifact script with validate
+    Then the build fails naming the bounding height and the 2560 cap
+
+  Scenario: A .oa-note whose collapsed-chip center lands inside a frame fails validation
+    Given a canvas recipe with a .oa-note whose --x/--y (chip center) is inside a frame rect
+    When the agent runs the artifact script with validate
+    Then the build fails naming the note position and the overlapped frame id
+    And no publish request is made
+
+  Scenario: A .oa-note in a gutter passes validation
+    Given a canvas recipe with a .oa-note whose chip center is in a gutter between frames
+    When the agent runs the artifact script with validate
+    Then the build succeeds
