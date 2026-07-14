@@ -187,22 +187,6 @@ working around it in markup.
   width: auto;
 }
 .oa-frame[data-focused] .oa-frame-body { box-shadow: 0 0 0 2px var(--accent); }
-/* At focus the body becomes the vertical scroll surface so content taller
-   than --h is reachable, not truncated. The base overflow:hidden + fixed
-   --h stay (overview needs the fixed world box); only a focused body
-   switches to overflow:auto. The > * companion surrenders a direct child's
-   vertical scroll to the body (an author height:100%;overflow:auto wrapper
-   like .fr-pad would otherwise re-absorb the scroll and hide it), while
-   keeping overflow-x:auto so horizontally-scrolling children (wide tables,
-   code blocks) keep their own horizontal scrollbar. --h is untouched, so
-   fitTo/bounds/legalRange/pan and the rounded-clip/inset-ring all hold. */
-.oa-frame[data-focused] .oa-frame-body { overflow: auto; }
-.oa-frame[data-focused] .oa-frame-body > * {
-  height: auto;
-  min-height: 100%;
-  overflow: visible;
-  overflow-x: auto;
-}
 /* Drag = pan even inside a focused frame (the Figma model), so flowing text
    is never drag-selectable. Editable fields are the exception: they own their
    pointer (see CONTROLS in the runtime JS) and caret work needs selection.
@@ -1249,6 +1233,26 @@ working around it in markup.
       for (const n of notes) setNoteCollapsed(n, false);
       updateTourUI();
       return;
+    }
+    // Grow each frame's --h to fit its content so nothing is truncated by the
+    // body's overflow:hidden + fixed --h. A frame whose content is taller than
+    // the authored --h gets --h raised to the content height; bounds()/fitTo()/
+    // pan then use the real height, so the whole frame is reachable by panning
+    // the canvas — no in-frame scroll needed. Frames whose content fits keep
+    // their authored --h. Measured by temporarily unsetting the body's height
+    // (overflow:hidden clips scrollHeight to the visible box, so the fixed
+    // height must be lifted to read the true content height) then restoring.
+    for (const f of frames) {
+      const body = f.querySelector(".oa-frame-body");
+      if (!body) continue;
+      const authored = +f.style.getPropertyValue("--h") || 0;
+      const prevHeight = body.style.height;
+      body.style.height = "auto";
+      const content = body.scrollHeight;
+      body.style.height = prevHeight;
+      if (content > authored) {
+        f.style.setProperty("--h", String(Math.ceil(content)));
+      }
     }
     focus(null);
     fitTo(bounds(), 0);
