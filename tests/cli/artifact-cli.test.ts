@@ -1008,6 +1008,19 @@ describe("Recipe builder", () => {
       expectFailure: true,
     });
     expect(templateResult.stderr).toContain("cannot contain template elements");
+
+    const overlap = writeRecipe("overlap-frames", {
+      canvas: true,
+      body: `<div class="oa-canvas" id="canvas"><div class="oa-plane" id="plane">
+<section class="oa-frame" id="first" data-tour="1" style="--x:0;--y:0;--w:390;--h:844"><button class="oa-frame-label" type="button">First</button><div class="oa-frame-body" inert>First</div></section>
+<section class="oa-frame" id="second" data-tour="2" style="--x:300;--y:0;--w:390;--h:844"><button class="oa-frame-label" type="button">Second</button><div class="oa-frame-body" inert>Second</div></section>
+</div></div>`,
+    });
+    const overlapResult = await run(["validate", overlap.recipePath], {
+      expectFailure: true,
+    });
+    expect(overlapResult.stderr).toContain("overlap");
+    expect(overlapResult.stderr).toContain("disjoint");
   });
 
   it("rejects incomplete Canvas frame and connector contracts", async () => {

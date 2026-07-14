@@ -90,6 +90,7 @@ function validateCanvas(content) {
   }
   const ids = [];
   const tours = [];
+  const rects = [];
   for (const match of frames) {
     const tag = match[0];
     if (match[1].toLowerCase() !== "section") {
@@ -106,6 +107,18 @@ function validateCanvas(content) {
         fail(`canvas frame ${id} is missing ${property}`);
       }
     }
+    // Collect the frame's world-rect for the overlap check below.
+    const num = (p) =>
+      Number(
+        tag.match(new RegExp(`${p}\\s*:\\s*(-?\\d+(?:\\.\\d+)?)`))?.[1] ?? 0,
+      );
+    rects.push({
+      id,
+      x: num("--x"),
+      y: num("--y"),
+      w: num("--w"),
+      h: num("--h"),
+    });
     const tour = tag.match(/\bdata-tour=["'](\d+)["']/i)?.[1];
     if (tour) tours.push(Number(tour));
 
@@ -146,6 +159,24 @@ function validateCanvas(content) {
       sorted.some((value, index) => value !== index + 1)
     ) {
       fail("canvas data-tour values must be unique and contiguous from 1");
+    }
+  }
+  // Two frames whose interiors overlap are an authoring bug: a focused frame
+  // would partly occlude its neighbor, and the overview reads as one blob.
+  // Frames may be edge-adjacent (0 gap is allowed — a tight grid is a valid
+  // design), but one frame's box may not enter another's. Frame labels float
+  // above their frame and are not part of the rect.
+  for (let i = 0; i < rects.length; i += 1) {
+    for (let j = i + 1; j < rects.length; j += 1) {
+      const a = rects[i];
+      const b = rects[j];
+      const overlapX = a.x < b.x + b.w && b.x < a.x + a.w;
+      const overlapY = a.y < b.y + b.h && b.y < a.y + a.h;
+      if (overlapX && overlapY) {
+        fail(
+          `canvas frames "${a.id}" and "${b.id}" overlap — keep their --x/--y/--w/--h boxes disjoint (edge-adjacent is fine, interior overlap is not)`,
+        );
+      }
     }
   }
   const connectorSvgs = [
