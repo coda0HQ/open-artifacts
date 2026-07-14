@@ -1020,7 +1020,30 @@ describe("Recipe builder", () => {
       expectFailure: true,
     });
     expect(overlapResult.stderr).toContain("overlap");
-    expect(overlapResult.stderr).toContain("disjoint");
+
+    const zeroGap = writeRecipe("zero-gap-frames", {
+      canvas: true,
+      body: `<div class="oa-canvas" id="canvas"><div class="oa-plane" id="plane">
+<section class="oa-frame" id="first" data-tour="1" style="--x:0;--y:0;--w:390;--h:844"><button class="oa-frame-label" type="button">First</button><div class="oa-frame-body" inert>First</div></section>
+<section class="oa-frame" id="second" data-tour="2" style="--x:0;--y:844;--w:390;--h:844"><button class="oa-frame-label" type="button">Second</button><div class="oa-frame-body" inert>Second</div></section>
+</div></div>`,
+    });
+    const zeroGapResult = await run(["validate", zeroGap.recipePath], {
+      expectFailure: true,
+    });
+    expect(zeroGapResult.stderr).toContain("0px apart");
+    expect(zeroGapResult.stderr).toContain(">=");
+    expect(zeroGapResult.stderr).toContain("8");
+
+    const tightGap = writeRecipe("tight-gap-frames", {
+      canvas: true,
+      body: `<div class="oa-canvas" id="canvas"><div class="oa-plane" id="plane">
+<section class="oa-frame" id="first" data-tour="1" style="--x:0;--y:0;--w:390;--h:844"><button class="oa-frame-label" type="button">First</button><div class="oa-frame-body" inert>First</div></section>
+<section class="oa-frame" id="second" data-tour="2" style="--x:0;--y:852;--w:390;--h:844"><button class="oa-frame-label" type="button">Second</button><div class="oa-frame-body" inert>Second</div></section>
+</div></div>`,
+    });
+    const tightGapResult = await run(["validate", tightGap.recipePath]);
+    expect(tightGapResult.code).toBe(0);
   });
 
   it("rejects incomplete Canvas frame and connector contracts", async () => {

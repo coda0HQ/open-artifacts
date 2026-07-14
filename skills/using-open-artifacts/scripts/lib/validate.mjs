@@ -163,9 +163,8 @@ function validateCanvas(content) {
   }
   // Two frames whose interiors overlap are an authoring bug: a focused frame
   // would partly occlude its neighbor, and the overview reads as one blob.
-  // Frames may be edge-adjacent (0 gap is allowed — a tight grid is a valid
-  // design), but one frame's box may not enter another's. Frame labels float
-  // above their frame and are not part of the rect.
+  // One frame's box may not enter another's. Frame labels float above their
+  // frame and are not part of the rect.
   for (let i = 0; i < rects.length; i += 1) {
     for (let j = i + 1; j < rects.length; j += 1) {
       const a = rects[i];
@@ -174,8 +173,40 @@ function validateCanvas(content) {
       const overlapY = a.y < b.y + b.h && b.y < a.y + a.h;
       if (overlapX && overlapY) {
         fail(
-          `canvas frames "${a.id}" and "${b.id}" overlap — keep their --x/--y/--w/--h boxes disjoint (edge-adjacent is fine, interior overlap is not)`,
+          `canvas frames "${a.id}" and "${b.id}" overlap — keep their --x/--y/--w/--h boxes disjoint (the minimum-gap gate below also applies)`,
         );
+      }
+    }
+  }
+  // Two frames that merely touch (0..7px gap) read as one blob: each body's
+  // inset hairline + rounded corners merge with no whitespace. Require a
+  // minimum inter-frame gap, but ONLY for frames adjacent along an axis
+  // (their projections overlap on the perpendicular axis). Diagonally
+  // corner-touching frames (no shared axis overlap) and distant frames are
+  // not flagged. 8 world px = --space-2, the smallest spacing token: tight
+  // grids stay valid (an 8px seam is visibly separated), 0-gap does not.
+  const MIN_FRAME_GAP = 8;
+  for (let i = 0; i < rects.length; i += 1) {
+    for (let j = i + 1; j < rects.length; j += 1) {
+      const a = rects[i];
+      const b = rects[j];
+      const overlapX = a.x < b.x + b.w && b.x < a.x + a.w;
+      const overlapY = a.y < b.y + b.h && b.y < a.y + a.h;
+      if (overlapX) {
+        const gapY = Math.max(b.y - (a.y + a.h), a.y - (b.y + b.h));
+        if (gapY >= 0 && gapY < MIN_FRAME_GAP) {
+          fail(
+            `canvas frames "${a.id}" and "${b.id}" are ${gapY}px apart on the Y axis — keep a >= ${MIN_FRAME_GAP} world-px gap between adjacent frames so they don't visually merge (tiled grids need a seam too)`,
+          );
+        }
+      }
+      if (overlapY) {
+        const gapX = Math.max(b.x - (a.x + a.w), a.x - (b.x + b.w));
+        if (gapX >= 0 && gapX < MIN_FRAME_GAP) {
+          fail(
+            `canvas frames "${a.id}" and "${b.id}" are ${gapX}px apart on the X axis — keep a >= ${MIN_FRAME_GAP} world-px gap between adjacent frames so they don't visually merge (tiled grids need a seam too)`,
+          );
+        }
       }
     }
   }

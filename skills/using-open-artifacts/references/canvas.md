@@ -159,11 +159,17 @@ working around it in markup.
   overflow: hidden;
   background: var(--bg);
   border-radius: var(--radius-lg);
-  box-shadow: var(--elev-ring);
-  /* Default content inset so a frame's text never kisses its edge. The runtime
-     owns this padding-box; author styles override it only when a frame needs
-     full-bleed content (set `padding: 0` on that frame-body). */
-  padding: var(--space-4);
+  /* Inset ring: the 1px hairline draws INSIDE the body's border-box so it
+     never bleeds into a 0-gap neighbor (the outward --elev-ring token is
+     still used by .oa-note and labels, which float in the plane and need
+     the outward edge). The focused-frame accent ring below stays outset. */
+  box-shadow: inset 0 0 0 1px var(--border);
+  /* padding strictly exceeds border-radius (16) so a flush child's outset
+     selection/focus border clears the rounded clip corner — overflow:hidden
+     + border-radius otherwise cut a full-width child's border at the curve.
+     Full-bleed frames override with `padding: 0` and must use INSET
+     selection rings (see the frame contract) since they have no clearance. */
+  padding: var(--space-5);
 }
 .oa-frame[data-focused] .oa-frame-body { box-shadow: 0 0 0 2px var(--accent); }
 /* Drag = pan even inside a focused frame (the Figma model), so flowing text

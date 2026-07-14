@@ -127,3 +127,19 @@ Feature: Build validation catches silent layout defects
       with no sections collection observed and no aria-current
     When the agent runs the artifact script with validate
     Then the build succeeds and no scrollspy-related message is emitted
+
+  Scenario: Two canvas frames with a 0 world-px gap fail validation
+    Given a canvas recipe with two frames stacked at 0 gap on the Y axis
+    When the agent runs the artifact script with validate
+    Then the build fails naming both frames, the gap, and the minimum 8 world-px
+    And no publish request is made
+
+  Scenario: Two canvas frames with an 8 world-px gap pass validation
+    Given a canvas recipe with two frames stacked with an 8 world-px vertical seam
+    When the agent runs the artifact script with validate
+    Then the build succeeds
+
+  Scenario: Two canvas frames touching only at a corner pass validation
+    Given a canvas recipe with two frames sharing no axis overlap (corner-touch only)
+    When the agent runs the artifact script with validate
+    Then the build succeeds
