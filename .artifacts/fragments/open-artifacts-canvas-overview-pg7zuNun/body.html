@@ -2,177 +2,228 @@
      aria-label="Canvas. Drag or Space-drag to pan, pinch or ctrl-scroll to zoom, double-click to zoom in, Shift+double-click to zoom out, click a frame or its label to focus. Escape returns to overview.">
   <div class="oa-plane" id="plane">
     <svg class="oa-connectors" aria-hidden="true">
-      <!-- Hero -> What it is (primary narrative) -->
-      <path d="M 1440 450 L 1560 450" data-from="hero" data-to="what-it-is"/>
-      <!-- What it is -> Publishing flow (curves down-left) -->
-      <path d="M 1940 900 C 1940 970, 720 970, 720 1040" data-from="what-it-is" data-to="publishing-flow"/>
-      <!-- Publishing flow -> Levels & canvas -->
-      <path d="M 1440 1420 L 1560 1420" data-from="publishing-flow" data-to="levels-canvas"/>
-      <!-- Levels & canvas -> Design directions -->
-      <path d="M 1950 1420 L 2070 1420" data-from="levels-canvas" data-to="design-directions"/>
+      <!-- Row 1: overview -> what-it-is (primary narrative, same row) -->
+      <path d="M 1280 260 L 1400 260" data-from="project-overview" data-to="what-it-is"/>
+      <!-- Spine: overview down to publishing-flow (the project -> the flow) -->
+      <path d="M 640 520 C 640 580, 640 580, 640 640" data-from="project-overview" data-to="publishing-flow"/>
+      <!-- Row 2 flow: publishing-flow -> levels-canvas -> design-directions -->
+      <path d="M 1280 900 L 1400 900" data-from="publishing-flow" data-to="levels-canvas"/>
+      <path d="M 1750 900 L 1870 900" data-from="levels-canvas" data-to="design-directions"/>
+      <!-- publishing-flow down to validation-gates (the flow is gated) -->
+      <path d="M 500 1160 C 500 1200, 500 1200, 500 1240" data-from="publishing-flow" data-to="validation-gates"/>
+      <!-- validation-gates -> viewer-chrome (gates feed the served page) -->
+      <path d="M 1000 1480 L 1120 1480" data-from="validation-gates" data-to="viewer-chrome"/>
+      <!-- viewer-chrome down to storage-bindings (served from storage) -->
+      <path d="M 1440 1640 C 1440 1680, 500 1680, 500 1720" data-from="viewer-chrome" data-to="storage-bindings"/>
+      <!-- storage-bindings -> local-shared-recipes (sources live alongside state) -->
+      <path d="M 1000 1960 L 1120 1960" data-from="storage-bindings" data-to="local-shared-recipes"/>
     </svg>
-    <!-- F1: Hero — 1440x900, top-left. The thesis. -->
-    <section class="oa-frame" id="hero" data-tour="1"
-             style="--x:0;--y:0;--w:1440;--h:900">
-      <button class="oa-frame-label" type="button">Hero</button>
+
+    <!-- F1: Project overview — 1280x520, top-left. The thesis. -->
+    <section class="oa-frame" id="project-overview" data-tour="1"
+             style="--x:0;--y:0;--w:1280;--h:520">
+      <button class="oa-frame-label" type="button">Project overview</button>
       <div class="oa-frame-body" inert>
         <div class="fr-pad center">
           <p class="fr-kicker">Open Artifacts</p>
           <h1 class="fr-h1">Self-hosted Claude Code<br/>Artifacts on Cloudflare.</h1>
-          <p class="fr-lead">Let any coding agent publish self-contained HTML/Markdown pages to shareable URLs, protect them with zero-knowledge passwords, and keep them updated as the project evolves. Runs entirely on Cloudflare, fits the free tier, no accounts anywhere.</p>
+          <p class="fr-lead">An agent skill plus a Cloudflare Worker (Hono + D1 + R2) that lets any coding agent publish self-contained HTML/Markdown pages to shareable URLs, protect them with zero-knowledge passwords, and keep them updated as the project evolves. Runs entirely on Cloudflare, fits the free tier, no accounts anywhere.</p>
           <div class="fr-row">
             <span class="fr-pill">Workers</span>
             <span class="fr-pill">D1</span>
             <span class="fr-pill">R2</span>
             <span class="fr-pill">MIT</span>
-            <span class="fr-pill fr-mono">Node &ge; 22</span>
+            <span class="fr-pill mono">Node &ge; 22</span>
           </div>
           <p class="fr-hint">Hosted at <span class="fr-mono">coda0.com</span> or self-host on your own Cloudflare account &mdash; same MIT-licensed engine either way.</p>
         </div>
       </div>
     </section>
 
-    <!-- F2: What it is — 760x900, top-right. Supporting panel. -->
+    <!-- F2: What it is — 560x520, top-right. The one-line definition. -->
     <section class="oa-frame" id="what-it-is" data-tour="2"
-             style="--x:1560;--y:0;--w:760;--h:900">
+             style="--x:1400;--y:0;--w:560;--h:520">
       <button class="oa-frame-label" type="button">What it is</button>
       <div class="oa-frame-body" inert>
         <div class="fr-pad tight">
           <h2 class="fr-h2">What it is</h2>
-          <p class="fr-body sm">An open-source clone of Claude Code Artifacts: an agent skill plus a Cloudflare backend. The skill composes body-only HTML from a Recipe; the Worker wraps it in a sandboxed skeleton; D1 holds metadata and tokens, R2 holds content bodies &mdash; both strongly consistent.</p>
+          <p class="fr-body">An open-source clone of Claude Code Artifacts. The skill composes body-only HTML from a Recipe; the Worker wraps it in a sandboxed skeleton; D1 holds metadata and token hashes, R2 holds content bodies &mdash; both strongly consistent.</p>
           <table class="fr-table">
-            <thead><tr><th>Concern</th><th>Design</th></tr></thead>
             <tbody>
-              <tr><td>Identity</td><td>No accounts. 12-char crypto-random ids. Creation returns a one-time write token; only its SHA-256 is stored.</td></tr>
-              <tr><td>Deterministic sources</td><td>A strict Recipe plus ordered fragments generates every artifact. The builder injects tokens and, for Canvas, the vendored runtime. Manifest v2 records Recipe/input/output hashes; direct HTML/Markdown publishing is rejected.</td></tr>
-              <tr><td>Channels</td><td><span class="fr-mono">artifact.channel</span> in the Recipe binds a stable URL; the CLI keeps a per-channel token (<span class="fr-mono">ch_</span>) in credentials. Only the channel hash is stored server-side.</td></tr>
-              <tr><td>Local mode</td><td><span class="fr-mono">artifact.local: true</span> places sources under gitignored <span class="fr-mono">.artifacts/recipes.local/</span> and <span class="fr-mono">.artifacts/fragments.local/</span>, with state in <span class="fr-mono">manifest.local.json</span>. Shared Recipes/fragments may be committed.</td></tr>
-              <tr><td>Storage</td><td>D1: metadata, token hashes, version index. R2: bodies at <span class="fr-mono">content/&lt;id&gt;/&lt;v&gt;</span>.</td></tr>
-              <tr><td>Versions</td><td>Every publish is an immutable version with an optional label and its own title/description/favicon/format/encryption state. <span class="fr-mono">?v=N</span> views history; <span class="fr-mono">PUT</span> accepts <span class="fr-mono">baseVersion</span>, 409 on conflict (override with <span class="fr-mono">force</span>).</td></tr>
-              <tr><td>Serving</td><td>CSP <span class="fr-mono">sandbox</span> + <span class="fr-mono">default-src 'none'</span> &mdash; opaque origin, no cookies, no storage.</td></tr>
-              <tr><td>Link previews</td><td>OpenGraph + Twitter tags on every page. <span class="fr-mono">/og/:id</span> returns a 1200x630 PNG card rasterized on the edge &mdash; no external requests.</td></tr>
-              <tr><td>Passwords</td><td>PBKDF2-HMAC-SHA256 (600k iterations) + AES-256-GCM, client-side. Server stores only <span class="fr-mono">{salt, iv, ciphertext}</span>.</td></tr>
-              <tr><td>Auto-update</td><td>Recipe records <span class="fr-mono">scope</span>, <span class="fr-mono">watch</span>, <span class="fr-mono">autoUpdate</span>; Manifest v2 keeps the snapshot. <span class="fr-mono">status</span> reports stale watched artifacts; the optional Stop-hook only surfaces opted-in entries. Agents regenerate fragments or <span class="fr-mono">ack</span> reviewed drift.</td></tr>
-              <tr><td>Markdown</td><td>Vendored <span class="fr-mono">marked</span> inlined &mdash; encrypted and plain share one code path.</td></tr>
+              <tr><td class="k">identity</td><td>No accounts. 12-char crypto-random ids. Creation returns a one-time write token; only its SHA-256 is stored.</td></tr>
+              <tr><td class="k">channels</td><td><span class="fr-mono">artifact.channel</span> binds a stable URL; the CLI keeps a per-channel token (<span class="fr-mono">ch_</span>) in credentials. Only the hash is stored.</td></tr>
+              <tr><td class="k">versions</td><td>Every publish is an immutable version with its own title/description/favicon/format/encryption state. <span class="fr-mono">?v=N</span> views history; <span class="fr-mono">baseVersion</span> mismatch &rarr; 409.</td></tr>
+              <tr><td class="k">markdown</td><td>Vendored <span class="fr-mono">marked</span> inlined &mdash; encrypted and plain share one client-side code path.</td></tr>
+              <tr><td class="k">passwords</td><td>PBKDF2-HMAC-SHA256 (600k iterations) + AES-256-GCM, client-side. Server stores only <span class="fr-mono">{salt, iv, ciphertext}</span>.</td></tr>
             </tbody>
           </table>
         </div>
       </div>
     </section>
 
-    <!-- F3: Publishing flow — 1440x760, second row left. The "how". -->
+    <!-- F3: Publishing flow — 1280x520, row 2. The spine. -->
     <section class="oa-frame" id="publishing-flow" data-tour="3"
-             style="--x:0;--y:1040;--w:1440;--h:760">
+             style="--x:0;--y:640;--w:1280;--h:520">
       <button class="oa-frame-label" type="button">Publishing flow</button>
       <div class="oa-frame-body" inert>
         <div class="fr-pad tight">
-          <h2 class="fr-h2 sm">How publishing works</h2>
+          <h2 class="fr-h2">How publishing works</h2>
           <p class="fr-flow">A zero-dep Node CLI (<span class="fr-mono">artifact.mjs</span>) is the agent's only tool. Every artifact is generated from a versioned JSON <b>Recipe</b> plus ordered <b>fragments</b>; the CLI validates and composes in memory, then sends one final publish request. Run <span class="fr-mono">validate</span>/<span class="fr-mono">create</span> from the project root with a project-relative Recipe path &mdash; an absolute path or a non-root cwd fails with <span class="fr-mono">recipe must live inside the project root</span>.</p>
-          <div class="fr-code">
-            <code>node skills/using-open-artifacts/scripts/artifact.mjs validate \
-  artifacts/app-interactions.recipe.json
-node skills/using-open-artifacts/scripts/artifact.mjs create \
-  artifacts/app-interactions.recipe.json</code>
-          </div>
-          <div style="display:flex;justify-content:flex-end">
-            <button class="fr-btn" id="copy-cmd" type="button" data-cmd="node skills/using-open-artifacts/scripts/artifact.mjs validate artifacts/app-interactions.recipe.json && node skills/using-open-artifacts/scripts/artifact.mjs create artifacts/app-interactions.recipe.json">Copy command</button>
-          </div>
+          <div class="fr-code"><code>node skills/using-open-artifacts/scripts/artifact.mjs validate artifacts/app.recipe.json
+node skills/using-open-artifacts/scripts/artifact.mjs create artifacts/app.recipe.json</code></div>
           <ol class="fr-steps">
             <li><strong>Recipe</strong> &mdash; JSON owns title, favicon, scope, <span class="fr-mono">watch</span> globs, channel, level, Canvas mode, locality, and encryption policy. Fragments are ordered theme, styles, body, scripts.</li>
             <li><strong>validate</strong> &mdash; local builder checks path traversal, duplicate or oversized fragments, external scripts/styles, remote media, network APIs, and (for Canvas) frame IDs, geometry, connectors, tours, and builder-owned controls. Writes nothing.</li>
-            <li><strong>build</strong> &mdash; composes final bytes in memory: injects <span class="fr-mono">tokens.css</span>, then the theme fragment, then vendored Canvas CSS/JS when <span class="fr-mono">canvas: true</span>. No timestamps or random values &mdash; the build is deterministic.</li>
-            <li><strong>publish</strong> &mdash; <span class="fr-mono">create</span> sends one request; the server returns <span class="fr-mono">id</span>, a one-time <span class="fr-mono">writeToken</span>, and a URL. Manifest v2 records the Recipe path and Recipe/input/output hashes only after the publish succeeds.</li>
-            <li><strong>update</strong> &mdash; same id, new immutable version; reads the Recipe from Manifest v2, rebuilds and re-validates in memory, publishes once. <span class="fr-mono">?v=N</span> views history; <span class="fr-mono">baseVersion</span> mismatches return 409.</li>
+            <li><strong>build</strong> &mdash; composes final bytes in memory: injects <span class="fr-mono">tokens.css</span>, the theme fragment, then vendored Canvas CSS/JS when <span class="fr-mono">canvas: true</span>. No timestamps or random values &mdash; the build is deterministic.</li>
+            <li><strong>create</strong> &mdash; sends one request; the server returns <span class="fr-mono">id</span>, a one-time <span class="fr-mono">writeToken</span>, and a URL. Manifest v2 records the Recipe path and Recipe/input/output hashes only after the publish succeeds.</li>
+            <li><strong>update</strong> &mdash; same id, new immutable version; reads the Recipe from Manifest v2, rebuilds and re-validates in memory, publishes once. <span class="fr-mono">--label</span> is capped at 60 <em>bytes</em> (CJK chars are 3 bytes each &mdash; keep labels terse ASCII).</li>
             <li><strong>status</strong> &mdash; hashes watched files against the last snapshot, reports every stale artifact; <span class="fr-mono">ack &lt;id&gt;</span> advances the baseline without republishing when the change is out of scope.</li>
           </ol>
         </div>
       </div>
     </section>
 
-    <!-- F4: Levels & canvas — 390x760 mobile, second row center. -->
+    <!-- F4: Levels & canvas — 350x520, row 2 center. -->
     <section class="oa-frame" id="levels-canvas" data-tour="4"
-             style="--x:1560;--y:1040;--w:390;--h:760">
+             style="--x:1400;--y:640;--w:350;--h:520">
       <button class="oa-frame-label" type="button">Levels &amp; canvas</button>
       <div class="oa-frame-body" inert>
         <div class="fr-pad tight">
-          <h2 class="fr-h2 sm">Levels &amp; canvas</h2>
-          <div class="fr-tabs" role="tablist" aria-label="Fidelity and canvas">
-            <button role="tab" id="tab-levels" aria-selected="true" aria-controls="panel-levels" type="button">Levels</button>
-            <button role="tab" id="tab-canvas" aria-selected="false" aria-controls="panel-canvas" type="button">Canvas</button>
+          <h2 class="fr-h2">Levels &amp; canvas</h2>
+          <p class="fr-body"><b style="color:var(--accent)">level</b> sets fidelity and motion budget. <b style="color:var(--accent)">canvas</b> swaps the shell &mdash; orthogonal to level.</p>
+          <div class="fr-levels">
+            <div class="fr-lv">L1</div><div class="fr-body">Typography-led document. No flashy hero, no JS state.</div>
+            <div class="fr-lv">L2</div><div class="fr-body">Information design. Scannable, stateful, no external requests.</div>
+            <div class="fr-lv">L3</div><div class="fr-body">Editorial / showcase. One orchestrated motion moment, native APIs only.</div>
           </div>
-          <div class="fr-panel" id="panel-levels" role="tabpanel" aria-labelledby="tab-levels" aria-hidden="false">
-            <p class="fr-body sm">Every artifact picks one of three levels &mdash; fidelity and motion budget.</p>
-            <div class="fr-levels">
-              <div class="fr-lv">1</div><div class="fr-body sm">Typography-led document. No flashy hero, no JS state.</div>
-              <div class="fr-lv">2</div><div class="fr-body sm">Information design. Scannable, stateful, no external requests.</div>
-              <div class="fr-lv">3</div><div class="fr-body sm">Editorial. One orchestrated motion moment, native APIs only.</div>
-            </div>
-          </div>
-          <div class="fr-panel" id="panel-canvas" role="tabpanel" aria-labelledby="tab-canvas" aria-hidden="true">
-            <p class="fr-body sm"><b style="color:var(--accent)">canvas: true</b> swaps the <em>shell</em> &mdash; a pan/zoom plane of frames instead of a scrolling document. Composes with any level.</p>
-            <p class="fr-hint">DOM contract: you author <span class="fr-mono">#canvas</span>, <span class="fr-mono">#plane</span>, <span class="fr-mono">.oa-frame</span> sections, optional <span class="fr-mono">.oa-note</span> and one inline <span class="fr-mono">svg.oa-connectors</span>. The builder injects zoom (<span class="fr-mono">#zoom-in/out/fit/pct</span>) and, when any frame has <span class="fr-mono">data-tour</span>, the tour controls &mdash; authoring those ids fails validation.</p>
-            <p class="fr-hint">Connector geometry is per-edge: straight for same-row, perpendicular control points on the row midline for A-bottom &rarr; B-top, and a shared-vertical-midline S-curve for diagonal row-to-below flow. The runtime counter-scales stroke width, so integer coords suffice.</p>
-            <p class="fr-hint">Figma-style pointer ownership: frame labels are pan surface that tap-to-focus; in-frame fields and buttons keep the pointer; Space-drag pans from anywhere. Selection stays off the pan surface except editable fields.</p>
-            <p class="fr-hint">Named <span class="fr-mono">TAP_SLOP</span> separates taps from pans; assistive clicks still open note chips; keyboard focus on a label is an instant camera jump; 44px hit targets; <span class="fr-mono">prefers-reduced-motion</span> collapses physics and tweens.</p>
-            <p class="fr-hint">This board is <span class="fr-mono">level 2, canvas: true</span>.</p>
-          </div>
+          <p class="fr-hint"><span class="fr-mono" style="color:var(--accent)">canvas: true</span> swaps a scrolling document for a pan/zoom plane of frames. Composes with any level: L1 spatial notes, L2 multi-frame prototype (the default), L3 canvas-as-showcase.</p>
+          <p class="fr-callout">This board is <span class="fr-mono">level 3, canvas: true</span> &mdash; the composition is the hero, the overview&rarr;focus zoom is the one orchestrated moment.</p>
         </div>
       </div>
     </section>
 
-    <!-- F5: Design directions — 660x760, second row right. -->
+    <!-- F5: Design directions — 560x520, row 2 right. -->
     <section class="oa-frame" id="design-directions" data-tour="5"
-             style="--x:2070;--y:1040;--w:660;--h:760">
+             style="--x:1870;--y:640;--w:560;--h:520">
       <button class="oa-frame-label" type="button">Design directions</button>
       <div class="oa-frame-body" inert>
         <div class="fr-pad tight">
-          <h2 class="fr-h2 sm">Design directions</h2>
-          <p class="fr-body sm">When no brand is specified, pick one of five token directions. This board runs <b style="color:var(--accent)">Modern minimal</b>.</p>
+          <h2 class="fr-h2">Design directions</h2>
+          <p class="fr-body">When no brand is specified, pick one of five token directions. This board runs <b style="color:var(--accent)">Modern minimal</b>.</p>
           <div>
             <div class="fr-dirrow">
               <span class="fr-swatch" style="background:oklch(52% 0.10 28)"></span>
-              <div>
-                <p class="fr-dirname">Editorial &mdash; Monocle / FT</p>
-                <p class="fr-dirpost">Serif headlines, paper + ink, one accent.</p>
-              </div>
+              <div><p class="fr-dirname">Editorial</p><p class="fr-dirpost">Monocle / FT. Serif headlines, paper + ink, one accent.</p></div>
             </div>
             <div class="fr-dirrow">
               <span class="fr-swatch" style="background:oklch(52% 0.18 255)"></span>
-              <div>
-                <p class="fr-dirname">Modern minimal &mdash; Linear / Vercel <span class="fr-hint">(this board)</span></p>
-                <p class="fr-dirpost">System fonts, crisp neutrals, hairline borders.</p>
-              </div>
+              <div><p class="fr-dirname">Modern minimal <span class="fr-hint">(this board)</span></p><p class="fr-dirpost">Linear / Vercel. System fonts, crisp neutrals, hairline borders.</p></div>
             </div>
             <div class="fr-dirrow">
               <span class="fr-swatch" style="background:oklch(56% 0.12 170)"></span>
-              <div>
-                <p class="fr-dirname">Human &mdash; Airbnb / Duolingo</p>
-                <p class="fr-dirpost">Tactile, generous radii, clear hierarchy.</p>
-              </div>
+              <div><p class="fr-dirname">Human</p><p class="fr-dirpost">Airbnb / Duolingo. Tactile, generous radii, clear hierarchy.</p></div>
             </div>
             <div class="fr-dirrow">
               <span class="fr-swatch" style="background:oklch(58% 0.16 145)"></span>
-              <div>
-                <p class="fr-dirname">Tech utility &mdash; Datadog / GitHub</p>
-                <p class="fr-dirpost">Data-dense, mono-friendly, tabular numerics.</p>
-              </div>
+              <div><p class="fr-dirname">Tech utility</p><p class="fr-dirpost">Datadog / GitHub. Data-dense, mono-friendly, tabular numerics.</p></div>
             </div>
             <div class="fr-dirrow">
               <span class="fr-swatch" style="background:oklch(60% 0.22 25)"></span>
-              <div>
-                <p class="fr-dirname">Brutalist &mdash; Are.na / Yale</p>
-                <p class="fr-dirpost">Loud type, visible grid, oversized serif.</p>
-              </div>
+              <div><p class="fr-dirname">Brutalist</p><p class="fr-dirpost">Are.na / Yale. Loud type, visible grid, oversized serif.</p></div>
             </div>
           </div>
+          <p class="fr-callout">Contrast gate P0: <span class="fr-mono">--fg/--bg</span>, <span class="fr-mono">--muted/--bg</span>, <span class="fr-mono">--muted/--surface</span>, <span class="fr-mono">--accent/--bg</span>, and <span class="fr-mono">--accent-on/--accent</span> must clear <span class="fr-mono">4.5:1</span> in <em>both</em> themes &mdash; <span class="fr-mono">validate</span> fails the build otherwise.</p>
         </div>
       </div>
     </section>
 
-    <!-- Freeform notes (counter-scaled by the runtime).
-         Placed in the row-gap (y 900-1040) between row 1 and row 2.
-         Neither note's box crosses any frame rectangle. -->
-    <p class="oa-note" style="--x:540;--y:910">Each frame holds real, operable UI &mdash; not bitmap mockups. Drag any surface (labels included) to pan; tap a frame or label to focus.</p>
-    <p class="oa-note" style="--x:1700;--y:910">This board is itself a <span class="fr-mono">level 2, canvas: true</span> artifact.</p>
+    <!-- F6: Validation gates — 1000x480, row 3 left. The gates. -->
+    <section class="oa-frame" id="validation-gates" data-tour="6"
+             style="--x:0;--y:1240;--w:1000;--h:480">
+      <button class="oa-frame-label" type="button">Validation gates</button>
+      <div class="oa-frame-body" inert>
+        <div class="fr-pad tight">
+          <h2 class="fr-h2">Validation gates</h2>
+          <p class="fr-flow">The local builder enforces these <b>before</b> publish. All are static; the strict CSP makes some of them structural.</p>
+          <div class="fr-gate"><span class="fr-gk">body &lt;style&gt;/&lt;script&gt;</span><span>HTML body fragments cannot contain document wrappers, <span class="fr-mono">&lt;style&gt;</span>, or <span class="fr-mono">&lt;script&gt;</span> &mdash; CSS goes in <span class="fr-mono">fragments.styles</span>, JS in <span class="fr-mono">fragments.scripts</span>, composed by the builder.</span></div>
+          <div class="fr-gate"><span class="fr-gk">container-class</span><span>If CSS defines a <span class="fr-mono">.class</span> with <span class="fr-mono">max-width</span>, the body must apply it (statically or via a quoted JS token) &mdash; catches the silent defect where a cap is defined but never used and the page ships at 100% width.</span></div>
+          <div class="fr-gate"><span class="fr-gk">contrast P0</span><span>Resolves authored <span class="fr-mono">--fg</span>/<span class="fr-mono">--bg</span>/<span class="fr-mono">--muted</span>/<span class="fr-mono">--surface</span>/<span class="fr-mono">--accent</span> overrides (hex/oklch/rgb/hsl literals only) and fails any pair under <span class="fr-mono">4.5:1</span> in either theme. Contract defaults already pass.</span></div>
+          <div class="fr-gate"><span class="fr-gk">measure cap (L1)</span><span>A level-1 non-canvas HTML doc must constrain body width (<span class="fr-mono">.oa-prose</span> or a <span class="fr-mono">max-width</span>) or the build fails &mdash; the default is a full-width doc with browser spacing. Canvas and L2/L3 are exempt.</span></div>
+          <div class="fr-gate"><span class="fr-gk">scrollspy last-tab</span><span>Detect-only: if a nav scrollspy ships the last-tab-stays-inactive-at-scroll-bottom bug (tight IO rootMargin <em>and</em> no scroll-boundary fallback <em>and</em> <span class="fr-mono">scrollIntoView</span> inside <span class="fr-mono">setActive</span>), it fails. No scrollspy &rarr; gate silent.</span></div>
+          <div class="fr-gate"><span class="fr-gk">canvas ABI</span><span>Exactly one <span class="fr-mono">#canvas</span> + one <span class="fr-mono">#plane</span> nested inside it; every frame a <span class="fr-mono">&lt;section&gt;</span> with kebab <span class="fr-mono">id</span>, <span class="fr-mono">--x/--y/--w/--h</span>, one <span class="fr-mono">button.oa-frame-label[type=button]</span>, one inert <span class="fr-mono">div.oa-frame-body</span>; no authored <span class="fr-mono">#zoom-*</span>/<span class="fr-mono">#tour-*</span> (builder-owned).</span></div>
+          <div class="fr-gate"><span class="fr-gk">dup style=</span><span>A start tag carrying <span class="fr-mono">style=</span> twice fails &mdash; HTML parsers keep only the first, silently dropping the later value.</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- F7: Viewer chrome — 660x480, row 3 right. -->
+    <section class="oa-frame" id="viewer-chrome" data-tour="7"
+             style="--x:1120;--y:1240;--w:660;--h:480">
+      <button class="oa-frame-label" type="button">Viewer chrome</button>
+      <div class="oa-frame-body" inert>
+        <div class="fr-pad tight">
+          <h2 class="fr-h2">Viewer chrome &amp; sandbox</h2>
+          <div class="fr-gate"><span class="fr-gk">sticky header</span><span>A service header (favicon + title, brand chip, theme toggle) is pinned to the top by the harness at serve time &mdash; never hand-authored. Its measured height is exposed as <span class="fr-mono">--oa-header-h</span> for sticky offsets.</span></div>
+          <div class="fr-gate"><span class="fr-gk">theme toggle</span><span>Stamps <span class="fr-mono">data-theme="light|dark"</span> on <span class="fr-mono">&lt;html&gt;</span>; both theme blocks are mandatory and must win over <span class="fr-mono">prefers-color-scheme</span> in both directions.</span></div>
+          <div class="fr-gate"><span class="fr-gk">opaque origin</span><span>CSP <span class="fr-mono">sandbox allow-scripts ...; default-src 'none'</span> gives the document an opaque origin &mdash; no cookies, no <span class="fr-mono">localStorage</span>, no same-origin API calls, no <span class="fr-mono">fetch</span>/<span class="fr-mono">XHR</span>/<span class="fr-mono">WebSocket</span>.</span></div>
+          <div class="fr-gate"><span class="fr-gk">no storage</span><span>Keep state in memory (JS variables) for the session. The theme toggle wraps <span class="fr-mono">localStorage</span> in try/catch (opaque origin throws) &mdash; theme choice is per-load.</span></div>
+          <div class="fr-gate"><span class="fr-gk">LAYOUT_SCRIPT</span><span>The harness rewrites <span class="fr-mono">top</span> of every <span class="fr-mono">position: sticky</span> body descendant to <span class="fr-mono">var(--oa-header-h)</span> &mdash; so canvas floating controls must be <span class="fr-mono">position: fixed</span>, never sticky.</span></div>
+          <div class="fr-gate"><span class="fr-gk">OG card</span><span>Every page emits OpenGraph + Twitter tags; <span class="fr-mono">/og/:id</span> returns a 1200&times;630 PNG rasterized on the edge with embedded Inter &mdash; no external requests.</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- F8: Storage & bindings — 1000x480, row 4 left. -->
+    <section class="oa-frame" id="storage-bindings" data-tour="8"
+             style="--x:0;--y:1720;--w:1000;--h:480">
+      <button class="oa-frame-label" type="button">Storage &amp; bindings</button>
+      <div class="oa-frame-body" inert>
+        <div class="fr-pad tight">
+          <h2 class="fr-h2">Storage &amp; bindings</h2>
+          <table class="fr-table">
+            <thead><tr><th>Binding</th><th>Role</th></tr></thead>
+            <tbody>
+              <tr><td class="k">DB (D1)</td><td>Metadata, token hashes, version index. Strongly consistent (read-after-write cross-colo). D1's 2 MB row cap forbids storing HTML here.</td></tr>
+              <tr><td class="k">CONTENT (R2)</td><td>Content bodies at <span class="fr-mono">content/&lt;id&gt;/&lt;version&gt;</span>. Strongly consistent via bindings. Per-version <span class="fr-mono">customMetadata.encrypted</span> flag &mdash; an artifact can switch encrypted/plain across versions.</td></tr>
+              <tr><td class="k">ASSETS</td><td>Static assets dir (<span class="fr-mono">public/</span>) for the landing page. <span class="fr-mono">run_worker_first</span> routes <span class="fr-mono">/</span>, <span class="fr-mono">/api/*</span>, <span class="fr-mono">/a/*</span>, <span class="fr-mono">/og/*</span> through the Worker first.</td></tr>
+            </tbody>
+          </table>
+          <div class="fr-gate"><span class="fr-gk">4 MiB cap</span><span>Max artifact content size is 4 MiB (post-base64 for encrypted &mdash; encrypted max plaintext &asymp; 2.97 MiB). Fits the free-tier envelope.</span></div>
+          <div class="fr-gate"><span class="fr-gk">schema auto</span><span>D1 schema applies itself on first request (<span class="fr-mono">CREATE TABLE IF NOT EXISTS</span>, memoized per isolate) &mdash; zero-step deploys. Lazy ALTERs add columns to existing DBs in place.</span></div>
+          <div class="fr-gate"><span class="fr-gk">compare-and-swap</span><span>Updates are safe: D1 advances <span class="fr-mono">current_version</span> only if it still matches the snapshot, then R2 writes &mdash; an R2 object is never orphaned from D1. Concurrent PUTs: exactly one wins, the rest get 409.</span></div>
+          <div class="fr-gate"><span class="fr-gk">rate limits</span><span>Best-effort, per-colo: create 20/min/IP, update 60/min/id. Free tier headroom: Workers 100k req/day, R2 1M writes/mo, D1 100k row writes/day.</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- F9: Local vs shared recipes — 660x480, row 4 right. -->
+    <section class="oa-frame" id="local-shared-recipes" data-tour="9"
+             style="--x:1120;--y:1720;--w:660;--h:480">
+      <button class="oa-frame-label" type="button">Local vs shared recipes</button>
+      <div class="oa-frame-body" inert>
+        <div class="fr-pad tight">
+          <h2 class="fr-h2">Local vs shared recipes</h2>
+          <p class="fr-flow">Fragment paths resolve against the <b>Recipe file's own directory</b>, not cwd. Shared Recipes/fragments are commit-ready reproducible sources; local or encrypted sources live under gitignored <span class="fr-mono">.artifacts/</span>.</p>
+          <div class="fr-code"><code>.artifacts/
+  recipes.local/
+    report.recipe.json     # paths use ../fragments.local/
+  fragments.local/
+    report/
+      theme.css
+      body.html
+      behavior.js</code></div>
+          <div class="fr-gate"><span class="fr-gk">shared</span><span>Recipe JSON + fragments in the project tree (e.g. <span class="fr-mono">artifacts/</span> or <span class="fr-mono">.artifacts/recipes/</span>). Commit-ready. This board's Recipe lives at <span class="fr-mono">.artifacts/recipes/open-artifacts-canvas-overview-pg7zuNun.recipe.json</span>.</span></div>
+          <div class="fr-gate"><span class="fr-gk">local</span><span><span class="fr-mono">artifact.local: true</span> places the Recipe under <span class="fr-mono">.artifacts/recipes.local/</span> and fragments under <span class="fr-mono">.artifacts/fragments.local/</span>, with state in <span class="fr-mono">manifest.local.json</span>. A misplaced local Recipe reports both rules at once.</span></div>
+          <div class="fr-gate"><span class="fr-gk">encrypted</span><span>Always local: names a <span class="fr-mono">passwordCredential</span>, resolved from <span class="fr-mono">--password</span>, an <span class="fr-mono">OPEN_ARTIFACTS_PASSWORD_*</span> env var, or <span class="fr-mono">credentials.json</span>. Passwords never enter Recipes or Manifests.</span></div>
+          <div class="fr-gate"><span class="fr-gk">path rule</span><span>Run <span class="fr-mono">validate</span>/<span class="fr-mono">create</span> from the project root with a project-relative Recipe path. An absolute path, or one whose real location resolves outside cwd, fails with <span class="fr-mono">recipe must live inside the project root</span>.</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Freeform notes (counter-scaled; collapsed to chips at overview zoom).
+         Placed in row-gaps so no note crosses a frame rectangle. -->
+    <p class="oa-note" style="--x:1320;--y:540">The overview&rarr;focus zoom is the one orchestrated moment on this board. Per-frame motion stays quiet &mdash; canvas chrome is operated, not watched.</p>
+    <p class="oa-note" style="--x:1760;--y:1160">Every connector is a real relation: <span class="fr-mono">data-from</span>/<span class="fr-mono">data-to</span> drive spotlight. No decorative spaghetti.</p>
+    <p class="oa-note" style="--x:1020;--y:1640">Gates feed the served page: validate &rarr; compose &rarr; wrap &rarr; serve under sandbox + <span class="fr-mono">default-src 'none'</span>.</p>
   </div>
 </div>

@@ -160,6 +160,10 @@ working around it in markup.
   background: var(--bg);
   border-radius: var(--radius-lg);
   box-shadow: var(--elev-ring);
+  /* Default content inset so a frame's text never kisses its edge. The runtime
+     owns this padding-box; author styles override it only when a frame needs
+     full-bleed content (set `padding: 0` on that frame-body). */
+  padding: var(--space-4);
 }
 .oa-frame[data-focused] .oa-frame-body { box-shadow: 0 0 0 2px var(--accent); }
 /* Drag = pan even inside a focused frame (the Figma model), so flowing text
