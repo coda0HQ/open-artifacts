@@ -2,30 +2,13 @@
   "manifestVersion": 2,
   "artifacts": [
     {
-      "id": "pg7zuNunQpo5",
-      "url": "https://coda0.com/a/pg7zuNunQpo5",
-      "version": 22,
-      "recipe": ".artifacts/recipes/open-artifacts-canvas-overview-pg7zuNun.recipe.json",
-      "recipeHash": "sha256:f61c0739fc83c2d797434cd9986b5531cec6a06a2ad5c51b8670794385bf6dac",
-      "inputHash": "sha256:59cdef2d43c4f4eb4500d2eaaaf38a83589a674ae195f02c1d735404a69de460",
-      "outputHash": "sha256:15aace4979d1c38adbcd171efcdde682793b3aef8f0d8a1f69dae16e61f8f70f",
-      "strategy": "direct",
-      "autoUpdate": false,
-      "snapshot": {
-        "docs/architecture.md": "6aaa2b2deb9715e7b5745e3c64961ab87f468b6e945788b5b4f3ef1af8098709",
-        "README.md": "8953aaf7d6e10d7181928ac83564a11c8d141e7247ccba4511a16f9594884703",
-        "skills/using-open-artifacts/references/canvas.md": "ba132bbf4af65926a6607997fd992b92ea54648aa66358a01b2411548fc62a20"
-      },
-      "updatedAt": "2026-07-14T08:43:16.474Z"
-    },
-    {
       "id": "tSXeJLyobwpY",
       "url": "https://coda0.com/a/tSXeJLyobwpY",
-      "version": 29,
+      "version": 30,
       "recipe": ".artifacts/recipes/open-artifacts-self-hosted-claude-code-a-tSXeJLyo.recipe.json",
       "recipeHash": "sha256:85d5d8b0f7ee2ecbbd29a88d6332fe5840a4c77717fadbf508b393fd619e0b2e",
-      "inputHash": "sha256:d47e3c9981d44cc26188c4a2a7c2401ad63721694f1eb6eebecbe4cd93cce992",
-      "outputHash": "sha256:7a6482071eb89bb71621a4d99f08cb8fc1b29417110dc603b48f52b59df06a73",
+      "inputHash": "sha256:707bb4fd315c4fd8f27caeae038930f823cd7999a7bbdcbc8a6bcaf9e736b8de",
+      "outputHash": "sha256:40f93aa53e4d2d7c056924cf12306d047694133cd59e4a96da465b86ed1aed48",
       "strategy": "direct",
       "autoUpdate": true,
       "snapshot": {
@@ -51,12 +34,12 @@
         "skills/using-open-artifacts/references/recipe.md": "07c363b7fe77f8a7884c8813880bec81669e607550ba871334017bc04ce0d258",
         "skills/using-open-artifacts/references/recipe.schema.json": "a0abf71802ae3a8e5e8a8b86c6abe4083b30036df44872e1a7948fec85d5e8af",
         "skills/using-open-artifacts/references/tokens.css": "8cade179f0c3cfb265e502637e1bc60d448e4d9d4ac85c5bcd75db0357b59cb2",
-        "skills/using-open-artifacts/scripts/artifact.mjs": "76471c0b37665499b6ab21762f5298a0b61f76004ea86eb9997b989d8a95586b",
+        "skills/using-open-artifacts/scripts/artifact.mjs": "13204cc72d6d63ba718956358543d169036117846b0e57fc67c1e1fe639e7720",
         "skills/using-open-artifacts/scripts/build-artifact.mjs": "601d527acf81d7e1cb529bd1f5e23ddc2ecd4304ae8e2f7c97dc62986ed4ec80",
         "skills/using-open-artifacts/scripts/lib/compose.mjs": "d5127c4d6015ec0dc90c42bbd724d23392df4b21665acd452f13f87b46f99cdb",
         "skills/using-open-artifacts/scripts/lib/contrast.mjs": "6a5761aa6a4859c5282d4228977a2ed577aadb0a4e8b87fda65b0f0ad9a18007",
         "skills/using-open-artifacts/scripts/lib/recipe.mjs": "9b1fc9f47849c783df020e1f329baa368569986c8a91bfb102bba20a6156d2c4",
-        "skills/using-open-artifacts/scripts/lib/validate.mjs": "9254b9b45c646b9f8f49e828b1c1c7b7f858cc72e4aa623ab22c43229c107112",
+        "skills/using-open-artifacts/scripts/lib/validate.mjs": "d5df6247242b3073c6ce987eb2bdccffb9470354c85889fdd26332d7062d271f",
         "skills/using-open-artifacts/SKILL.md": "814cde87be7c81841217f9723d80aea4cf3d8278cd746faeb1ac49f626659ef7",
         "src/api.ts": "ddad91ff6aeae6a1b164b637800ebdb44366c9a4a6d1790cc53a8c62978b406e",
         "src/domain.ts": "e5a261d1c99ecdcf9c88f453d9e78d00b5f29057692cdc8d5c0946fd4cb70ce6",
@@ -67,12 +50,12 @@
         "src/wrap.ts": "a0ca26ddbdfdc2e3c153654dbacb80e58755277e5ea586f4ef3983c54d7d45b2",
         "wrangler.jsonc": "870a14d7bcf752797ea7417d223918de78806e038e7fa8e625a04a56734e9b74"
       },
-      "updatedAt": "2026-07-14T08:43:36.310Z"
+      "updatedAt": "2026-07-14T09:19:09.001Z"
     },
     {
       "id": "9bG94htMRttn",
       "url": "https://coda0.com/a/9bG94htMRttn",
-      "version": 3,
+      "version": 4,
       "recipe": ".artifacts/recipes/open-artifacts-architecture-overview.recipe.json",
       "recipeHash": "sha256:ec8e3d03e81cbc13e5ef193b88a695000d135e6e30e99f7297a379559e1fccf8",
       "inputHash": "sha256:ebab95a1f9df04f733592c7409e34513e0e7fc1bf959257c6539bd7ac2246cc4",
@@ -91,7 +74,24 @@
         "src/wrap.ts": "a0ca26ddbdfdc2e3c153654dbacb80e58755277e5ea586f4ef3983c54d7d45b2",
         "wrangler.jsonc": "870a14d7bcf752797ea7417d223918de78806e038e7fa8e625a04a56734e9b74"
       },
-      "updatedAt": "2026-07-14T08:45:30.064Z"
+      "updatedAt": "2026-07-14T09:19:11.817Z"
+    },
+    {
+      "id": "pg7zuNunQpo5",
+      "url": "https://coda0.com/a/pg7zuNunQpo5",
+      "version": 23,
+      "recipe": ".artifacts/recipes/open-artifacts-canvas-overview-pg7zuNun.recipe.json",
+      "recipeHash": "sha256:f61c0739fc83c2d797434cd9986b5531cec6a06a2ad5c51b8670794385bf6dac",
+      "inputHash": "sha256:cb71a5cbb657a1c1f27b5e3ddca27c6357f59b94cddb8e6182b11218301ef6e7",
+      "outputHash": "sha256:b9ca09e6779f58a77b778e16994959e3e2244bb662dd28ae8e923d8186bcac9e",
+      "strategy": "direct",
+      "autoUpdate": false,
+      "snapshot": {
+        "docs/architecture.md": "6aaa2b2deb9715e7b5745e3c64961ab87f468b6e945788b5b4f3ef1af8098709",
+        "README.md": "8953aaf7d6e10d7181928ac83564a11c8d141e7247ccba4511a16f9594884703",
+        "skills/using-open-artifacts/references/canvas.md": "ba132bbf4af65926a6607997fd992b92ea54648aa66358a01b2411548fc62a20"
+      },
+      "updatedAt": "2026-07-14T09:19:11.956Z"
     }
   ]
 }
