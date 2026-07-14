@@ -351,7 +351,14 @@ async function prepareRecipePayload(recipePath, flags, artifactId = null) {
     description: artifact.description,
     favicon: artifact.favicon,
   };
-  if (flags.label) payload.label = flags.label;
+  if (flags.label) {
+    if (Buffer.byteLength(flags.label) > 60) {
+      throw new Error(
+        `--label must be at most 60 bytes (got ${Buffer.byteLength(flags.label)}): ${flags.label.slice(0, 60)}`,
+      );
+    }
+    payload.label = flags.label;
+  }
   if (password) {
     const encryptedPayload = await encryptContent(
       build.publishContent,

@@ -65,7 +65,7 @@
       <div class="oa-frame-body" inert>
         <div class="fr-pad tight">
           <h2 class="fr-h2 sm">How publishing works</h2>
-          <p class="fr-flow">A zero-dep Node CLI (<span class="fr-mono">artifact.mjs</span>) is the agent's only tool. Every artifact is generated from a versioned JSON <b>Recipe</b> plus ordered <b>fragments</b>; the CLI validates and composes in memory, then sends one final publish request.</p>
+          <p class="fr-flow">A zero-dep Node CLI (<span class="fr-mono">artifact.mjs</span>) is the agent's only tool. Every artifact is generated from a versioned JSON <b>Recipe</b> plus ordered <b>fragments</b>; the CLI validates and composes in memory, then sends one final publish request. Run <span class="fr-mono">validate</span>/<span class="fr-mono">create</span> from the project root with a project-relative Recipe path &mdash; an absolute path or a non-root cwd fails with <span class="fr-mono">recipe must live inside the project root</span>.</p>
           <div class="fr-code">
             <code>node skills/using-open-artifacts/scripts/artifact.mjs validate \
   artifacts/app-interactions.recipe.json
@@ -108,7 +108,8 @@ node skills/using-open-artifacts/scripts/artifact.mjs create \
           </div>
           <div class="fr-panel" id="panel-canvas" role="tabpanel" aria-labelledby="tab-canvas" aria-hidden="true">
             <p class="fr-body sm"><b style="color:var(--accent)">canvas: true</b> swaps the <em>shell</em> &mdash; a pan/zoom plane of frames instead of a scrolling document. Composes with any level.</p>
-            <p class="fr-hint">Vendored runtime: momentum + pinch with rubber past MIN/MAX, optional presenter tour, connector spotlighting, <span class="fr-mono">#frame-id</span> deep links, frame + freeform contracts, and a canvas ship-gate.</p>
+            <p class="fr-hint">DOM contract: you author <span class="fr-mono">#canvas</span>, <span class="fr-mono">#plane</span>, <span class="fr-mono">.oa-frame</span> sections, optional <span class="fr-mono">.oa-note</span> and one inline <span class="fr-mono">svg.oa-connectors</span>. The builder injects zoom (<span class="fr-mono">#zoom-in/out/fit/pct</span>) and, when any frame has <span class="fr-mono">data-tour</span>, the tour controls &mdash; authoring those ids fails validation.</p>
+            <p class="fr-hint">Connector geometry is per-edge: straight for same-row, perpendicular control points on the row midline for A-bottom &rarr; B-top, and a shared-vertical-midline S-curve for diagonal row-to-below flow. The runtime counter-scales stroke width, so integer coords suffice.</p>
             <p class="fr-hint">Figma-style pointer ownership: frame labels are pan surface that tap-to-focus; in-frame fields and buttons keep the pointer; Space-drag pans from anywhere. Selection stays off the pan surface except editable fields.</p>
             <p class="fr-hint">Named <span class="fr-mono">TAP_SLOP</span> separates taps from pans; assistive clicks still open note chips; keyboard focus on a label is an instant camera jump; 44px hit targets; <span class="fr-mono">prefers-reduced-motion</span> collapses physics and tweens.</p>
             <p class="fr-hint">This board is <span class="fr-mono">level 2, canvas: true</span>.</p>
@@ -134,7 +135,7 @@ node skills/using-open-artifacts/scripts/artifact.mjs create \
               </div>
             </div>
             <div class="fr-dirrow">
-              <span class="fr-swatch" style="background:oklch(58% 0.18 255)"></span>
+              <span class="fr-swatch" style="background:oklch(52% 0.18 255)"></span>
               <div>
                 <p class="fr-dirname">Modern minimal &mdash; Linear / Vercel <span class="fr-hint">(this board)</span></p>
                 <p class="fr-dirpost">System fonts, crisp neutrals, hairline borders.</p>

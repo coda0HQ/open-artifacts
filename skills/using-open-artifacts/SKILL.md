@@ -69,11 +69,17 @@ Give the sub-agent everything it needs to work alone, then let it work:
 - If updating: the artifact id. The sub-agent runs `node artifact.mjs show
   <id>` to read the current published version as its starting reference —
   for a locked design, the direction comment at the top of that page states
-  what must not change. (For an encrypted artifact, `show` decrypts locally
-  with the password stored at create time in `credentials.json`, so the
-  plaintext is recovered without re-prompting the user.) It then reads the
-  Recipe recorded in Manifest v2, its fragments, and the project files its
-  `scope` covers.
+  what must not change. "Locked" means the **visual direction** (register,
+  palette hue family, layout posture) must not change — it does **not** exempt
+  the artifact from validation gates. A contrast or CSP check added after the
+  original publish can retroactively fail a previously-passing token; the
+  refresh must then nudge the offending token within the same hue (e.g. darken
+  the light-theme `--accent` a few lightness steps) so the page passes the gate
+  while staying visually the same direction. (For an encrypted artifact, `show`
+  decrypts locally with the password stored at create time in
+  `credentials.json`, so the plaintext is recovered without re-prompting the
+  user.) It then reads the Recipe recorded in Manifest v2, its fragments, and
+  the project files its `scope` covers.
 - Any explicit publication requirements. Put title, description, favicon,
   scope, channel, watch globs, level, Canvas mode, locality, and auto-update
   in the Recipe. Keep passwords out of it.

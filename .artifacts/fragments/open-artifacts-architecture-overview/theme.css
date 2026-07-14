@@ -5,7 +5,7 @@
   --fg: oklch(18% 0.012 250);
   --muted: oklch(50% 0.014 250);
   --border: oklch(92% 0.005 250);
-  --accent: oklch(54% 0.13 200);
+  --accent: oklch(52% 0.13 200);
   --accent-on: oklch(99% 0.002 240);
   --font-display: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", system-ui, sans-serif;
   --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", system-ui, sans-serif;
