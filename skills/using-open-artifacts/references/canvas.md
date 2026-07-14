@@ -187,6 +187,22 @@ working around it in markup.
   width: auto;
 }
 .oa-frame[data-focused] .oa-frame-body { box-shadow: 0 0 0 2px var(--accent); }
+/* At focus the body becomes the vertical scroll surface so content taller
+   than --h is reachable, not truncated. The base overflow:hidden + fixed
+   --h stay (overview needs the fixed world box); only a focused body
+   switches to overflow:auto. The > * companion surrenders a direct child's
+   vertical scroll to the body (an author height:100%;overflow:auto wrapper
+   like .fr-pad would otherwise re-absorb the scroll and hide it), while
+   keeping overflow-x:auto so horizontally-scrolling children (wide tables,
+   code blocks) keep their own horizontal scrollbar. --h is untouched, so
+   fitTo/bounds/legalRange/pan and the rounded-clip/inset-ring all hold. */
+.oa-frame[data-focused] .oa-frame-body { overflow: auto; }
+.oa-frame[data-focused] .oa-frame-body > * {
+  height: auto;
+  min-height: 100%;
+  overflow: visible;
+  overflow-x: auto;
+}
 /* Drag = pan even inside a focused frame (the Figma model), so flowing text
    is never drag-selectable. Editable fields are the exception: they own their
    pointer (see CONTROLS in the runtime JS) and caret work needs selection.
