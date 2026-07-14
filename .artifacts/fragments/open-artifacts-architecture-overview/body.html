@@ -186,10 +186,12 @@ Referrer-Policy: no-referrer</code></pre>
           <span class="oa-copy-text">复制</span>
         </button>
       </div>
-      <pre><code>artifacts(id, token_hash, title, description, favicon, format,
-           encrypted, current_version, created_at, updated_at)
-versions(artifact_id, version, label, size, created_at)
--- R2: content/&lt;id&gt;/&lt;v&gt;  明文或加密 envelope</code></pre>
+      <pre><code>artifacts(id, token_hash, channel_hash, title, description, favicon,
+           format, encrypted, current_version, created_at, updated_at)
+versions(artifact_id, version, label, title, description, favicon, format,
+         encrypted, size, created_at)
+-- R2: content/&lt;id&gt;/&lt;v&gt;  明文或加密 envelope
+-- channel_hash 上的 UNIQUE INDEX 让并发首发同一 channel 只能 mint 一个 artifact</code></pre>
     </div>
     <details class="oa-details">
       <summary>身份与鉴权（无账号）</summary>
@@ -244,8 +246,8 @@ versions(artifact_id, version, label, size, created_at)
       <p class="oa-section-sub"><code>wrap.ts</code> 的四个块。</p>
     </div>
     <div class="oa-prose">
-      <p><code>src/wrap.ts</code> 服务时给每个 artifact 包骨架。四个关键块：<strong><code>RESET_CSS</code></strong>（reset + <code>--oa-*</code> token + <code>.oa-header</code> sticky + <code>.oa-md</code> markdown prose 基线）、<strong><code>THEME_SCRIPT</code></strong>（localStorage 存主题——这是外层 viewer 页，不是沙箱 iframe 内，opaque origin 时 try/catch 容错）、<strong><code>LAYOUT_SCRIPT</code></strong>（测 header 高度写到 <code>--oa-header-h</code>，把作者自写的 sticky 元素顶到 header 下方）、<strong><code>ogCardSvg</code></strong>（resvg 渲 PNG，无系统字体所以有 <code>isRenderable</code> fallback 对 CJK 等返回品牌锁型卡）。</p>
-      <p>sticky header ≈3rem，高度测成 <code>--oa-header-h</code> 暴露给页面。作者的 sticky 元素设 <code>top: var(--oa-header-h, 2.5rem)</code> 更可靠。viewer 的主题切换盖 <code>prefers-color-scheme</code> 双向。</p>
+      <p><code>src/wrap.ts</code> 服务时给每个 artifact 包骨架。四个关键块：<strong><code>RESET_CSS</code></strong>（reset + <code>--oa-*</code> token + <code>.oa-header</code> sticky + <code>.oa-md</code> markdown prose 基线）、<strong><code>THEME_SCRIPT</code></strong>（localStorage 存主题——这是外层 viewer 页，不是沙箱 iframe 内，opaque origin 时 try/catch 容错）、<strong><code>LAYOUT_SCRIPT</code></strong>（测 header 高度写到 <code>--oa-header-h</code>，把作者自写的 sticky 元素顶到 header 下方；并把 header 钉到 viewport 顶部——若作者设了 <code>body { padding-top }</code>，会把该 padding 折进 header 首个兄弟节点的 <code>margin-top</code>，header 仍贴 y=0，作者的内容垂直偏移不丢）、<strong><code>ogCardSvg</code></strong>（resvg 渲 PNG，无系统字体所以有 <code>isRenderable</code> fallback 对 CJK 等返回品牌锁型卡）。</p>
+      <p>sticky header 高度约 2.5rem（padding .375rem、toggle 28px，收紧到对齐设计规格），测成 <code>--oa-header-h</code> 暴露给页面。作者的 sticky 元素设 <code>top: var(--oa-header-h, 2.5rem)</code> 更可靠。viewer 的主题切换盖 <code>prefers-color-scheme</code> 双向。</p>
     </div>
     <div class="oa-callout">
       <p>OpenGraph：每个 viewer 响应带 OG + Twitter 标签。<code>og:image</code> 指向 <code>GET /og/:id</code>，返回 1200×630 <strong>PNG</strong>（不是 SVG——Facebook、X、LinkedIn、Slack、iMessage、Discord 都拒渲 SVG <code>og:image</code>）。卡是自包含 SVG，<code>@resvg/resvg-wasm</code> 栅格化。emoji favicon 故意省略（resvg 渲不了彩色 emoji）。</p>

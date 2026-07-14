@@ -48,9 +48,11 @@
               <tr><td>Channels</td><td><span class="fr-mono">artifact.channel</span> in the Recipe binds a stable URL; the CLI keeps a per-channel token (<span class="fr-mono">ch_</span>) in credentials. Only the channel hash is stored server-side.</td></tr>
               <tr><td>Local mode</td><td><span class="fr-mono">artifact.local: true</span> places sources under gitignored <span class="fr-mono">.artifacts/recipes.local/</span> and <span class="fr-mono">.artifacts/fragments.local/</span>, with state in <span class="fr-mono">manifest.local.json</span>. Shared Recipes/fragments may be committed.</td></tr>
               <tr><td>Storage</td><td>D1: metadata, token hashes, version index. R2: bodies at <span class="fr-mono">content/&lt;id&gt;/&lt;v&gt;</span>.</td></tr>
+              <tr><td>Versions</td><td>Every publish is an immutable version with an optional label and its own title/description/favicon/format/encryption state. <span class="fr-mono">?v=N</span> views history; <span class="fr-mono">PUT</span> accepts <span class="fr-mono">baseVersion</span>, 409 on conflict (override with <span class="fr-mono">force</span>).</td></tr>
               <tr><td>Serving</td><td>CSP <span class="fr-mono">sandbox</span> + <span class="fr-mono">default-src 'none'</span> &mdash; opaque origin, no cookies, no storage.</td></tr>
               <tr><td>Link previews</td><td>OpenGraph + Twitter tags on every page. <span class="fr-mono">/og/:id</span> returns a 1200x630 PNG card rasterized on the edge &mdash; no external requests.</td></tr>
               <tr><td>Passwords</td><td>PBKDF2-HMAC-SHA256 (600k iterations) + AES-256-GCM, client-side. Server stores only <span class="fr-mono">{salt, iv, ciphertext}</span>.</td></tr>
+              <tr><td>Auto-update</td><td>Recipe records <span class="fr-mono">scope</span>, <span class="fr-mono">watch</span>, <span class="fr-mono">autoUpdate</span>; Manifest v2 keeps the snapshot. <span class="fr-mono">status</span> reports stale watched artifacts; the optional Stop-hook only surfaces opted-in entries. Agents regenerate fragments or <span class="fr-mono">ack</span> reviewed drift.</td></tr>
               <tr><td>Markdown</td><td>Vendored <span class="fr-mono">marked</span> inlined &mdash; encrypted and plain share one code path.</td></tr>
             </tbody>
           </table>

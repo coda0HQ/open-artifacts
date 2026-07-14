@@ -352,9 +352,10 @@ async function prepareRecipePayload(recipePath, flags, artifactId = null) {
     favicon: artifact.favicon,
   };
   if (flags.label) {
-    if (Buffer.byteLength(flags.label) > 60) {
+    const labelBytes = Buffer.byteLength(flags.label);
+    if (labelBytes > 60) {
       throw new Error(
-        `--label must be at most 60 bytes (got ${Buffer.byteLength(flags.label)}): ${flags.label.slice(0, 60)}`,
+        `--label must be at most 60 bytes (got ${labelBytes}, over by ${labelBytes - 60}; CJK chars are 3 bytes each — shorten or drop non-ASCII): ${flags.label.slice(0, 60)}`,
       );
     }
     payload.label = flags.label;
@@ -1248,7 +1249,7 @@ commands:
 options:
   --output <path>      (build) explicit preview/export output path
   --standalone         (build) wrap HTML for direct file:// preview
-  --label <l>          (create/update) version label (max 60 chars)
+  --label <l>          (create/update) version label (max 60 bytes; note: CJK chars are 3 bytes each, so keep labels terse)
   --password <p>       encrypt client-side; server only stores ciphertext
   --api <url>          instance URL (default: OPEN_ARTIFACTS_URL or config)
   --force              overwrite on version conflict

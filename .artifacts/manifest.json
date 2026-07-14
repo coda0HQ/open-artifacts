@@ -2,37 +2,13 @@
   "manifestVersion": 2,
   "artifacts": [
     {
-      "id": "9bG94htMRttn",
-      "url": "https://coda0.com/a/9bG94htMRttn",
-      "version": 2,
-      "recipe": ".artifacts/recipes/open-artifacts-architecture-overview.recipe.json",
-      "recipeHash": "sha256:ec8e3d03e81cbc13e5ef193b88a695000d135e6e30e99f7297a379559e1fccf8",
-      "inputHash": "sha256:37cc65ebf2a96d2c2556ada71488b41be4c8ecfbeb5edb1357239fb6d72c143a",
-      "outputHash": "sha256:218bceff44892d608ce5ce9dd987253baf1c592aaf573e8eee1cb4e323edb3f6",
-      "strategy": "direct",
-      "autoUpdate": false,
-      "snapshot": {
-        "CLAUDE.md": "688eb6e659b978fe1b364e0f447c25524a2abbdb27e417a3baee1643fea27c9d",
-        "docs/architecture.md": "6aaa2b2deb9715e7b5745e3c64961ab87f468b6e945788b5b4f3ef1af8098709",
-        "docs/saas-design.md": "30763d132614f0c2b81b9a4ca7d2c9234f50e8bc80d4c4af92a247e77dc1bad5",
-        "PRODUCT.md": "4d7ec90effcd50890f955689a50ba2f9ef83b071ded66e3878a222c0f8cd875a",
-        "src/api.ts": "ddad91ff6aeae6a1b164b637800ebdb44366c9a4a6d1790cc53a8c62978b406e",
-        "src/domain.ts": "e5a261d1c99ecdcf9c88f453d9e78d00b5f29057692cdc8d5c0946fd4cb70ce6",
-        "src/index.ts": "17990528b446551ae45d6e3bde21a167b55a396336a17df626d64cd112bfa885",
-        "src/store.ts": "3c963a0ff1aad26c43c2da30a69c972b6933064c022e5427280fea55df25b074",
-        "src/wrap.ts": "a0ca26ddbdfdc2e3c153654dbacb80e58755277e5ea586f4ef3983c54d7d45b2",
-        "wrangler.jsonc": "870a14d7bcf752797ea7417d223918de78806e038e7fa8e625a04a56734e9b74"
-      },
-      "updatedAt": "2026-07-14T05:59:14.907Z"
-    },
-    {
       "id": "pg7zuNunQpo5",
       "url": "https://coda0.com/a/pg7zuNunQpo5",
-      "version": 21,
+      "version": 22,
       "recipe": ".artifacts/recipes/open-artifacts-canvas-overview-pg7zuNun.recipe.json",
       "recipeHash": "sha256:f61c0739fc83c2d797434cd9986b5531cec6a06a2ad5c51b8670794385bf6dac",
-      "inputHash": "sha256:d74ed348999d87659a945d0629273cbdcaca4edf24387f00f0baacdd3a40fc80",
-      "outputHash": "sha256:76f2b0350e50d75f968292576e414e6e8c382a80bb09cae1308157e2fb86e22f",
+      "inputHash": "sha256:59cdef2d43c4f4eb4500d2eaaaf38a83589a674ae195f02c1d735404a69de460",
+      "outputHash": "sha256:15aace4979d1c38adbcd171efcdde682793b3aef8f0d8a1f69dae16e61f8f70f",
       "strategy": "direct",
       "autoUpdate": false,
       "snapshot": {
@@ -40,16 +16,16 @@
         "README.md": "8953aaf7d6e10d7181928ac83564a11c8d141e7247ccba4511a16f9594884703",
         "skills/using-open-artifacts/references/canvas.md": "ba132bbf4af65926a6607997fd992b92ea54648aa66358a01b2411548fc62a20"
       },
-      "updatedAt": "2026-07-14T06:00:03.359Z"
+      "updatedAt": "2026-07-14T08:43:16.474Z"
     },
     {
       "id": "tSXeJLyobwpY",
       "url": "https://coda0.com/a/tSXeJLyobwpY",
-      "version": 28,
+      "version": 29,
       "recipe": ".artifacts/recipes/open-artifacts-self-hosted-claude-code-a-tSXeJLyo.recipe.json",
       "recipeHash": "sha256:85d5d8b0f7ee2ecbbd29a88d6332fe5840a4c77717fadbf508b393fd619e0b2e",
-      "inputHash": "sha256:3593d55ab0f0f6bb1c4be7583088f1ec76a9585754e1c90cc9bcb8b34c67d71a",
-      "outputHash": "sha256:c178045e4ca7936c01de8a9da096fb9825d6059ea866cf9af044c0db7cbbe0ad",
+      "inputHash": "sha256:d47e3c9981d44cc26188c4a2a7c2401ad63721694f1eb6eebecbe4cd93cce992",
+      "outputHash": "sha256:7a6482071eb89bb71621a4d99f08cb8fc1b29417110dc603b48f52b59df06a73",
       "strategy": "direct",
       "autoUpdate": true,
       "snapshot": {
@@ -75,13 +51,13 @@
         "skills/using-open-artifacts/references/recipe.md": "07c363b7fe77f8a7884c8813880bec81669e607550ba871334017bc04ce0d258",
         "skills/using-open-artifacts/references/recipe.schema.json": "a0abf71802ae3a8e5e8a8b86c6abe4083b30036df44872e1a7948fec85d5e8af",
         "skills/using-open-artifacts/references/tokens.css": "8cade179f0c3cfb265e502637e1bc60d448e4d9d4ac85c5bcd75db0357b59cb2",
-        "skills/using-open-artifacts/scripts/artifact.mjs": "4f3aff05e857f6f931a1721676f50cd6104596e36c3bebc9a8ef8c7a55c0716e",
+        "skills/using-open-artifacts/scripts/artifact.mjs": "76471c0b37665499b6ab21762f5298a0b61f76004ea86eb9997b989d8a95586b",
         "skills/using-open-artifacts/scripts/build-artifact.mjs": "601d527acf81d7e1cb529bd1f5e23ddc2ecd4304ae8e2f7c97dc62986ed4ec80",
         "skills/using-open-artifacts/scripts/lib/compose.mjs": "d5127c4d6015ec0dc90c42bbd724d23392df4b21665acd452f13f87b46f99cdb",
         "skills/using-open-artifacts/scripts/lib/contrast.mjs": "6a5761aa6a4859c5282d4228977a2ed577aadb0a4e8b87fda65b0f0ad9a18007",
         "skills/using-open-artifacts/scripts/lib/recipe.mjs": "9b1fc9f47849c783df020e1f329baa368569986c8a91bfb102bba20a6156d2c4",
-        "skills/using-open-artifacts/scripts/lib/validate.mjs": "d8a22cad2ef7913749f921e8e3803716295587e0ba4e1fbc48e828f8d229ab2a",
-        "skills/using-open-artifacts/SKILL.md": "129ea3a906682b9a2d03bc0bd92595ce46d986bd6a0592e0f819ae7b70439746",
+        "skills/using-open-artifacts/scripts/lib/validate.mjs": "9254b9b45c646b9f8f49e828b1c1c7b7f858cc72e4aa623ab22c43229c107112",
+        "skills/using-open-artifacts/SKILL.md": "814cde87be7c81841217f9723d80aea4cf3d8278cd746faeb1ac49f626659ef7",
         "src/api.ts": "ddad91ff6aeae6a1b164b637800ebdb44366c9a4a6d1790cc53a8c62978b406e",
         "src/domain.ts": "e5a261d1c99ecdcf9c88f453d9e78d00b5f29057692cdc8d5c0946fd4cb70ce6",
         "src/index.ts": "17990528b446551ae45d6e3bde21a167b55a396336a17df626d64cd112bfa885",
@@ -91,7 +67,31 @@
         "src/wrap.ts": "a0ca26ddbdfdc2e3c153654dbacb80e58755277e5ea586f4ef3983c54d7d45b2",
         "wrangler.jsonc": "870a14d7bcf752797ea7417d223918de78806e038e7fa8e625a04a56734e9b74"
       },
-      "updatedAt": "2026-07-14T06:01:56.337Z"
+      "updatedAt": "2026-07-14T08:43:36.310Z"
+    },
+    {
+      "id": "9bG94htMRttn",
+      "url": "https://coda0.com/a/9bG94htMRttn",
+      "version": 3,
+      "recipe": ".artifacts/recipes/open-artifacts-architecture-overview.recipe.json",
+      "recipeHash": "sha256:ec8e3d03e81cbc13e5ef193b88a695000d135e6e30e99f7297a379559e1fccf8",
+      "inputHash": "sha256:ebab95a1f9df04f733592c7409e34513e0e7fc1bf959257c6539bd7ac2246cc4",
+      "outputHash": "sha256:a409111ac3aecd02bf3de0870466f081342b03853ad8ccfdae37a358bc06490a",
+      "strategy": "direct",
+      "autoUpdate": false,
+      "snapshot": {
+        "CLAUDE.md": "688eb6e659b978fe1b364e0f447c25524a2abbdb27e417a3baee1643fea27c9d",
+        "docs/architecture.md": "6aaa2b2deb9715e7b5745e3c64961ab87f468b6e945788b5b4f3ef1af8098709",
+        "docs/saas-design.md": "30763d132614f0c2b81b9a4ca7d2c9234f50e8bc80d4c4af92a247e77dc1bad5",
+        "PRODUCT.md": "4d7ec90effcd50890f955689a50ba2f9ef83b071ded66e3878a222c0f8cd875a",
+        "src/api.ts": "ddad91ff6aeae6a1b164b637800ebdb44366c9a4a6d1790cc53a8c62978b406e",
+        "src/domain.ts": "e5a261d1c99ecdcf9c88f453d9e78d00b5f29057692cdc8d5c0946fd4cb70ce6",
+        "src/index.ts": "17990528b446551ae45d6e3bde21a167b55a396336a17df626d64cd112bfa885",
+        "src/store.ts": "3c963a0ff1aad26c43c2da30a69c972b6933064c022e5427280fea55df25b074",
+        "src/wrap.ts": "a0ca26ddbdfdc2e3c153654dbacb80e58755277e5ea586f4ef3983c54d7d45b2",
+        "wrangler.jsonc": "870a14d7bcf752797ea7417d223918de78806e038e7fa8e625a04a56734e9b74"
+      },
+      "updatedAt": "2026-07-14T08:45:30.064Z"
     }
   ]
 }

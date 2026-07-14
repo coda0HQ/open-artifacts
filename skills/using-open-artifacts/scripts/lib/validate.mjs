@@ -305,10 +305,16 @@ function validateScrollspy(authoredScripts) {
   const errors = [];
 
   // RULE 1 — bottom-boundary fallback OR a generous IO band. A *boundary
-  // expression* (not a bare scrollY/innerHeight/scrollHeight anywhere — those
-  // match an unrelated back-to-top button and false-pass). (Reviewer fix.)
+  // expression* compares scroll position against the scrollable range — it must
+  // reference scrollHeight (or a maxScroll/atBottom local derived from it) so an
+  // unrelated back-to-top button (`if (scrollY > 100)`) does not false-pass.
+  // Accept the common shapes: a maxScroll/atBottom local, scrollHeight minus
+  // innerHeight, scrollY compared against scrollHeight/maxScroll, AND the
+  // additive form `innerHeight + scrollY >= scrollHeight` (functionally
+  // identical, used by the project-intro artifact) — so a correct fallback is
+  // not rejected just for spelling the comparison additively.
   const boundaryExpr =
-    /\b(?:maxScroll|atBottom)\b|\bscrollHeight\s*-\s*(?:window\.)?innerHeight\b|\bscrollY\s*[<>=!]+\s*[^;]{0,60}?scrollHeight\b|\bscrollY\s*[<>=!]+\s*[^;]{0,60}?maxScroll\b/.test(
+    /\b(?:maxScroll|atBottom)\b|\bscrollHeight\s*-\s*(?:window\.)?innerHeight\b|\bscrollY\s*[<>=!]+\s*[^;]{0,60}?scrollHeight\b|\bscrollY\s*[<>=!]+\s*[^;]{0,60}?maxScroll\b|\b(?:window\.)?innerHeight\s*\+\s*(?:window\.)?scrollY\s*[<>=!]+\s*[^;]{0,40}?scrollHeight\b|\b(?:window\.)?scrollY\s*\+\s*(?:window\.)?innerHeight\s*[<>=!]+\s*[^;]{0,40}?scrollHeight\b/.test(
       js,
     );
 

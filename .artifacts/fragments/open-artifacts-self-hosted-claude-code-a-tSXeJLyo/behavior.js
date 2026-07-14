@@ -17,7 +17,7 @@ document.documentElement.classList.add('js');
     if(current!==id){current=id;Object.keys(links).forEach(function(k){links[k].classList.toggle('active',k===current)})}
     reveal(links[id],instant);
   }
-  function atEnd(){return window.scrollY+window.innerHeight>=document.documentElement.scrollHeight-2}
+  function atEnd(){var maxScroll=document.documentElement.scrollHeight-window.innerHeight;return window.scrollY>=maxScroll-2}
   function markVisible(){
     if(last&&atEnd()){mark(last.id,false);return}
     var best=null,bestR=0;

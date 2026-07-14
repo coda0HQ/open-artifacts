@@ -749,6 +749,43 @@ describe("Recipe builder", () => {
     expect(result.code).toBe(0);
   });
 
+  it("passes a scrollspy whose bottom-boundary uses the additive innerHeight+scrollY form", async () => {
+    // The project-intro artifact used `window.scrollY + window.innerHeight >=
+    // document.documentElement.scrollHeight - 2` — functionally correct, but the
+    // gate must accept this additive spelling, not just the maxScroll local form.
+    const scriptsDir = join(projectDir, "scrollspy-additive-fragments");
+    mkdirSync(scriptsDir, { recursive: true });
+    writeFileSync(
+      join(scriptsDir, "behavior.js"),
+      [
+        "var links = [].slice.call(document.querySelectorAll('.nav-chips a'));",
+        "var sections = links.map(function(a){ return document.getElementById(a.getAttribute('href').slice(1)); });",
+        "var lastIdx = sections.length - 1;",
+        "function setActive(id){ links.forEach(function(a){ if(a.getAttribute('href')==='#'+id) a.setAttribute('aria-current','true'); else a.removeAttribute('aria-current'); }); }",
+        "function atEnd(){ return window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2; }",
+        "function recompute(){ if(atEnd() && lastIdx >= 0){ setActive(sections[lastIdx].id); return; } }",
+        "var io = new IntersectionObserver(function(entries){ entries.forEach(function(e){ if(e.isIntersecting && e.target.id) setActive(e.target.id); }); }, { rootMargin: '-40% 0px -55% 0px', threshold: 0 });",
+        "sections.forEach(function(s){ if(s) io.observe(s); });",
+        "window.addEventListener('scroll', recompute, { passive: true });",
+      ].join("\n"),
+    );
+    const recipe = writeRecipe("scrollspy-additive", {
+      mutate: (r) => {
+        r.artifact.level = 2;
+        r.document.fragments.scripts = [
+          "../scrollspy-additive-fragments/behavior.js",
+        ];
+      },
+      body: '<main><nav class="nav-chips"><a href="#a">A</a><a href="#b">B</a></nav><section id="a">a</section><section id="b">b</section></main>\n',
+    });
+    writeFileSync(
+      recipe.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n',
+    );
+    const result = await run(["validate", recipe.recipePath]);
+    expect(result.code).toBe(0);
+  });
+
   it("passes a lazy-image-reveal artifact (not a scrollspy) untouched", async () => {
     const scriptsDir = join(projectDir, "lazy-reveal-fragments");
     mkdirSync(scriptsDir, { recursive: true });

@@ -40,6 +40,23 @@
     sections.forEach(function (sec) {
       spy.observe(sec);
     });
+
+    // Bottom-boundary fallback: when the page is scrolled to the bottom,
+    // the IO band (-60% bottom margin) never intersects the last section,
+    // so the last tab would stay inactive. Activate the last section when
+    // we are within 4px of the scroll floor.
+    var lastSection = sections[sections.length - 1];
+    function onScroll() {
+      if (
+        window.scrollY >=
+        document.documentElement.scrollHeight - window.innerHeight - 4
+      ) {
+        setActive(lastSection.id);
+      }
+    }
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll, { passive: true });
+    onScroll();
   }
 
   navLinks.forEach(function (link) {
