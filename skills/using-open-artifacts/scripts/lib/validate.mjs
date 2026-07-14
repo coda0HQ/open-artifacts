@@ -322,7 +322,7 @@ export function validateBuild(loaded, composed) {
       )
     ) {
       fail(
-        "HTML body fragments cannot contain document wrappers, style, or script elements",
+        "HTML body fragments cannot contain document wrappers, <style>, or <script> elements — put CSS in document.fragments.styles and JS in document.fragments.scripts, not inline in the body",
       );
     }
     // A repeated attribute on one start tag is silent data loss: HTML parsers
