@@ -20,7 +20,7 @@
   },
   "document": {
     "language": "en",
-    "theme": "migrated",
+    "theme": "modern-minimal-canvas",
     "fragments": {
       "theme": [
         "../fragments/open-artifacts-canvas-overview-pg7zuNun/theme.css"

@@ -196,7 +196,7 @@ versions(artifact_id, version, label, title, description, favicon, format,
     <details class="oa-details">
       <summary>身份与鉴权（无账号）</summary>
       <div class="oa-prose">
-        <p>Artifact id：12 字符 crypto-random，base58-like 字母表（不可猜、默认不列出）。Write token：<code>wt_</code> + 32 random bytes base64url，<code>create</code> 时返回一次；只存 SHA-256(token)，用 <code>crypto.subtle.timingSafeEqual</code> 比较。可选实例门：<code>CREATE_TOKEN</code> secret 设了，<code>POST /api/artifacts</code> 需要它作 bearer；没设 = 开放实例（仅限流）。可选 canonical 域：<code>PUBLIC_URL</code>（如 <code>https://coda0.com</code>）是每个生成链接的 base。</p>
+        <p>Artifact id：12 字符 crypto-random，base58-like 字母表（不可猜、默认不列出）。Write token：<code>wt_</code> + 32 random bytes base64url，<code>create</code> 时返回一次；只存 SHA-256(token)，用 <code>crypto.subtle.timingSafeEqual</code> 比较。可选实例门：<code>CREATE_TOKEN</code> secret 设了，<code>POST /api/artifacts</code> 需要它作 bearer；没设 = 开放实例（应用层无限流，仅这道 bearer 门）。可选 canonical 域：<code>PUBLIC_URL</code>（如 <code>https://coda0.com</code>）是每个生成链接的 base。</p>
       </div>
     </details>
     <details class="oa-details">

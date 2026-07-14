@@ -5,18 +5,18 @@
       <!-- Row 1: overview -> what-it-is (primary narrative, same row) -->
       <path d="M 1280 260 L 1400 260" data-from="project-overview" data-to="what-it-is"/>
       <!-- Spine: overview down to publishing-flow (the project -> the flow) -->
-      <path d="M 640 520 C 640 580, 640 580, 640 640" data-from="project-overview" data-to="publishing-flow"/>
+      <path d="M 640 520 C 640 595, 640 595, 640 670" data-from="project-overview" data-to="publishing-flow"/>
       <!-- Row 2 flow: publishing-flow -> levels-canvas -> design-directions -->
-      <path d="M 1280 900 L 1400 900" data-from="publishing-flow" data-to="levels-canvas"/>
-      <path d="M 1750 900 L 1870 900" data-from="levels-canvas" data-to="design-directions"/>
+      <path d="M 1280 930 L 1400 930" data-from="publishing-flow" data-to="levels-canvas"/>
+      <path d="M 1750 930 L 1870 930" data-from="levels-canvas" data-to="design-directions"/>
       <!-- publishing-flow down to validation-gates (the flow is gated) -->
-      <path d="M 500 1160 C 500 1200, 500 1200, 500 1240" data-from="publishing-flow" data-to="validation-gates"/>
+      <path d="M 500 1190 C 500 1265, 500 1265, 500 1340" data-from="publishing-flow" data-to="validation-gates"/>
       <!-- validation-gates -> viewer-chrome (gates feed the served page) -->
-      <path d="M 1000 1480 L 1120 1480" data-from="validation-gates" data-to="viewer-chrome"/>
+      <path d="M 1000 1580 L 1120 1580" data-from="validation-gates" data-to="viewer-chrome"/>
       <!-- viewer-chrome down to storage-bindings (served from storage) -->
-      <path d="M 1440 1640 C 1440 1680, 500 1680, 500 1720" data-from="viewer-chrome" data-to="storage-bindings"/>
+      <path d="M 1450 1820 C 1450 1895, 500 1895, 500 1970" data-from="viewer-chrome" data-to="storage-bindings"/>
       <!-- storage-bindings -> local-shared-recipes (sources live alongside state) -->
-      <path d="M 1000 1960 L 1120 1960" data-from="storage-bindings" data-to="local-shared-recipes"/>
+      <path d="M 1000 2210 L 1120 2210" data-from="storage-bindings" data-to="local-shared-recipes"/>
     </svg>
 
     <!-- F1: Project overview — hero with working tour/link interactions -->
@@ -78,7 +78,7 @@
 
     <!-- F3: Publishing flow — mini Recipe-builder simulator -->
     <section class="oa-frame" id="publishing-flow" data-tour="3"
-             style="--x:0;--y:640;--w:1280;--h:520">
+             style="--x:0;--y:670;--w:1280;--h:520">
       <button class="oa-frame-label" type="button">Publishing flow</button>
       <div class="oa-frame-body" inert>
         <div class="fr-pad tight" id="pf-root">
@@ -127,7 +127,7 @@
 
     <!-- F4: Levels & canvas — level picker with live preview -->
     <section class="oa-frame" id="levels-canvas" data-tour="4"
-             style="--x:1400;--y:640;--w:350;--h:520">
+             style="--x:1400;--y:670;--w:350;--h:520">
       <button class="oa-frame-label" type="button">Levels &amp; canvas</button>
       <div class="oa-frame-body" inert>
         <div class="fr-pad tight" id="lc-root">
@@ -155,7 +155,7 @@
 
     <!-- F5: Design directions — direction switcher with live swap -->
     <section class="oa-frame" id="design-directions" data-tour="5"
-             style="--x:1870;--y:640;--w:560;--h:520">
+             style="--x:1870;--y:670;--w:560;--h:520">
       <button class="oa-frame-label" type="button">Design directions</button>
       <div class="oa-frame-body" inert>
         <div class="fr-pad tight" id="dd-root">
@@ -182,7 +182,7 @@
 
     <!-- F6: Validation gates — checklist + snippet tripper -->
     <section class="oa-frame" id="validation-gates" data-tour="6"
-             style="--x:0;--y:1240;--w:1000;--h:480">
+             style="--x:0;--y:1340;--w:1000;--h:480">
       <button class="oa-frame-label" type="button">Validation gates</button>
       <div class="oa-frame-body" inert>
         <div class="fr-pad tight" id="vg-root">
@@ -207,7 +207,7 @@
 
     <!-- F7: Viewer chrome — theme toggle + sticky header demo -->
     <section class="oa-frame" id="viewer-chrome" data-tour="7"
-             style="--x:1120;--y:1240;--w:660;--h:480">
+             style="--x:1120;--y:1340;--w:660;--h:480">
       <button class="oa-frame-label" type="button">Viewer chrome</button>
       <div class="oa-frame-body" inert>
         <div class="fr-pad tight" id="vc-root">
@@ -232,7 +232,7 @@
 
     <!-- F8: Storage & bindings — interactive D1/R2 schema diagram -->
     <section class="oa-frame" id="storage-bindings" data-tour="8"
-             style="--x:0;--y:1744;--w:1000;--h:480">
+             style="--x:0;--y:1970;--w:1000;--h:480">
       <button class="oa-frame-label" type="button">Storage &amp; bindings</button>
       <div class="oa-frame-body" inert>
         <div class="fr-pad tight" id="sb-root">
@@ -265,7 +265,7 @@
 
     <!-- F9: Local vs shared recipes — path resolver toy -->
     <section class="oa-frame" id="local-shared-recipes" data-tour="9"
-             style="--x:1120;--y:1744;--w:660;--h:480">
+             style="--x:1120;--y:1970;--w:660;--h:480">
       <button class="oa-frame-label" type="button">Local vs shared recipes</button>
       <div class="oa-frame-body" inert>
         <div class="fr-pad tight" id="ls-root">
@@ -289,9 +289,12 @@
     </section>
 
     <!-- Freeform notes (counter-scaled; collapsed to chips at overview zoom).
-         Placed in row-gaps so no note crosses a frame rectangle. -->
-    <p class="oa-note" style="--x:1320;--y:540">The overview&rarr;focus zoom is the one orchestrated moment on this board. Per-frame motion stays quiet &mdash; canvas chrome is operated, not watched.</p>
-    <p class="oa-note" style="--x:1760;--y:1160">Every connector is a real relation: <span class="fr-mono">data-from</span>/<span class="fr-mono">data-to</span> drive spotlight. No decorative spaghetti.</p>
-    <p class="oa-note" style="--x:1020;--y:1640">Gates feed the served page: validate &rarr; compose &rarr; wrap &rarr; serve under sandbox + <span class="fr-mono">default-src 'none'</span>.</p>
+         Placed in the full-width row-gaps (150 world px) between rows, 15px
+         clear of the frame edge on either side, so the note's ~360x120
+         expanded box never crosses a frame rectangle -- a 120px-wide column
+         gutter can't hold a note this wide, so notes live in row-gaps only. -->
+    <p class="oa-note" style="--x:1400;--y:535">The overview&rarr;focus zoom is the one orchestrated moment on this board. Per-frame motion stays quiet &mdash; canvas chrome is operated, not watched.</p>
+    <p class="oa-note" style="--x:1650;--y:1205">Every connector is a real relation: <span class="fr-mono">data-from</span>/<span class="fr-mono">data-to</span> drive spotlight. No decorative spaghetti.</p>
+    <p class="oa-note" style="--x:900;--y:1835">Gates feed the served page: validate &rarr; compose &rarr; wrap &rarr; serve under sandbox + <span class="fr-mono">default-src 'none'</span>.</p>
   </div>
 </div>

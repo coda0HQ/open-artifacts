@@ -21,7 +21,7 @@
 }
 
 /* ── Frame-internal components (token-driven) ───────────────────────── */
-.fr-pad { padding: var(--space-7) var(--space-10); height: 100%; box-sizing: border-box; display: flex; flex-direction: column; gap: var(--space-4); overflow: auto; }
+.fr-pad { padding: var(--space-7) var(--space-10); height: 100%; box-sizing: border-box; display: flex; flex-direction: column; gap: var(--space-4); }
 .fr-pad.tight { padding: var(--space-5) var(--space-7); gap: var(--space-3); }
 .fr-pad.center { align-items: center; text-align: center; max-width: 60ch; margin: 0 auto; justify-content: center; }
 .fr-pad.center .fr-row { justify-content: center; }
