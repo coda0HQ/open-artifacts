@@ -93,19 +93,19 @@
     {
       "id": "pg7zuNunQpo5",
       "url": "https://coda0.com/a/pg7zuNunQpo5",
-      "version": 34,
+      "version": 36,
       "recipe": ".artifacts/recipes/open-artifacts-canvas-overview-pg7zuNun.recipe.json",
       "recipeHash": "sha256:803466b96f479859404a7fb61dc0977df7b3f9680eea0edb8ca3a39d27487854",
-      "inputHash": "sha256:683ee1e3ccedf3c059e4550aa6447c4b2f20f038a968bf722c78c69a840f3adf",
-      "outputHash": "sha256:b3fdfaeb768c0a8baf52b1200e3f1e04e7f99a6a8904b2b7e558c6951bf6d1b7",
+      "inputHash": "sha256:a16ffb1d285e1e4f00d92ee793cb3713919603163f02b189ea98f986985a1e2d",
+      "outputHash": "sha256:45953e0e783a3eeeafc08dffe42d6239651a6becd1b5c88e302efa530d378dfa",
       "strategy": "staged",
       "autoUpdate": false,
       "snapshot": {
         "docs/architecture.md": "614800001df5a9f835a1d6158c4b16cfd5ed73f2a6494fc21009711f24174891",
         "README.md": "7d2ab4c7d1b159a5eafc57b4989cea9f8b867ff26b9e1ff9ef88550a59426bd7",
-        "skills/using-open-artifacts/references/canvas.md": "ccdd1f4295c8c88c03606dad1d87f8f67158ba153cfbf5aa45a239c8902ecc37"
+        "skills/using-open-artifacts/references/canvas.md": "418a923a3e09e88f5762e16b95470252f14f5071852e0b1dbaf18c7f0d32759d"
       },
-      "updatedAt": "2026-07-14T16:00:08.082Z"
+      "updatedAt": "2026-07-14T16:24:53.875Z"
     }
   ]
 }

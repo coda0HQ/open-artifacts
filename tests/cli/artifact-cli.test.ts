@@ -1113,13 +1113,13 @@ describe("Recipe builder", () => {
     });
     expect(zeroGapResult.stderr).toContain("0px apart");
     expect(zeroGapResult.stderr).toContain(">=");
-    expect(zeroGapResult.stderr).toContain("8");
+    expect(zeroGapResult.stderr).toContain("24");
 
     const tightGap = writeRecipe("tight-gap-frames", {
       canvas: true,
       body: `<div class="oa-canvas" id="canvas"><div class="oa-plane" id="plane">
 <section class="oa-frame" id="first" data-tour="1" style="--x:0;--y:0;--w:390;--h:844"><button class="oa-frame-label" type="button">First</button><div class="oa-frame-body" inert>First</div></section>
-<section class="oa-frame" id="second" data-tour="2" style="--x:0;--y:852;--w:390;--h:844"><button class="oa-frame-label" type="button">Second</button><div class="oa-frame-body" inert>Second</div></section>
+<section class="oa-frame" id="second" data-tour="2" style="--x:0;--y:868;--w:390;--h:844"><button class="oa-frame-label" type="button">Second</button><div class="oa-frame-body" inert>Second</div></section>
 </div></div>`,
     });
     const tightGapResult = await run(["validate", tightGap.recipePath]);
@@ -1139,7 +1139,7 @@ describe("Recipe builder", () => {
           (i) =>
             `<section class="oa-frame" id="f${i}" data-tour="${
               i + 1
-            }" style="--x:${i * (1440 + 8)};--y:0;--w:1440;--h:900"><button class="oa-frame-label" type="button">F${i}</button><div class="oa-frame-body" inert>F${i}</div></section>`,
+            }" style="--x:${i * (1440 + 24)};--y:0;--w:1440;--h:900"><button class="oa-frame-label" type="button">F${i}</button><div class="oa-frame-body" inert>F${i}</div></section>`,
         )
         .join("")}</div></div>`,
     });
@@ -1162,7 +1162,7 @@ describe("Recipe builder", () => {
           (i) =>
             `<section class="oa-frame" id="f${i}" data-tour="${
               i + 1
-            }" style="--x:0;--y:${i * (844 + 8)};--w:390;--h:844"><button class="oa-frame-label" type="button">F${i}</button><div class="oa-frame-body" inert>F${i}</div></section>`,
+            }" style="--x:0;--y:${i * (844 + 24)};--w:390;--h:844"><button class="oa-frame-label" type="button">F${i}</button><div class="oa-frame-body" inert>F${i}</div></section>`,
         )
         .join("")}</div></div>`,
     });
@@ -1195,7 +1195,7 @@ describe("Recipe builder", () => {
       body: `<div class="oa-canvas" id="canvas"><div class="oa-plane" id="plane">
 <section class="oa-frame" id="first" data-tour="1" style="--x:0;--y:0;--w:390;--h:844"><button class="oa-frame-label" type="button">First</button><div class="oa-frame-body" inert>First</div></section>
 <section class="oa-frame" id="second" data-tour="2" style="--x:0;--y:900;--w:390;--h:844"><button class="oa-frame-label" type="button">Second</button><div class="oa-frame-body" inert>Second</div></section>
-<div class="oa-note" style="--x:195;--y:872">a note in the row-gap gutter (center 195,872 is between frames)</div>
+<div class="oa-note" style="--x:195;--y:856">a note in the row-gap gutter (center 195,872 is between frames)</div>
 </div></div>`,
     });
     const noteResult = await run(["validate", noteInGutter.recipePath]);

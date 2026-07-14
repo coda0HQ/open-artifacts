@@ -185,6 +185,16 @@ working around it in markup.
 .oa-frame-body > * {
   margin-inline: var(--space-2);
   width: auto;
+  /* A canvas frame is a spatial box, not a scrollport. Vertical drag pans the
+     whole canvas (the Figma model), so a frame body must NEVER scroll
+     internally — overflow:auto/scroll on an author's content wrapper (e.g.
+     .fr-pad height:100%;overflow:auto) is overridden to visible. The body's
+     own overflow:hidden (above) clips at the frame box; the runtime grows
+     --h to fit content (init measure), so nothing is truncated and no
+     in-frame scroll is ever needed. (overflow-x:auto is NOT used: the CSS
+     spec promotes overflow-y:visible to auto when the other axis is
+     non-visible, which would re-introduce vertical scroll.) */
+  overflow: visible;
 }
 .oa-frame[data-focused] .oa-frame-body { box-shadow: 0 0 0 2px var(--accent); }
 /* Drag = pan even inside a focused frame (the Figma model), so flowing text

@@ -183,9 +183,11 @@ function validateCanvas(content) {
   // minimum inter-frame gap, but ONLY for frames adjacent along an axis
   // (their projections overlap on the perpendicular axis). Diagonally
   // corner-touching frames (no shared axis overlap) and distant frames are
-  // not flagged. 8 world px = --space-2, the smallest spacing token: tight
-  // grids stay valid (an 8px seam is visibly separated), 0-gap does not.
-  const MIN_FRAME_GAP = 8;
+  // not flagged. 24 world px = --space-6: frames with different heights (one
+  // grew to fit content) sit on different visual rows and need clear
+  // separation so they don't read as glued. A tight same-size grid still
+  // passes (24px is a visible seam), 0/near-gap does not.
+  const MIN_FRAME_GAP = 24;
   for (let i = 0; i < rects.length; i += 1) {
     for (let j = i + 1; j < rects.length; j += 1) {
       const a = rects[i];

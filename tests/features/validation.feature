@@ -131,11 +131,11 @@ Feature: Build validation catches silent layout defects
   Scenario: Two canvas frames with a 0 world-px gap fail validation
     Given a canvas recipe with two frames stacked at 0 gap on the Y axis
     When the agent runs the artifact script with validate
-    Then the build fails naming both frames, the gap, and the minimum 8 world-px
+    Then the build fails naming both frames, the gap, and the minimum 24 world-px
     And no publish request is made
 
-  Scenario: Two canvas frames with an 8 world-px gap pass validation
-    Given a canvas recipe with two frames stacked with an 8 world-px vertical seam
+  Scenario: Two canvas frames with an 24 world-px gap pass validation
+    Given a canvas recipe with two frames stacked with a 24 world-px vertical seam
     When the agent runs the artifact script with validate
     Then the build succeeds
 
