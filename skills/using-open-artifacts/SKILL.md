@@ -209,8 +209,11 @@ fragment, no `:root`/`[data-theme="dark"]` requirement, no contrast check, no
 L1 measure-cap, no banned-trope grep). The viewer wraps the raw Markdown in
 `.oa-md` and renders it client-side with the viewer's default tokens, so:
 
-- `document.theme`, `document.fragments.theme`/`styles`/`scripts` are all
-  ignored — supply `document.fragments.body` with one or more `.md` files only.
+- `document.theme`, `document.fragments.theme`/`styles`/`scripts` must all
+  be **omitted** — `validate` *rejects* a Markdown Recipe that carries a
+  theme/styles/scripts fragment (error: "Markdown recipes only support body
+  fragments"). Supply `document.fragments.body` with one or more `.md` files
+  only; `document.theme` may be omitted or `null`.
 - You cannot theme, style, or script a Markdown artifact; if you need
   interaction, identity tokens, or a measure cap beyond the default, author it
   as HTML instead.
