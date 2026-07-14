@@ -260,6 +260,136 @@ function validateMeasureCap(loaded, composed) {
   );
 }
 
+// A scrollspy (IntersectionObserver on nav sections, or a scroll handler
+// that toggles aria-current on nav links by section id) can ship a
+// last-tab-stays-inactive-at-scroll-bottom bug: the IntersectionObserver's
+// rootMargin band is too tight for a short final section (so it never
+// intersects at scroll end), AND/OR the active-toggling function calls
+// scrollIntoView (re-triggering the observer and jittering), AND there is no
+// scroll-boundary fallback to force the last section active. This caught the
+// trip-plan v3 bug exactly. The gate is detect-only — if no scrollspy
+// signals are present it does nothing — and conservative: it fails ONLY on
+// the clear bug signature, never on ambiguous approaches (a different
+// active-selection heuristic is silently passed, not failed).
+function validateScrollspy(authoredScripts) {
+  const stripComments = (s) =>
+    s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'])\/\/[^\n]*/g, "$1");
+  const js = stripComments(authoredScripts);
+
+  // Active-state write: aria-current (setAttribute or assignment) OR a quoted
+  // exact 'active'/"active" classList arg. We deliberately do NOT match bare
+  // `.active` or `is-active` — those are generic state/animation class names
+  // used far beyond nav active-state and would false-positive lazy-reveal
+  // artifacts. (Reviewer fix: dropped `is-active` + bare `.active`.)
+  const activeWrite =
+    /setAttribute\s*\(\s*["']aria-current|aria-current\s*=|classList\.(?:add|remove|toggle)\s*\(\s*["']active["']\s*\)/;
+
+  // Signal A: an IntersectionObserver plus a section-ish collection name
+  // (sections|secs|panels|chapters|parts) plus any `.observe(` call. The
+  // collection name is what separates a nav scrollspy from a lazy-image
+  // reveal (which observes `imgs`/`els`, not `sections`); we don't verify the
+  // observe target identifier itself because the common idiom
+  // `sections.forEach(s => io.observe(s))` puts the observe inside a callback
+  // the regex can't scope to.
+  const ioSignal =
+    /new\s+IntersectionObserver\b/.test(js) &&
+    /\b(?:sections|secs|panels|chapters|parts)\b/.test(js) &&
+    /\.observe\s*\(/.test(js);
+
+  // Signal B: a scroll handler that toggles nav-link active state.
+  const scrollHandlerSignal =
+    /addEventListener\s*\(\s*["']scroll["']/.test(js) && activeWrite.test(js);
+
+  if (!ioSignal && !scrollHandlerSignal) return; // no scrollspy, gate silent
+
+  const errors = [];
+
+  // RULE 1 — bottom-boundary fallback OR a generous IO band. A *boundary
+  // expression* (not a bare scrollY/innerHeight/scrollHeight anywhere — those
+  // match an unrelated back-to-top button and false-pass). (Reviewer fix.)
+  const boundaryExpr =
+    /\b(?:maxScroll|atBottom)\b|\bscrollHeight\s*-\s*(?:window\.)?innerHeight\b|\bscrollY\s*[<>=!]+\s*[^;]{0,60}?scrollHeight\b|\bscrollY\s*[<>=!]+\s*[^;]{0,60}?maxScroll\b/.test(
+      js,
+    );
+
+  // IO band: extract the rootMargin. A bottom margin <= 45% lets a short last
+  // section still intersect at scroll end; a tight band (e.g. -55%) does not.
+  // Band-alone is fragile — the message says the fallback is preferred.
+  const rm = js.match(/rootMargin\s*:\s*["']([^"']+)["']/);
+  let tightBand = false;
+  if (rm) {
+    const parts = rm[1].trim().split(/\s+/);
+    let bottomMargin;
+    if (parts.length === 1) bottomMargin = parts[0];
+    else if (parts.length === 2) bottomMargin = parts[1];
+    else bottomMargin = parts[2]; // top right bottom left
+    const pct = /^(-?\d+(?:\.\d+)?)%$/.exec(bottomMargin ?? "");
+    if (pct && Math.abs(Number(pct[1])) > 45) tightBand = true;
+  }
+  if (tightBand && !boundaryExpr) {
+    errors.push(
+      "scrollspy: IntersectionObserver rootMargin bottom margin is too tight for a short last section and no bottom-boundary fallback exists — the last tab stays inactive at scroll bottom. Add a scroll/idle handler that activates the last section when window.scrollY >= document.documentElement.scrollHeight - window.innerHeight - 4, or widen the IO band so the bottom margin is <= 45%. The fallback is preferred.",
+    );
+  }
+
+  // RULE 2 — no scrollIntoView inside the active-toggling scope. A function
+  // that writes aria-current/active AND calls scrollIntoView re-triggers the
+  // observer and jitters. Extract function bodies with a brace-balanced scan
+  // (regex can't handle nested braces, so the common
+  // `function setActive(id){ links.forEach(a => { a.scrollIntoView(); }) }`
+  // would be truncated mid-body by a `[^}]*` regex).
+  const fnBodies = [];
+  // Match function-start openers: `function name(...)`, `function(...)`, or
+  // `=>` whose next non-space char is `{`. Two separate patterns avoid one
+  // giant alternation regex the parser chokes on; we union the matches.
+  const namedFn = /function\s+\w+\s*\([^)]*\)\s*\{/g;
+  const anonFn = /function\s*\([^)]*\)\s*\{/g;
+  const arrowFn = /=>\s*\{/g;
+  const starts = [];
+  for (const re of [namedFn, anonFn, arrowFn]) {
+    re.lastIndex = 0;
+    let mm = re.exec(js);
+    while (mm) {
+      starts.push(mm.index + mm[0].length - 1);
+      mm = re.exec(js);
+    }
+  }
+  for (const openIdx of starts) {
+    let depth = 1;
+    for (let i = openIdx + 1; i < js.length; i += 1) {
+      if (js[i] === "{") depth += 1;
+      else if (js[i] === "}") {
+        depth -= 1;
+        if (depth === 0) {
+          fnBodies.push(js.slice(openIdx + 1, i));
+          break;
+        }
+      }
+    }
+  }
+  for (const body of fnBodies) {
+    // Only flag a LEAF function — one whose body contains no nested function
+    // declaration/expression/arrow. A wrapper (IIFE, or a function whose body
+    // contains sibling function definitions) would "contain" both signals
+    // only because nested siblings define them, not because they co-occur in
+    // the same scope. The trip-plan v3 bug co-locates them in the innermost
+    // callback; the v4 fix separates them into two leaf functions.
+    const isLeaf = !/function\b|=>/.test(body);
+    if (!isLeaf) continue;
+    if (activeWrite.test(body) && /\.scrollIntoView\s*\(/.test(body)) {
+      errors.push(
+        "scrollspy: the function that sets aria-current/active also calls scrollIntoView, which re-triggers the IntersectionObserver and jitters — call scrollIntoView only on the nav chip from a separate sync function (or omit it), not from setActive.",
+      );
+      break; // one hit is enough; the message is the same
+    }
+  }
+  if (errors.length === 1) {
+    fail(errors[0]);
+  } else if (errors.length > 1) {
+    fail(`scrollspy defects (fix all):\n  - ${errors.join("\n  - ")}`);
+  }
+}
+
 function validateTheme(loaded) {
   if (loaded.recipe.artifact.format !== "html") return;
   const themeFragments = loaded.descriptors.filter(
@@ -382,6 +512,7 @@ export function validateBuild(loaded, composed) {
       composed.authoredBody,
       composed.authoredScripts,
     );
+    validateScrollspy(composed.authoredScripts);
     validateMeasureCap(loaded, composed);
   }
   if (artifact.canvas) validateCanvas(composed.authoredBody);

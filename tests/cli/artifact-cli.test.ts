@@ -680,6 +680,102 @@ describe("Recipe builder", () => {
     expect(result.code).toBe(0);
   });
 
+  it("fails a scrollspy with a tight IO band, no boundary fallback, and scrollIntoView in setActive", async () => {
+    const scriptsDir = join(projectDir, "scrollspy-bad-fragments");
+    mkdirSync(scriptsDir, { recursive: true });
+    writeFileSync(
+      join(scriptsDir, "behavior.js"),
+      [
+        "var links = [].slice.call(document.querySelectorAll('.nav-chips a'));",
+        "var sections = links.map(function(a){ return document.getElementById(a.getAttribute('href').slice(1)); }).filter(Boolean);",
+        "function setActive(id){ links.forEach(function(a){ if(a.getAttribute('href')==='#'+id){ a.setAttribute('aria-current','true'); a.scrollIntoView(); } else a.removeAttribute('aria-current'); }); }",
+        "var io = new IntersectionObserver(function(entries){ entries.forEach(function(e){ if(e.isIntersecting && e.target.id) setActive(e.target.id); }); }, { rootMargin: '-40% 0px -55% 0px', threshold: 0 });",
+        "sections.forEach(function(s){ io.observe(s); });",
+      ].join("\n"),
+    );
+    const recipe = writeRecipe("scrollspy-bad", {
+      mutate: (r) => {
+        r.artifact.level = 2;
+        r.document.fragments.scripts = [
+          "../scrollspy-bad-fragments/behavior.js",
+        ];
+      },
+      body: '<main><nav class="nav-chips"><a href="#a">A</a><a href="#b">B</a></nav><section id="a">a</section><section id="b">b</section></main>\n',
+    });
+    writeFileSync(
+      recipe.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n',
+    );
+    const result = await run(["validate", recipe.recipePath], {
+      expectFailure: true,
+    });
+    expect(result.stderr).toContain("scrollspy:");
+    expect(result.stderr).toContain("bottom margin is too tight");
+    expect(result.stderr).toContain("scrollIntoView");
+    expect(requests).toHaveLength(0);
+  });
+
+  it("passes a scrollspy with a bottom-boundary fallback and chip-only scrollIntoView", async () => {
+    const scriptsDir = join(projectDir, "scrollspy-good-fragments");
+    mkdirSync(scriptsDir, { recursive: true });
+    writeFileSync(
+      join(scriptsDir, "behavior.js"),
+      [
+        "var links = [].slice.call(document.querySelectorAll('.nav-chips a'));",
+        "var sections = links.map(function(a){ return document.getElementById(a.getAttribute('href').slice(1)); });",
+        "var lastIdx = sections.length - 1;",
+        "function setActive(id){ links.forEach(function(a){ if(a.getAttribute('href')==='#'+id) a.setAttribute('aria-current','true'); else a.removeAttribute('aria-current'); }); }",
+        "function syncChipScroll(id){ var active = links.filter(function(a){ return a.getAttribute('href')==='#'+id; })[0]; if(active) active.scrollIntoView({ block:'nearest' }); }",
+        "function recompute(){ var docTop = window.scrollY; var maxScroll = document.documentElement.scrollHeight - window.innerHeight; if(maxScroll>0 && docTop >= maxScroll - 4){ var id = sections[lastIdx].id; setActive(id); syncChipScroll(id); return; } }",
+        "var io = new IntersectionObserver(function(entries){ entries.forEach(function(e){ if(e.isIntersecting && e.target.id){ setActive(e.target.id); syncChipScroll(e.target.id); } }); }, { rootMargin: '-45% 0px -45% 0px', threshold: 0 });",
+        "sections.forEach(function(s){ if(s) io.observe(s); });",
+        "window.addEventListener('scroll', recompute, { passive: true });",
+      ].join("\n"),
+    );
+    const recipe = writeRecipe("scrollspy-good", {
+      mutate: (r) => {
+        r.artifact.level = 2;
+        r.document.fragments.scripts = [
+          "../scrollspy-good-fragments/behavior.js",
+        ];
+      },
+      body: '<main><nav class="nav-chips"><a href="#a">A</a><a href="#b">B</a></nav><section id="a">a</section><section id="b">b</section></main>\n',
+    });
+    writeFileSync(
+      recipe.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n',
+    );
+    const result = await run(["validate", recipe.recipePath]);
+    expect(result.code).toBe(0);
+  });
+
+  it("passes a lazy-image-reveal artifact (not a scrollspy) untouched", async () => {
+    const scriptsDir = join(projectDir, "lazy-reveal-fragments");
+    mkdirSync(scriptsDir, { recursive: true });
+    writeFileSync(
+      join(scriptsDir, "behavior.js"),
+      [
+        "var imgs = [].slice.call(document.querySelectorAll('img[data-reveal]'));",
+        "function reveal(el){ el.classList.add('is-active'); el.scrollIntoView(); }",
+        "var io = new IntersectionObserver(function(entries){ entries.forEach(function(e){ if(e.isIntersecting) reveal(e.target); }); }, { rootMargin: '0px' });",
+        "imgs.forEach(function(i){ io.observe(i); });",
+      ].join("\n"),
+    );
+    const recipe = writeRecipe("lazy-reveal", {
+      mutate: (r) => {
+        r.artifact.level = 2;
+        r.document.fragments.scripts = ["../lazy-reveal-fragments/behavior.js"];
+      },
+      body: '<main><img data-reveal src="data:image/svg+xml,<svg></svg>"></main>\n',
+    });
+    writeFileSync(
+      recipe.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n',
+    );
+    const result = await run(["validate", recipe.recipePath]);
+    expect(result.code).toBe(0);
+  });
+
   it("rejects a dark --muted below 4.5:1 contrast against --bg", async () => {
     const lowContrast = writeRecipe("low-contrast-dark", {
       mutate: (recipe) => {

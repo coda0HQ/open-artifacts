@@ -102,3 +102,28 @@ Feature: Build validation catches silent layout defects
     Then the build succeeds because migration wraps the body in main.oa-prose
     And the migrated body fragment contains class="oa-prose"
     And the artifact is not locked out of future updates
+
+  Scenario: An artifact with no scrollspy passes validation untouched
+    Given an HTML recipe whose script wires a click handler and never references aria-current,
+      an IntersectionObserver on nav sections, or a scroll listener toggling active classes by section id
+    When the agent runs the artifact script with validate
+    Then the build succeeds and no scrollspy-related message is emitted
+
+  Scenario: A scrollspy with a tight IO band, no bottom-boundary fallback, and scrollIntoView in setActive fails validation
+    Given an HTML recipe whose script builds a scrollspy — an IntersectionObserver with a tight bottom rootMargin
+      observing a sections collection, with setActive toggling aria-current and calling scrollIntoView, and no boundary expression
+    When the agent runs the artifact script with validate
+    Then the build fails naming the bottom-boundary fallback as the preferred fix and the scrollIntoView self-interference
+    And no publish request is made
+
+  Scenario: A scrollspy with a bottom-boundary fallback and chip-only scrollIntoView passes validation
+    Given an HTML recipe whose script builds a scrollspy with a recompute that reads scrollY and scrollHeight
+      to activate the last section at scroll end, and scrollIntoView only in a separate sync function
+    When the agent runs the artifact script with validate
+    Then the build succeeds
+
+  Scenario: A lazy-image-reveal artifact (not a scrollspy) passes validation untouched
+    Given an HTML recipe whose script reveals images on viewport entry via IntersectionObserver and toggles is-active,
+      with no sections collection observed and no aria-current
+    When the agent runs the artifact script with validate
+    Then the build succeeds and no scrollspy-related message is emitted
