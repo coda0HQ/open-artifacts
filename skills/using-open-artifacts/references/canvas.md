@@ -171,6 +171,21 @@ working around it in markup.
      selection rings (see the frame contract) since they have no clearance. */
   padding: var(--space-5);
 }
+/* Inset direct children of the body horizontally so a full-width descendant
+   (a selected row's accent-soft fill, a hairline divider) clears the rounded
+   clip curve at every zoom. The body's own padding (20 world) minus the
+   radius (16) leaves only 4 world px of clearance — sub-pixel at overview
+   zoom (0.4 screen px at MIN k=0.1), and an author's scroll-container child
+   may itself render with 0 padding (e.g. when its --space-* tokens are
+   undefined), placing its full-width descendants flush to the content-box
+   edge. This 8 world-px side margin makes the clearance 12 world px (>=1
+   screen px at MIN zoom) unconditionally. width is reset so the margin does
+   not overflow the content box. An author who needs a genuinely full-bleed
+   direct child (edge-to-edge media) sets `margin-inline: 0` on that child. */
+.oa-frame-body > * {
+  margin-inline: var(--space-2);
+  width: auto;
+}
 .oa-frame[data-focused] .oa-frame-body { box-shadow: 0 0 0 2px var(--accent); }
 /* Drag = pan even inside a focused frame (the Figma model), so flowing text
    is never drag-selectable. Editable fields are the exception: they own their
