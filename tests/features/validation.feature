@@ -213,6 +213,26 @@ Feature: Build validation catches silent layout defects
     When the agent runs the artifact script with validate
     Then the build succeeds because leads and standfirsts are sanctioned large-type surfaces
 
+  Scenario: A callout at 16px (body-size pixels) passes validation
+    Given an HTML recipe whose styles set font-size:16px on a .positioning callout
+    When the agent runs the artifact script with validate
+    Then the build succeeds because body-size pixels are below the lead step
+
+  Scenario: A callout at var(--text-4xl) fails validation
+    Given an HTML recipe whose styles set font-size:var(--text-4xl) on a .positioning callout
+    When the agent runs the artifact script with validate
+    Then the build fails naming the enlarged-callout trope
+
+  Scenario: A .card-title at var(--text-xl) fails validation
+    Given an HTML recipe whose styles set font-size:var(--text-xl) on a .card-title selector
+    When the agent runs the artifact script with validate
+    Then the build fails because a generic card-title is not a sanctioned display surface
+
+  Scenario: A .page-title at var(--text-3xl) passes validation
+    Given an HTML recipe whose styles set font-size:var(--text-3xl) on a .page-title selector
+    When the agent runs the artifact script with validate
+    Then the build succeeds because a page title is a sanctioned large-type surface
+
   Scenario: A heading with an inline icon but no centered-row layout fails validation
     Given an HTML recipe whose body puts an inline <svg> in an <h2> that has neither
       the .oa-ico-text helper nor an authored display:flex/grid rule targeting it

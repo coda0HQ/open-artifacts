@@ -416,9 +416,9 @@ const TROPE_FLOATING_NAME_RE =
 // Sanctioned large-type surfaces pass: headings (h1–h6 + .oa-prose headings),
 // a hero/standfirst/display/quote set-piece, and font-size on :root/body.
 const TROPE_FONT_SIZE_RE =
-  /font-size\s*:\s*(?:var\(\s*--text-(?:lg|xl|2xl|3xl|display)\s*\)|1\.2\d*(?:rem|em)|1\.[3-9]\d*(?:rem|em)|[2-9](?:\.\d+)?(?:rem|em)|\d{2,}(?:px|pt))/i;
+  /font-size\s*:\s*(?:var\(\s*--text-(?:lg|xl|2xl|3xl|4xl|display)\s*\)|1\.2[5-9]\d*(?:rem|em)|1\.[3-9]\d*(?:rem|em)|[2-9](?:\.\d+)?(?:rem|em)|(?:[2-9]\d|\d{3,})(?:px|pt))/i;
 const TROPE_LARGE_NAME_RE =
-  /\b(?:hero|standfirst|lead|lede|display|kicker|eyebrow|quote|pull-?quote|setpiece|set-piece|masthead|headline|title)\b/i;
+  /\b(?:hero|standfirst|lead|lede|display|kicker|eyebrow|quote|pull-?quote|setpiece|set-piece|masthead|headline|page-title|site-title)\b/i;
 const TROPE_HEADING_SEL_RE = /(?:^|[>\s+~,(])(?:h[1-6]\b)/i;
 
 function parseRules(css) {

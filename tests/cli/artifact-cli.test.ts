@@ -795,6 +795,68 @@ describe("Recipe builder", () => {
     expect(result.code).toBe(0);
   });
 
+  it("passes a callout at 16px (body-size pixels, not oversized)", async () => {
+    const pxCallout = writeRecipe("positioning-px", {
+      mutate: (r) => {
+        r.artifact.level = 2;
+      },
+    });
+    writeFileSync(
+      pxCallout.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n.positioning{padding:1rem;background:var(--surface);border:1px solid var(--border);font-size:16px;line-height:1.5}\n',
+    );
+    const result = await run(["validate", pxCallout.recipePath]);
+    expect(result.code).toBe(0);
+  });
+
+  it("rejects a callout at var(--text-4xl) (display-tier token)", async () => {
+    const big = writeRecipe("positioning-4xl", {
+      mutate: (r) => {
+        r.artifact.level = 2;
+      },
+    });
+    writeFileSync(
+      big.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n.positioning{padding:1rem;background:var(--surface);border:1px solid var(--border);font-size:var(--text-4xl)}\n',
+    );
+    const result = await run(["validate", big.recipePath], {
+      expectFailure: true,
+    });
+    expect(result.stderr).toContain("enlarged callout");
+    expect(requests).toHaveLength(0);
+  });
+
+  it("rejects a .card-title callout at --text-xl (generic title selector)", async () => {
+    const cardTitle = writeRecipe("card-title", {
+      mutate: (r) => {
+        r.artifact.level = 2;
+      },
+    });
+    writeFileSync(
+      cardTitle.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n.card-title{font-size:var(--text-xl);font-weight:600}\n',
+    );
+    const result = await run(["validate", cardTitle.recipePath], {
+      expectFailure: true,
+    });
+    expect(result.stderr).toContain("enlarged callout");
+    expect(requests).toHaveLength(0);
+  });
+
+  it("passes a .page-title at var(--text-3xl) (sanctioned page title)", async () => {
+    const pageTitle = writeRecipe("page-title", {
+      mutate: (r) => {
+        r.artifact.level = 2;
+      },
+    });
+    writeFileSync(
+      pageTitle.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n.page-title{font-size:var(--text-3xl)}\n',
+    );
+    const result = await run(["validate", pageTitle.recipePath]);
+    expect(result.code).toBe(0);
+  });
+
   it("rejects a heading with an inline icon but no centered-row layout", async () => {
     const crooked = writeRecipe("crooked-icon", {
       body: '<main class="oa-prose"><h2><svg viewBox="0 0 24 24" fill="currentColor"><path d="M11 7H13V9H11V7Z"/></svg> What it is</h2></main>\n',
