@@ -548,6 +548,29 @@ working around it in markup.
 }
 ```
 
+## Comment pins (anchored comments)
+
+The viewer's anchored-comment layer drops a **pin** on the canvas when a user
+comments on a point. A pin is not authored content — the runtime injects it —
+but it obeys the same freeform-citizen rules as a note chip, so it is documented
+here rather than patched per artifact:
+
+- A pin is a child of the transformed `#plane`, positioned in **world**
+  coordinates via `--x`/`--y` (`left: calc(var(--x) * 1px); top: calc(var(--y) *
+  1px)`). The plane's `translate…scale` pans and zooms it for free.
+- It counter-scales **unconditionally** — `transform: scale(calc(1 / var(--k,
+  1))) translate(-50%, -50%)` — so it holds a constant on-screen size and stays
+  centred on its world point at every zoom. Unlike `.oa-note` it is **not**
+  gated on `CHIP_K` and uses an **uncapped** `1/k` (a pin is always pin-sized,
+  never a shrunk-then-clamped chip).
+- The pin's world coordinate is read from the plane transform **once**, at
+  comment time (`new DOMMatrixReadOnly(getComputedStyle(plane).transform)` →
+  `k=m.a, tx=m.e, ty=m.f`; `world = (screen − t) / k`). No camera polling.
+
+If you build a canvas that should host comments, keep `#plane` as the single
+transformed element and place spatial content in world coordinates — the pin
+layer then rides it with no per-artifact work.
+
 ## The vendored runtime — JS
 
 ```js

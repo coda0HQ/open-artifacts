@@ -399,12 +399,13 @@ document.getElementById("oa-content").innerHTML=marked.parse(${jsonForInlineScri
 <head>
 <meta charset="utf-8">
 ${cspMeta}<meta name="viewport" content="width=device-width, initial-scale=1">
-<style>${RESET_CSS}${format === "markdown" ? MARKDOWN_CSS : ""}</style>
+<style>${RESET_CSS}${format === "markdown" ? MARKDOWN_CSS : ""}${FRAME_ANCHOR_CSS}</style>
 </head>
 <body>
 ${body}
 <script>${THEME_SCRIPT}</script>
 <script>${FRAME_BRIDGE_SCRIPT}</script>
+<script>${FRAME_ANCHOR_SCRIPT}</script>
 </body>
 </html>
 `;
@@ -724,6 +725,59 @@ const FRAME_BRIDGE_SCRIPT = `
     }
   });
   send({type:"oa:ready"});
+})();
+`;
+
+// Canvas comment pin: a passive freeform child of the transformed plane. The
+// plane's own translate/scale pans and zooms it on the GPU for free; the pin's
+// own scale(1/k) cancels the zoom so it holds a constant on-screen size (the
+// collapsed-note-chip idiom), and translate(-50%,-50%) centres it. Unlike a
+// note it counter-scales unconditionally at every zoom (no CHIP_K threshold).
+const FRAME_ANCHOR_CSS = `
+.oa-cm-pin{position:absolute;left:calc(var(--x,0)*1px);top:calc(var(--y,0)*1px);transform:scale(calc(1/var(--k,1))) translate(-50%,-50%);transform-origin:0 0;z-index:2;width:22px;height:22px;padding:0;border:1px solid var(--oa-bg);border-radius:50% 50% 50% 2px;background:var(--oa-accent);cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.oa-cm-pin:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+`;
+
+// Frame side, canvas mode: capture a click to drop a pin (world coords, read
+// once from the plane transform) and render existing point anchors as passive
+// plane children. No-op on non-canvas documents (text mode is separate).
+const FRAME_ANCHOR_SCRIPT = `
+(function(){
+  var plane=document.querySelector('.oa-plane');
+  if(!plane||getComputedStyle(plane).transform==='none')return;
+  function screenToWorld(cx,cy){
+    var r=plane.getBoundingClientRect();
+    var m=new DOMMatrixReadOnly(getComputedStyle(plane).transform);
+    return {x:Math.round((cx-r.left-m.e)/m.a),y:Math.round((cy-r.top-m.f)/m.a)};
+  }
+  document.addEventListener('click',function(e){
+    if(window.__oaArmed!=='point')return;
+    e.stopPropagation();e.preventDefault();
+    window.__oaArmed=null;
+    var w=screenToWorld(e.clientX,e.clientY);
+    if(window.__oaSend)window.__oaSend({type:'oa:anchor:new',anchor:{mode:'point',x:w.x,y:w.y,anchorVersion:window.__oaViewedVersion||1},point:{x:e.clientX,y:e.clientY}});
+  },true);
+  window.__oaRenderMarkers=function(list){
+    var old=plane.querySelectorAll('.oa-cm-pin');
+    for(var i=0;i<old.length;i++)old[i].remove();
+    var vv=window.__oaViewedVersion||1;
+    (list||[]).forEach(function(cm){
+      if(!cm.anchor||cm.anchor.mode!=='point')return;
+      if((cm.anchor.anchorVersion||1)>vv)return;
+      var pin=document.createElement('button');
+      pin.className='oa-cm-pin';pin.type='button';
+      pin.setAttribute('aria-label','Open comment');
+      pin.style.setProperty('--x',String(cm.anchor.x));
+      pin.style.setProperty('--y',String(cm.anchor.y));
+      pin.setAttribute('data-id',cm.id);
+      pin.addEventListener('click',function(ev){
+        ev.stopPropagation();
+        if(window.__oaSend)window.__oaSend({type:'oa:anchor:open',ids:[cm.id],point:{x:ev.clientX,y:ev.clientY}});
+      });
+      plane.appendChild(pin);
+    });
+  };
+  if(window.__oaComments&&window.__oaComments.length)window.__oaRenderMarkers(window.__oaComments);
 })();
 `;
 
