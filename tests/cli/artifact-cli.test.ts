@@ -807,16 +807,30 @@ describe("Recipe builder", () => {
     const result = await run(["validate", recipe.recipePath], {
       expectFailure: true,
     });
-    expect(result.stderr).toContain("/vendor/mermaid.bundle.mjs");
+    expect(result.stderr).toContain("/vendor/mermaid.runtime.js");
     expect(requests).toHaveLength(0);
   });
 
-  it("accepts an allowlisted same-origin mermaid <script src> in the body", async () => {
+  it("rejects a module <script src> for mermaid (deferred load-order bug)", async () => {
+    const recipe = writeRecipe("mermaid-module", {
+      mutate: (r) => {
+        r.artifact.level = 1;
+      },
+      body: '<main class="oa-prose"><pre class="mermaid">flowchart LR\nA-->B</pre><script type="module" src="/vendor/mermaid.runtime.js"></script></main>\n',
+    });
+    const result = await run(["validate", recipe.recipePath], {
+      expectFailure: true,
+    });
+    expect(result.stderr).toContain('type="module"');
+    expect(requests).toHaveLength(0);
+  });
+
+  it("accepts an allowlisted same-origin regular mermaid <script src> in the body", async () => {
     const recipe = writeRecipe("mermaid", {
       mutate: (r) => {
         r.artifact.level = 1;
       },
-      body: '<main class="oa-prose"><pre class="mermaid">flowchart LR\nA-->B</pre><script type="module" src="/vendor/mermaid.bundle.mjs"></script></main>\n',
+      body: '<main class="oa-prose"><pre class="mermaid">flowchart LR\nA-->B</pre><script src="/vendor/mermaid.runtime.js"></script></main>\n',
     });
     const result = await run(["validate", recipe.recipePath]);
     expect(result.code).toBe(0);

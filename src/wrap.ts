@@ -31,7 +31,7 @@ function escapeInlineScript(source: string): string {
 // 'nonce-<value>' in script-src so 'unsafe-inline' can be dropped. script-src
 // is nonce-only with no 'strict-dynamic' and no external script host: the
 // only non-inline scripts allowed are same-origin ('self'), so mermaid loads
-// from /vendor/mermaid.bundle.mjs under 'self' while a runtime
+// from /vendor/mermaid.runtime.js under 'self' while a runtime
 // createElement("script", {src: externalURL}) is blocked (no host allowlisted)
 // — closing the inline-JS jsdelivr bypass (issue #11) WITHOUT breaking user JS.
 export function generateNonce(): string {
@@ -43,7 +43,7 @@ export function generateNonce(): string {
 }
 
 function scriptSrcForNonce(nonce: string): string {
-  // 'self' lets the same-origin /vendor/mermaid.bundle.mjs script load; the
+  // 'self' lets the same-origin /vendor/mermaid.runtime.js script load; the
   // nonce lets every inline <script> run. No 'strict-dynamic' (so trust does
   // not propagate from a nonce'd script to a runtime-created one) and no
   // external host (so a createElement("script", {src: <external>}) is blocked).
@@ -57,7 +57,7 @@ function scriptSrcForNonce(nonce: string): string {
 // over a stable CDN for Awwwards-listed families), style-src gains 'self' plus
 // the Google Fonts CSS host (so the same-origin /fonts/<slug>.css shim and
 // Google Fonts @import load). Runtime libraries (mermaid) are self-hosted:
-// the vendored bundle is served same-origin from /vendor/mermaid.bundle.mjs
+// the vendored bundle is served same-origin from /vendor/mermaid.runtime.js
 // (a static asset under public/), so script-src stays 'self' + nonce with no
 // external script host. The trade-off: artifacts lose the opaque-origin
 // guarantee and can read the host origin's localStorage/cookies, and an

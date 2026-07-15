@@ -19,7 +19,7 @@ const LINKEDOM_BUNDLE = join(VENDOR_DIR, "linkedom.bundle.mjs");
 
 const externalChecks = [
   // Any external (http/https) <script src> is blocked — runtime libraries load
-  // same-origin from /vendor/* (e.g. /vendor/mermaid.bundle.mjs), so no external
+  // same-origin from /vendor/* (e.g. /vendor/mermaid.runtime.js), so no external
   // script host ever appears in the CSP and the jsdelivr bypass is closed. The
   // validateScriptSrcs gate restricts WHICH same-origin /vendor/... path loads.
   [/<script\b[^>]*\bsrc\s*=\s*["']https?:\/\//i, "external script src"],
@@ -855,10 +855,19 @@ function validateFonts(authoredStyles) {
 // is inline (no src), points at an external host, or names a /vendor/... path
 // off the allowlist. Scripts execute, so the allowlist is deliberate code
 // change, not a runtime decision. See references/scripts.md.
-const ALLOWED_SCRIPT_BUNDLES = ["/vendor/mermaid.bundle.mjs"];
+//
+// The mermaid bundle is a REGULAR (non-module) IIFE script: the load-order bug
+// (issue #11) is that a module `<script src>` is deferred and runs AFTER the
+// scripts-slot inline init, so `window.mermaid` was undefined at init time. A
+// regular same-origin `<script src>` executes synchronously when the parser
+// hits it (blocking), and compose emits the body (with the `<script src>`)
+// BEFORE the scripts-slot inline init, so `window.mermaid` is defined first.
+// `type="module"` is therefore NOT permitted on a runtime-library <script>:
+// it reintroduces the deferred-execution load-order bug.
+const ALLOWED_SCRIPT_BUNDLES = ["/vendor/mermaid.runtime.js"];
 const SCRIPT_SRC_RE = /<script\b[^>]*\bsrc\s*=\s*["']([^"']+)["'][^>]*>/gi;
 // A same-origin /vendor/<bundle> path — bundle must be on the allowlist.
-const ALLOWED_SCRIPT_SRC_RE = /^\/vendor\/([a-z0-9][a-z0-9.-]*\.mjs)$/i;
+const ALLOWED_SCRIPT_SRC_RE = /^\/vendor\/([a-z0-9][a-z0-9.-]*\.(?:mjs|js))$/i;
 
 function validateScriptSrcs(authoredBody) {
   SCRIPT_SRC_RE.lastIndex = 0;
@@ -868,7 +877,19 @@ function validateScriptSrcs(authoredBody) {
     match !== null;
     match = SCRIPT_SRC_RE.exec(authoredBody)
   ) {
+    const tag = match[0];
     const url = match[1];
+    // A module <script src> is deferred: it executes AFTER document parse, so
+    // the scripts-slot inline init runs first and `window.mermaid` is
+    // undefined at init time — the load-order bug (issue #11). A regular
+    // (non-module) <script src> executes synchronously when the parser hits
+    // it, and compose emits the body before the scripts slot, so the global is
+    // set first. Reject `type="module"` on a runtime-library script.
+    if (/\btype\s*=\s*["']module["']/i.test(tag)) {
+      fail(
+        `a runtime-library <script src> must NOT use type="module" — module scripts are deferred and run AFTER the scripts-slot init, so window.mermaid is undefined at init time (the load-order bug). Use a regular <script src="${url}"> (no type). See references/scripts.md.`,
+      );
+    }
     const m = url.match(ALLOWED_SCRIPT_SRC_RE);
     if (m === null) {
       fail(
@@ -1033,20 +1054,21 @@ export function validateBuild(loaded, composed) {
       fail("style fragments cannot contain a closing style tag");
     }
     // Body fragments forbid document wrappers, <style>, and inline/external
-    // <script> — but a <script src="/vendor/mermaid.bundle.mjs"> (optionally
-    // with type="module") for an allowlisted runtime library is permitted. The
+    // <script> — but a <script src="/vendor/mermaid.runtime.js"> (a REGULAR,
+    // non-module script) for an allowlisted runtime library is permitted. The
     // script-src gate below rejects any <script src> that is not an allowlisted
-    // same-origin /vendor/... path, so we exclude those from this structural
-    // gate and let the script-src gate catch the rest.
+    // same-origin /vendor/... path (and rejects type="module" on it), so we
+    // exclude those from this structural gate and let the script-src gate
+    // catch the rest.
     const bodyViolation = composed.authoredBody
       .replace(
-        /<script\b[^>]*\bsrc\s*=\s*["']\/vendor\/[a-z0-9][a-z0-9.-]*\.mjs["'][^>]*>\s*<\/script>/gi,
+        /<script\b[^>]*\bsrc\s*=\s*["']\/vendor\/[a-z0-9][a-z0-9.-]*\.(?:mjs|js)["'][^>]*>\s*<\/script>/gi,
         "",
       )
       .match(/<!doctype\b|<\/?(?:html|head|body)\b|<(?:style|script)\b/i);
     if (bodyViolation) {
       fail(
-        'HTML body fragments cannot contain document wrappers, <style>, or inline/external <script> elements — put CSS in document.fragments.styles and JS in document.fragments.scripts. The only <script> allowed in the body is <script type="module" src="/vendor/mermaid.bundle.mjs"> for an allowlisted library.',
+        'HTML body fragments cannot contain document wrappers, <style>, or inline/external <script> elements — put CSS in document.fragments.styles and JS in document.fragments.scripts. The only <script> allowed in the body is <script src="/vendor/mermaid.runtime.js"> (a regular, non-module script) for an allowlisted library.',
       );
     }
     // A repeated attribute on one start tag is silent data loss: HTML parsers

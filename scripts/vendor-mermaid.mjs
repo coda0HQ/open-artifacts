@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -16,9 +16,25 @@ import { fileURLToPath } from "node:url";
 //   node scripts/vendor-mermaid.mjs
 //
 // Outputs:
-//   vendor/mermaid/mermaid.bundle.mjs   (~3.4MB, mermaid + all its deps bundled)
-//   vendor/mermaid/linkedom.bundle.mjs  (~480KB, a DOM shim sufficient for parse)
-//   vendor/mermaid/LICENSE              (mermaid MIT, linkedom ISC)
+//   skills/.../vendor/mermaid/mermaid.bundle.mjs  (~3.4MB, ESM) — node build-time gate
+//   skills/.../vendor/mermaid/linkedom.bundle.mjs (~480KB, ESM) — DOM shim for parse
+//   skills/.../vendor/mermaid/LICENSE              (mermaid MIT, linkedom ISC)
+//   public/vendor/mermaid.runtime.js              (~3.5MB, IIFE) — browser runtime
+//
+// TWO bundle formats for mermaid, by necessity:
+//   - ESM (mermaid.bundle.mjs): the node build-time gate does `import()` and reads
+//     `mod.default`. ESM is the only format node can `import()` here. Kept in the
+//     skill's vendor dir (NOT public) — it is a build-time input, never served.
+//   - IIFE (mermaid.runtime.js): the BROWSER runtime. The browser load-order bug
+//     (issue #11): a module `<script src>` is deferred (executes after parse), but
+//     the mermaid init is a plain inline `<script>` in the scripts slot that runs
+//     synchronously DURING parse — before the deferred module. So `window.mermaid`
+//     was undefined when the init guard ran and diagrams never rendered. The fix:
+//     load mermaid as a REGULAR (non-module) `<script src="/vendor/mermaid.runtime.js">`
+//     in the body. A regular same-origin script executes synchronously when the
+//     parser hits it (blocking), and compose emits the body BEFORE the scripts-slot
+//     inline init, so `window.mermaid` is defined before the init runs. The IIFE
+//     assigns `window.mermaid` synchronously (not as a deferred module side effect).
 //
 // Why linkedom not jsdom: jsdom bundles to ~6MB and pulls ~60 deps; linkedom
 // is a no-dep DOM that satisfies mermaid's DOMPurify path (classDiagram needs
@@ -55,7 +71,7 @@ function npmInstall(spec) {
   return join(tmpDir, "node_modules", name);
 }
 
-function esbuild(entry, outfile, extra = []) {
+function esbuild(entry, outfile, { format = "esm", extra = [] } = {}) {
   const res = spawnSync(
     "npx",
     [
@@ -64,7 +80,7 @@ function esbuild(entry, outfile, extra = []) {
       entry,
       "--bundle",
       "--platform=node",
-      "--format=esm",
+      `--format=${format}`,
       "--minify",
       `--outfile=${outfile}`,
       ...extra,
@@ -78,20 +94,14 @@ const mermaidEntry = join(
   npmInstall(`mermaid@${MERMAID_MAJOR}`),
   "dist/mermaid.esm.mjs",
 );
-const mermaidBundle = join(outDir, "mermaid.bundle.mjs");
-esbuild(mermaidEntry, mermaidBundle);
 
-// The bundle is an ESM with `export{<binding> as default}`. Two consumers load
-// it: the skill's build-time syntax gate (node `import()`, reads
-// `mod.default`), and the browser — a `<script type=module src="/vendor/...">
-// loaded same-origin under nonce-only CSP. The browser init is plain inline JS
-// in the scripts slot that calls `window.mermaid.run(...)`, but the ESM bundle
-// only `export`s its default; it never assigns `window.mermaid`. Append a
-// side-effect line that assigns the default-export binding to
-// `window.mermaid`/`globalThis.mermaid` so both consumers reach the same API:
-// the node gate still gets `mod.default`, and the browser gets the global.
-// Parsing the binding name from the emitted `export{...as default}` keeps this
-// robust across re-vendors (the minified name shifts on every bump).
+// ESM bundle — the node build-time syntax gate `import()`s this and reads
+// `mod.default`. Lives in the SKILL's vendor dir (not public): it is a
+// build-time input, never served to a browser. The appended
+// `window.mermaid=...` line is inert in node (no window) but keeps the file a
+// loadable ESM module; the gate reads `mod.default` regardless.
+const mermaidBundle = join(outDir, "mermaid.bundle.mjs");
+esbuild(mermaidEntry, mermaidBundle, { format: "esm" });
 const emitted = readFileSync(mermaidBundle, "utf8");
 const exportMatch = emitted.match(
   /export\s*\{\s*([A-Za-z_$][\w$]*)\s+as\s+default\s*\}/,
@@ -107,13 +117,25 @@ writeFileSync(
   `${emitted}\n;window.mermaid=globalThis.mermaid=${binding};\n`,
 );
 
-// Serve the same bundle same-origin from the Worker's static assets dir so it
-// loads under `script-src 'self'` (no external script host in CSP). The skill's
-// vendor copy stays the build-time source; this public copy is the browser
-// source. Kept in sync by this vendor step.
+// IIFE runtime bundle — the BROWSER runtime. A regular (non-module)
+// `<script src="/vendor/mermaid.runtime.js">` executes synchronously when the
+// parser hits it (blocking), so `window.mermaid` is defined before the
+// scripts-slot inline init runs — fixing the deferred-module load-order bug.
+// `--global-name=mermaid` makes esbuild assign the default export to a global
+// `mermaid` var; the appended line mirrors the ESM one to set
+// `window.mermaid`/`globalThis.mermaid` synchronously.
 const publicVendorDir = join(root, "public", "vendor");
 mkdirSync(publicVendorDir, { recursive: true });
-copyFileSync(mermaidBundle, join(publicVendorDir, "mermaid.bundle.mjs"));
+const runtimeBundle = join(publicVendorDir, "mermaid.runtime.js");
+esbuild(mermaidEntry, runtimeBundle, {
+  format: "iife",
+  extra: ["--global-name=mermaid"],
+});
+const runtimeEmitted = readFileSync(runtimeBundle, "utf8");
+writeFileSync(
+  runtimeBundle,
+  `${runtimeEmitted}\n;window.mermaid=globalThis.mermaid=mermaid;\n`,
+);
 
 const linkedomEntry = join(npmInstall("linkedom"), "esm/index.js");
 const linkedomBundle = join(outDir, "linkedom.bundle.mjs");

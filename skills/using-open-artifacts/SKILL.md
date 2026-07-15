@@ -182,7 +182,8 @@ images, fetch/XHR/WebSockets):
   `OPEN_ARTIFACTS_WEB_FONTS="1"`, a web font may also be loaded same-origin via
   the `/fonts/<family>--<weight>[--italic]` proxy or directly from an allowlisted
   font CDN (Fontshare / Google Fonts), and mermaid via an allowlisted
-  `<script type="module" src="/vendor/mermaid.bundle.mjs">` served same-origin —
+  `<script src="/vendor/mermaid.runtime.js">` (a regular, non-module script)
+  served same-origin —
   see `references/fonts.md` and `references/scripts.md`. The build gate restricts
   `@font-face`/`@import` to those font hosts and `<script src>` to the
   allowlisted same-origin `/vendor/...` bundle, so no arbitrary external host is

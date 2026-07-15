@@ -35,7 +35,7 @@ Feature: Self-hosted mermaid + nonce-only CSP close the inline-JS jsdelivr bypas
     And the parent CSP carries a 'nonce-<value> token
 
   Scenario: The mermaid bundle is served same-origin with a JavaScript MIME and nosniff
-    When a request hits GET /vendor/mermaid.bundle.mjs
+    When a request hits GET /vendor/mermaid.runtime.js
     Then the response is JavaScript with content-type text/javascript
     And the response carries x-content-type-options: nosniff
 

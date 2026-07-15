@@ -186,15 +186,19 @@ describe("GET /a/:id (plain HTML)", () => {
 
   it("serves the self-hosted mermaid bundle same-origin with a JS MIME and nosniff", async () => {
     const res = await exports.default.fetch(
-      `${BASE}/vendor/mermaid.bundle.mjs`,
+      `${BASE}/vendor/mermaid.runtime.js`,
     );
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toContain("text/javascript");
     expect(res.headers.get("x-content-type-options")).toBe("nosniff");
     const body = await res.text();
-    // The bundle self-attaches window.mermaid so the browser init (plain inline
-    // JS in the scripts slot) can call window.mermaid.run().
+    // The bundle is an IIFE that self-attaches window.mermaid synchronously on
+    // load, so the browser init (plain inline JS in the scripts slot, which
+    // compose emits AFTER the body) can call window.mermaid.run(). It must NOT
+    // be an ESM module (a module script is deferred and would run after the
+    // init — the load-order bug, issue #11).
     expect(body).toContain("window.mermaid=");
+    expect(body).not.toMatch(/^\s*export\b/m);
   });
 
   it("supports both theme signals", async () => {
