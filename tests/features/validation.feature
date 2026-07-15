@@ -233,6 +233,11 @@ Feature: Build validation catches silent layout defects
     When the agent runs the artifact script with validate
     Then the build succeeds because a page title is a sanctioned large-type surface
 
+  Scenario: A heading font-size nested in @media passes validation
+    Given an HTML recipe whose styles set font-size:var(--text-xl) on an h2 inside an @media block
+    When the agent runs the artifact script with validate
+    Then the build succeeds because the heading exemption matches the real selector, not the at-rule prelude
+
   Scenario: A heading with an inline icon but no centered-row layout fails validation
     Given an HTML recipe whose body puts an inline <svg> in an <h2> that has neither
       the .oa-ico-text helper nor an authored display:flex/grid rule targeting it

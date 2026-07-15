@@ -421,29 +421,12 @@ const TROPE_LARGE_NAME_RE =
   /\b(?:hero|standfirst|lead|lede|display|kicker|eyebrow|quote|pull-?quote|setpiece|set-piece|masthead|headline|page-title|site-title)\b/i;
 const TROPE_HEADING_SEL_RE = /(?:^|[>\s+~,(])(?:h[1-6]\b)/i;
 
-function parseRules(css) {
-  const stripped = css.replace(/\/\*[\s\S]*?\*\//g, "");
-  const rules = [];
-  let i = 0;
-  while (i < stripped.length) {
-    const brace = stripped.indexOf("{", i);
-    if (brace === -1) break;
-    const selector = stripped.slice(i, brace).trim();
-    let depth = 1;
-    let j = brace + 1;
-    for (; j < stripped.length && depth > 0; j += 1) {
-      if (stripped[j] === "{") depth += 1;
-      else if (stripped[j] === "}") depth -= 1;
-    }
-    const decls = stripped.slice(brace + 1, j - 1);
-    rules.push({ selector, decls });
-    i = j;
-  }
-  return rules;
-}
-
 function validateTropes(authoredStyles) {
-  for (const { selector, decls } of parseRules(authoredStyles)) {
+  // collectStyleRules (not parseRules) so tropes see the real selector of a
+  // rule nested in @media/@supports/@layer, not the at-rule prelude. Otherwise
+  // `@media{ h2{font-size:var(--text-xl)} }` flattens to selector "@media…"
+  // and the heading exemption never matches — a false enlarged-callout fail.
+  for (const { selector, decls } of collectStyleRules(authoredStyles)) {
     // Trope 1 — decorative side-stripe: border-left/right > 1px that is not a
     // blockquote quote-bar or a list-marker surface. Hairlines (<=1px, `thin`)
     // pass; `medium`/`thick` are >1px.
@@ -510,11 +493,12 @@ function validateTropes(authoredStyles) {
 }
 
 // Flatten a stylesheet into style rules at ANY nesting depth, recursing into
-// grouping/conditional at-rules (@media/@supports/@layer) so a flex rule
-// declared only inside one is still seen — parseRules (used by the trope gate)
-// walks top level only, which would make a responsive `@media { h2{...} }`
-// invisible. @font-face/@keyframes bodies hold no heading selectors, so
-// recursing into them is harmless.
+// grouping/conditional at-rules (@media/@supports/@layer) so a rule declared
+// only inside one is still seen with its real selector — a top-level-only walk
+// would make the @media prelude the "selector" and trip the trope gate's
+// heading exemption, falsely flagging `@media{ h2{font-size:var(--text-xl)} }`.
+// Used by both flexRowTargets and the trope gate. @font-face/@keyframes bodies
+// hold no heading selectors, so recursing into them is harmless.
 function collectStyleRules(css) {
   const stripped = css.replace(/\/\*[\s\S]*?\*\//g, "");
   const rules = [];

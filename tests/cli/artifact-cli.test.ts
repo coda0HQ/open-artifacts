@@ -857,6 +857,20 @@ describe("Recipe builder", () => {
     expect(result.code).toBe(0);
   });
 
+  it("passes a heading font-size inside @media (real selector, not the at-rule prelude)", async () => {
+    const responsive = writeRecipe("responsive-heading", {
+      mutate: (r) => {
+        r.artifact.level = 2;
+      },
+    });
+    writeFileSync(
+      responsive.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n@media (min-width:768px){ h2 { font-size: var(--text-xl) } }\n',
+    );
+    const result = await run(["validate", responsive.recipePath]);
+    expect(result.code).toBe(0);
+  });
+
   it("rejects a heading with an inline icon but no centered-row layout", async () => {
     const crooked = writeRecipe("crooked-icon", {
       body: '<main class="oa-prose"><h2><svg viewBox="0 0 24 24" fill="currentColor"><path d="M11 7H13V9H11V7Z"/></svg> What it is</h2></main>\n',
