@@ -223,7 +223,8 @@ img,video,canvas{max-width:100%}
 .oa-brand svg{display:block;width:14px;height:14px}
 @media (hover:hover) and (pointer:fine){.oa-header #oa-theme-toggle:hover,.oa-header #oa-feedback-toggle:hover{opacity:1;border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 25%)}.oa-brand:hover{color:var(--oa-fg);background:var(--oa-surface)}}
 @media (max-width:30rem){.oa-brand .oa-brand-text{display:none}}
-.oa-version{display:inline-flex;align-items:center;flex-shrink:0}
+.oa-version{display:inline-flex;align-items:center;flex-shrink:0;min-width:0}
+@media (max-width:30rem){.oa-version .oa-version-select{max-width:5rem;padding-right:1.4rem}}
 .oa-version .oa-version-select{min-height:28px;padding:.2rem 1.6rem .2rem .5rem;border:1px solid var(--oa-border);border-radius:6px;background:var(--oa-surface);color:var(--oa-fg);font-size:.75rem;font-family:inherit;line-height:1.4;cursor:pointer;transition:border-color .15s,background .15s;-webkit-appearance:none;appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--oa-muted) 50%),linear-gradient(135deg,var(--oa-muted) 50%,transparent 50%);background-position:calc(100% - .7rem) 55%,calc(100% - .4rem) 55%;background-size:.3rem .3rem;background-repeat:no-repeat}
 .oa-version .oa-version-select:focus-visible{outline:none;border-color:var(--oa-accent);box-shadow:var(--oa-focus-ring)}
 .oa-version .oa-version-select:active{transform:translateY(1px)}
@@ -447,11 +448,13 @@ function versionPickerHtml(
       const q = new URL(base);
       q.searchParams.set("v", String(v.version));
       const target = `${q.pathname}?${q.searchParams.toString()}`;
-      const label = v.label
-        ? `${escapeHtml(v.label)} (v${v.version})`
-        : `v${v.version}`;
+      // The header is cramped on narrow screens, so each option's visible text
+      // is the compact "v<n>" form; the version's own label (if any) is kept as
+      // a tooltip via the title attribute so context is not lost.
+      const short = `v${v.version}`;
+      const title = v.label ? ` title="${escapeHtml(v.label)}"` : "";
       const selected = v.version === currentVersion ? " selected" : "";
-      return `<option value="${escapeHtml(target)}"${selected}>${label}</option>`;
+      return `<option value="${escapeHtml(target)}"${selected}${title}>${short}</option>`;
     })
     .join("");
   return `<label class="oa-version" for="oa-version-select"><span class="oa-version-sr" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0">Version</span><select id="oa-version-select" class="oa-version-select" aria-label="Artifact version">${options}</select></label>`;
