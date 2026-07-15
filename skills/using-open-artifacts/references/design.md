@@ -292,7 +292,12 @@ assembled one.
 **The face IS available — the CSP only blocks *downloading* fonts, not the
 OS library.** `system-ui` for everything is a choice, usually the lazy one.
 Build stacks from the installed faces, macOS/iOS face first, Windows
-metric-cousin second, generic last:
+metric-cousin second, generic last. When an installed face cannot carry the
+voice (editorial serif display, geometric display sans, fashion), a web font
+from the same-origin `/fonts/<slug>` proxy is the opt-in fallback — see
+`references/fonts.md` and "Web fonts" under Hard constraints; the proxy only
+renders on deploys with `OPEN_ARTIFACTS_WEB_FONTS="1"`, so the installed stack
+below must always be acceptable on its own:
 
 | Voice | Stack to reach for |
 | --- | --- |
@@ -841,17 +846,52 @@ restriction. The **CSP directive** is
 `<style>` and inline `<script>` are allowed, but `<link>` stylesheets, web
 fonts, remote `<img>`/`<video>`/`<source>` src, and every `fetch`/XHR/
 WebSocket/EventSource are blocked by `default-src 'none'`. Separately, the
-iframe `sandbox` attribute (no `allow-same-origin`) blocks
-`localStorage`/`sessionStorage`/cookies — the opaque origin also means
-`location.hash` inside the iframe is independent of the parent URL (see
-`canvas.md`'s encrypted-canvas deep-link caveat).
+iframe `sandbox` attribute blocks `localStorage`/`sessionStorage`/cookies via
+an opaque origin, and `location.hash` inside the iframe is independent of the
+parent URL (see `canvas.md`'s encrypted-canvas deep-link caveat).
+
+### Web fonts & runtime libraries (opt-in)
+
+Web fonts and runtime libraries (mermaid) are an opt-in, per-deploy surface.
+When the deploy sets `OPEN_ARTIFACTS_WEB_FONTS="1"`, the CSP widens to
+`font-src 'self' data: cdn.fontshare.com fonts.gstatic.com`,
+`style-src 'unsafe-inline' fonts.googleapis.com`, and
+`script-src 'self' 'unsafe-inline' cdn.jsdelivr.net`, and the sandbox gains
+`allow-same-origin` so the browser can cache fonts. Delivery paths:
+
+- **Fonts** — same-origin `/fonts/<slug>` proxy (for foundry-download-page
+  families) **or** an allowlisted font CDN (`cdn.fontshare.com`,
+  `fonts.gstatic.com`, `fonts.googleapis.com`). See `references/fonts.md`.
+- **Runtime libraries** — the browser loads an allowlisted package directly from
+  `https://cdn.jsdelivr.net/npm/<pkg>@<ver>/<path>`. There is no same-origin
+  proxy for scripts. See `references/scripts.md` (`mermaid@11`), the allowlist,
+  and the build-time syntax gate.
+
+`connect-src` stays `'none'`. The trade-off: `allow-same-origin` ends the
+opaque-origin guarantee — a malicious artifact on such a deploy can read the host
+origin's `localStorage`/`cookies`, the loaded library executes third-party code
+from jsdelivr, and an artifact can pull passive font bytes from the allowlisted
+CDNs. The build gate restricts `@font-face src` / `@import` to the same-origin
+proxy, `data:`, and the allowlisted font CDNs, and `<script src>` to an
+allowlisted `cdn.jsdelivr.net/npm/<pkg>@<ver>/...` path, so neither surface can
+pull in an arbitrary external host or package. Reach for installed-font stacks
+and hand-drawn SVG first; a web font only when an installed face can't carry
+the voice, a library only when text-authored diagrams justify the ~3.5 MB.
 
 - **No external requests of any kind** — the strict CSP blocks all CDN
-  scripts, web fonts, remote images, fetch/XHR/WebSockets. Inline all CSS
-  and JS; embed images and fonts as `data:` URIs. Use installed-font stacks
-  (see Typography) or inline a face as a `@font-face` data URI.
-- **No localStorage / sessionStorage / cookies** — the sandbox blocks them.
-  Keep state in memory (JS variables/objects) for the session.
+  scripts, remote images, fetch/XHR/WebSockets. Inline all CSS and JS; embed
+  images as `data:` URIs. Fonts are either installed-face stacks (see
+  Typography), an inlined `@font-face` `data:` URI, the same-origin
+  `/fonts/<slug>` proxy, or — on an opt-in deploy only — a `@font-face`/`@import`
+  pointing at an allowlisted font CDN (Fontshare / Google Fonts). Scripts are
+  inline JS in `document.fragments.scripts`, or — on an opt-in deploy only — an
+  allowlisted `<script src="https://cdn.jsdelivr.net/npm/<pkg>@<ver>/<path>">`
+  in the body for an allowlisted library (mermaid).
+- **No localStorage / sessionStorage / cookies** — on a non-opt-in deploy the
+  sandbox blocks them; keep state in memory for the session. On an opt-in
+  deploy (`allow-same-origin`) they are reachable, but `connect-src 'none'`
+  still blocks network egress, so do not rely on storage for persistence and
+  never treat the artifact as a trusted same-origin document.
 - **Both themes must work**: the viewer stamps `data-theme` on `<html>` and
   it must win over `prefers-color-scheme` in both directions. The injected
   contract handles the mechanics (`@layer` + an OS-dark tier); your job is

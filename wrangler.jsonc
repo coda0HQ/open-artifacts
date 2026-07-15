@@ -7,8 +7,13 @@
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
-    "run_worker_first": ["/", "/api/*", "/a/*", "/og/*"]
+    "run_worker_first": ["/", "/api/*", "/a/*", "/og/*", "/fonts/*"]
   },
+  // "1" opts this deploy into the web-font/runtime-library surface: the /fonts
+  // proxy, allowlisted font CDNs, an allow-same-origin sandbox so the browser
+  // can cache fonts, and script-src cdn.jsdelivr.net for allowlisted libraries.
+  // Self-hosters who don't want the opaque-origin protection lifted omit it.
+  "vars": { "OPEN_ARTIFACTS_WEB_FONTS": "1" },
   "d1_databases": [
     {
       "binding": "DB",

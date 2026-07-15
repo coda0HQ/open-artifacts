@@ -1,17 +1,45 @@
+import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { checkContrast } from "./contrast.mjs";
 import { readFragment } from "./recipe.mjs";
 
 const MAX_CONTENT_BYTES = 4 * 1024 * 1024;
 
+const VENDOR_DIR = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "..",
+  "vendor",
+  "mermaid",
+);
+const MERMAID_BUNDLE = join(VENDOR_DIR, "mermaid.bundle.mjs");
+const LINKEDOM_BUNDLE = join(VENDOR_DIR, "linkedom.bundle.mjs");
+
 const externalChecks = [
-  [/<script\b[^>]*\bsrc\s*=/i, "external script src"],
+  // External <script src> is blocked unless it points at jsdelivr — the
+  // validateScriptSrcs gate then restricts WHICH jsdelivr pkg@ver/path loads.
+  [
+    /<script\b[^>]*\bsrc\s*=\s*["']https?:\/\/(?!cdn\.jsdelivr\.net)/i,
+    "external script src",
+  ],
   [/<link\b[^>]*\brel\s*=\s*["']?stylesheet/i, "external stylesheet"],
   [
     /<(?:img|video|audio|source|iframe)\b[^>]*\bsrc\s*=\s*["'](?:https?:)?\/\//i,
     "remote media source",
   ],
-  [/@import\b/i, "CSS @import"],
-  [/url\(\s*["']?(?:https?:)?\/\//i, "remote CSS url()"],
+  // @import and remote url() are allowed for the opt-in font CDNs only (Fontshare
+  // + Google Fonts CSS); everything else is blocked. validateFonts gives the
+  // font-specific verdict. See references/fonts.md.
+  [
+    /@import\b(?![^;]*\b(?:cdn\.fontshare\.com|fonts\.googleapis\.com)\b)/i,
+    "CSS @import",
+  ],
+  [
+    /url\(\s*["']?(?:https?:)?\/\/(?!cdn\.fontshare\.com|fonts\.gstatic\.com)/i,
+    "remote CSS url()",
+  ],
   [/<base\b/i, "base element"],
   [/<meta\b[^>]*http-equiv\s*=\s*["']?refresh/i, "meta refresh"],
   [/<form\b[^>]*\baction\s*=\s*["'](?:https?:)?\/\//i, "external form action"],
@@ -769,6 +797,188 @@ function validateScrollspy(authoredScripts) {
   }
 }
 
+// Web fonts are an opt-in, same-origin surface (design.md "Web fonts"; see
+// references/fonts.md). The only sanctioned @font-face sources are the Worker's
+// same-origin /fonts/<slug> proxy (which fetches Fontshare server-side and
+// caches in R2) and inline data: URIs. Any other src — a remote https URL, a
+// file: path, or an absolute path outside /fonts/ — either violates the CSP
+// (font-src 'self' data: on opt-in deploys, font-src data: otherwise) or routes
+// the artifact through an unvetted third party. The external-request scan already
+// blocks `url(...//`, but this gate gives a font-specific error and also rejects
+// scheme-less external hosts and non-/fonts absolute paths that the broad scan
+// would otherwise let through on an opt-in deploy.
+const FONT_FACE_SRC_RE = /@font-face\s*\{[^}]*\bsrc\s*:([^;}]+)/gis;
+
+// The only sanctioned @font-face src hosts: the same-origin /fonts proxy, a
+// data: URI, or a font CDN on the opt-in CSP allowlist (Fontshare + Google
+// Fonts — the two that serve woff2 over a stable CDN for Awwwards-listed
+// families). Foundry/marketplace download pages (behance/gumroad/...) never
+// serve font files and must not appear here; those families are self-hosted
+// via the /fonts proxy instead. Keep in sync with WEB_FONT_CSP in src/wrap.ts.
+const ALLOWED_FONT_HOSTS = ["cdn.fontshare.com", "fonts.gstatic.com"];
+
+function isAllowedFontSrc(url) {
+  if (url.startsWith("data:")) return true;
+  if (url.startsWith("/fonts/")) return true;
+  for (const host of ALLOWED_FONT_HOSTS) {
+    if (url === `https://${host}` || url.startsWith(`https://${host}/`))
+      return true;
+  }
+  return false;
+}
+
+function validateFonts(authoredStyles) {
+  const stripped = authoredStyles.replace(/\/\*[\s\S]*?\*\//g, "");
+  let match;
+  FONT_FACE_SRC_RE.lastIndex = 0;
+  for (
+    match = FONT_FACE_SRC_RE.exec(stripped);
+    match !== null;
+    match = FONT_FACE_SRC_RE.exec(stripped)
+  ) {
+    const src = match[1];
+    for (const urlMatch of src.matchAll(/url\(\s*["']?([^"')]+)["']?\s*\)/gi)) {
+      const url = urlMatch[1].trim();
+      if (isAllowedFontSrc(url)) continue;
+      fail(
+        `@font-face src must be the same-origin /fonts/<family>--<weight>[--italic].woff2 proxy, a data: URI, or a font CDN on the opt-in allowlist (${ALLOWED_FONT_HOSTS.join(", ")}) — found "${url.slice(0, 80)}". Foundry/marketplace download pages are not font CDNs; self-host those families via the /fonts proxy. See references/fonts.md.`,
+      );
+    }
+  }
+}
+
+// Runtime-library <script src> tags (mermaid, etc.) are allowed in the body
+// ONLY via jsdelivr, and only for a package + sub-path on the allowlist below.
+// The opt-in CSP adds cdn.jsdelivr.net to script-src; this gate restricts
+// WHICH jsdelivr URLs an artifact may load so a malicious artifact can't pull
+// arbitrary npm JS. The body fragment gate permits a <script src> with the
+// jsdelivr allowlist path specifically; this gate rejects any <script> that is
+// inline (no src), points at a non-jsdelivr host, or names a package/version/path
+// off the allowlist. Scripts execute, so the allowlist is deliberate code change,
+// not a runtime decision. See references/scripts.md.
+const ALLOWED_SCRIPT_PACKAGES = ["mermaid"];
+const SCRIPT_SRC_RE = /<script\b[^>]*\bsrc\s*=\s*["']([^"']+)["'][^>]*>/gi;
+// https://cdn.jsdelivr.net/npm/<pkg>@<ver>/<path> — pkg must be allowlisted,
+// ver a major pin or exact semver, path anything under the package.
+const ALLOWED_SCRIPT_SRC_RE =
+  /^https:\/\/cdn\.jsdelivr\.net\/npm\/([a-z][a-z0-9-]*)@(\d+(?:\.\d+){0,2})\/\S+$/i;
+
+function validateScriptSrcs(authoredBody) {
+  SCRIPT_SRC_RE.lastIndex = 0;
+  let match;
+  for (
+    match = SCRIPT_SRC_RE.exec(authoredBody);
+    match !== null;
+    match = SCRIPT_SRC_RE.exec(authoredBody)
+  ) {
+    const url = match[1];
+    const m = url.match(ALLOWED_SCRIPT_SRC_RE);
+    if (m === null) {
+      fail(
+        `<script src> must be https://cdn.jsdelivr.net/npm/<pkg>@<ver>/<path> for an allowlisted package (${ALLOWED_SCRIPT_PACKAGES.join(", ")}) — found "${url.slice(0, 80)}". Inline JS still goes in document.fragments.scripts. See references/scripts.md.`,
+      );
+    }
+    if (!ALLOWED_SCRIPT_PACKAGES.includes(m[1])) {
+      fail(
+        `script package "${m[1]}" is not on the allowlist (${ALLOWED_SCRIPT_PACKAGES.join(", ")}). Add it to ALLOWED_SCRIPT_PACKAGES in validate.mjs. See references/scripts.md.`,
+      );
+    }
+  }
+}
+
+// Build-time mermaid-syntax gate. A <pre class="mermaid"> block is rendered by
+// the runtime mermaid bundle (see references/scripts.md); a syntax error there
+// ships a broken diagram (raw text, or a render error) with no signal at author
+// time. This gate runs mermaid.parse() on every mermaid block in a node child
+// process — mermaid needs a DOM (classDiagram goes through DOMPurify), so the
+// child loads the vendored linkedom bundle as the DOM shim and the vendored
+// mermaid bundle. Both ship with the skill (vendor/mermaid/) so the gate runs
+// offline with no node_modules. A parse() throw fails the build with mermaid's
+// own message (line number + expected token). If the bundles are absent (the
+// skill was installed before this gate), the gate skips with a stderr hint so a
+// missing vendor step never blocks publishing — it only warns.
+const MERMAID_BLOCK_RE =
+  /<pre\b[^>]*\bclass\s*=\s*["'][^"']*\bmermaid\b[^"']*["'][^>]*>([\s\S]*?)<\/pre>/gi;
+
+function extractMermaidBlocks(body) {
+  return [...body.matchAll(MERMAID_BLOCK_RE)].map((m) => m[1]);
+}
+
+const MERMAID_CHILD_SCRIPT = `
+// Order matters: mermaid's DOMPurify captures globalThis.window at module-init
+// time, so the DOM shim (linkedom) MUST be installed BEFORE the mermaid bundle
+// is imported — otherwise classDiagram (which sanitizes labels via DOMPurify)
+// fails with "lo.addHook is not a function" against an absent window.
+import { parseHTML } from ${JSON.stringify(pathToFileURL(LINKEDOM_BUNDLE).href)};
+const { window } = parseHTML("<!doctype html><html><body></body></html>");
+globalThis.window = window;
+globalThis.document = window.document;
+Object.defineProperty(globalThis, "navigator", { value: { userAgent: "node" }, configurable: true });
+globalThis.location = { href: "http://localhost/", origin: "http://localhost" };
+for (const k of ["SVGElement","HTMLElement","Element","Node","Event","MutationObserver","XMLSerializer","DOMParser"]) {
+  if (window[k]) globalThis[k] = window[k];
+}
+import(${JSON.stringify(pathToFileURL(MERMAID_BUNDLE).href)}).then(async (mod) => {
+  const mer = mod.default || mod;
+  const diagrams = JSON.parse(process.argv[1]);
+  const errors = [];
+  for (let i = 0; i < diagrams.length; i += 1) {
+    try { await mer.parse(diagrams[i]); }
+    catch (e) { errors.push({ index: i, message: (e && e.message ? e.message : String(e)) }); }
+  }
+  if (errors.length) process.stdout.write(JSON.stringify(errors));
+  else process.stdout.write("ok");
+}).catch((e) => { process.stdout.write("LOAD_ERR:" + (e && e.message ? e.message : String(e))); });
+`;
+
+function validateMermaidSyntax(authoredBody) {
+  const diagrams = extractMermaidBlocks(authoredBody);
+  if (diagrams.length === 0) return;
+  if (!existsSync(MERMAID_BUNDLE) || !existsSync(LINKEDOM_BUNDLE)) {
+    process.stderr.write(
+      "warn: mermaid syntax gate skipped — vendor/mermaid/ bundles missing; run `node scripts/vendor-mermaid.mjs` in the open-artifacts repo\n",
+    );
+    return;
+  }
+  const result = spawnSync(
+    process.execPath,
+    [
+      "--input-type=module",
+      "-e",
+      MERMAID_CHILD_SCRIPT,
+      JSON.stringify(diagrams),
+    ],
+    {
+      encoding: "utf8",
+      timeout: 30000,
+    },
+  );
+  if (result.status !== 0 && result.signal === null && !result.stdout) {
+    fail(`mermaid syntax gate crashed: ${result.stderr.slice(0, 200)}`);
+  }
+  const out = result.stdout.trim();
+  if (out === "ok") return;
+  if (out.startsWith("LOAD_ERR:")) {
+    fail(
+      `mermaid syntax gate could not load mermaid: ${out.slice("LOAD_ERR:".length).slice(0, 200)}`,
+    );
+  }
+  let errors;
+  try {
+    errors = JSON.parse(out);
+  } catch {
+    fail(
+      `mermaid syntax gate returned an unexpected result: ${out.slice(0, 200)}`,
+    );
+    return;
+  }
+  for (const { index, message } of errors) {
+    fail(
+      `mermaid syntax error in <pre class="mermaid"> block #${index + 1} — ${message.split("\n")[0]}. Full source:\n${diagrams[index].slice(0, 200)}`,
+    );
+  }
+}
+
 function validateTheme(loaded) {
   if (loaded.recipe.artifact.format !== "html") return;
   const themeFragments = loaded.descriptors.filter(
@@ -825,13 +1035,21 @@ export function validateBuild(loaded, composed) {
     if (/<\/style/i.test(composed.authoredStyles)) {
       fail("style fragments cannot contain a closing style tag");
     }
-    if (
-      /<!doctype\b|<\/?(?:html|head|body)\b|<(?:style|script)\b/i.test(
-        composed.authoredBody,
+    // Body fragments forbid document wrappers, <style>, and inline/external
+    // <script> — but a <script src="https://cdn.jsdelivr.net/npm/<pkg>@<ver>/...">
+    // for an allowlisted runtime library (mermaid, ...) is permitted on an
+    // opt-in deploy. The script-src gate below rejects any <script src> that is
+    // not an allowlisted jsdelivr pkg@ver/path, so we exclude those from this
+    // structural gate and let the script-src gate catch the rest.
+    const bodyViolation = composed.authoredBody
+      .replace(
+        /<script\b[^>]*\bsrc\s*=\s*["']https:\/\/cdn\.jsdelivr\.net\/npm\/[a-z][a-z0-9-]*@\d+(?:\.\d+){0,2}\/[^"']*["'][^>]*>\s*<\/script>/gi,
+        "",
       )
-    ) {
+      .match(/<!doctype\b|<\/?(?:html|head|body)\b|<(?:style|script)\b/i);
+    if (bodyViolation) {
       fail(
-        "HTML body fragments cannot contain document wrappers, <style>, or <script> elements — put CSS in document.fragments.styles and JS in document.fragments.scripts, not inline in the body",
+        'HTML body fragments cannot contain document wrappers, <style>, or inline/external <script> elements — put CSS in document.fragments.styles and JS in document.fragments.scripts. The only <script> allowed in the body is <script src="https://cdn.jsdelivr.net/npm/<pkg>@<ver>/<path>"> for an allowlisted library.',
       );
     }
     // A repeated attribute on one start tag is silent data loss: HTML parsers
@@ -873,6 +1091,13 @@ export function validateBuild(loaded, composed) {
       /<script\b[^>]*>([\s\S]*?)<\/script>/gi,
       (_m, body) => `<script>${stripStrings(stripComments(body))}</script>`,
     );
+    // Font-specific @font-face src gate runs before the broad external-request
+    // scan so a remote font URL surfaces as a font error, not as a generic
+    // "remote CSS url()" hit.
+    validateFonts(composed.authoredStyles);
+    // Script-src gate: the only sanctioned external-ish script is the
+    // same-origin /scripts/<pkg>@<ver>.js proxy for an allowlisted library.
+    validateScriptSrcs(composed.authoredBody);
     for (const [pattern, label] of externalChecks) {
       if (pattern.test(scanned)) fail(`${label} is incompatible with the CSP`);
     }
@@ -895,6 +1120,7 @@ export function validateBuild(loaded, composed) {
     validateTropes(composed.authoredStyles);
     validateIconAlignment(composed.authoredBody, composed.authoredStyles);
     validateMeasureCap(loaded, composed);
+    validateMermaidSyntax(composed.authoredBody);
   }
   if (artifact.canvas) validateCanvas(composed.authoredBody);
   const title = artifact.title ?? extractTitle(content, artifact.format);

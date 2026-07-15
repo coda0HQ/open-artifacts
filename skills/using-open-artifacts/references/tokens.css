@@ -17,8 +17,12 @@
  * which direction is active.
  *
  * Adapted from open-design's design-system token schema, retargeted to
- * this project's strict no-external-requests CSP: no web fonts are
- * loaded, so font stacks are installed-face or inlined @font-face only.
+ * this project's strict no-external-requests CSP: by default no web fonts are
+ * loaded, so font stacks are installed-face or inlined @font-face only. On a
+ * deploy that sets OPEN_ARTIFACTS_WEB_FONTS="1", a web font may lead the stack
+ * either via the same-origin /fonts/<slug> proxy or directly from an allowlisted
+ * font CDN (Fontshare / Google Fonts); the installed-face tail must still
+ * resolve on its own (see references/fonts.md).
  */
 
 @layer oa-tokens {

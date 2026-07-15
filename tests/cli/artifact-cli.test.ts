@@ -647,6 +647,160 @@ describe("Recipe builder", () => {
     expect(requests).toHaveLength(0);
   });
 
+  it("rejects a @font-face src that points at a remote host", async () => {
+    const stylesDir = join(projectDir, "remote-font-fragments");
+    mkdirSync(stylesDir, { recursive: true });
+    writeFileSync(
+      join(stylesDir, "styles.css"),
+      '@font-face{font-family:"Evil";src:url("https://evil.example/font.woff2") format("woff2")}\n',
+    );
+    const recipe = writeRecipe("remote-font", {
+      mutate: (r) => {
+        r.artifact.level = 1;
+        r.document.fragments.styles = ["../remote-font-fragments/styles.css"];
+      },
+      body: '<main class="oa-prose"><h1>Remote font</h1></main>\n',
+    });
+    const result = await run(["validate", recipe.recipePath], {
+      expectFailure: true,
+    });
+    expect(result.stderr).toContain("@font-face");
+    expect(result.stderr).toContain("/fonts/");
+    expect(requests).toHaveLength(0);
+  });
+
+  it("accepts a @font-face src that points at the same-origin /fonts/ proxy", async () => {
+    const stylesDir = join(projectDir, "proxy-font-fragments");
+    mkdirSync(stylesDir, { recursive: true });
+    writeFileSync(
+      join(stylesDir, "styles.css"),
+      '@font-face{font-family:"General Sans";src:url("/fonts/general-sans--400.woff2") format("woff2");font-display:swap}\n:root{--font-display:"General Sans",system-ui,sans-serif}\n',
+    );
+    const recipe = writeRecipe("proxy-font", {
+      mutate: (r) => {
+        r.artifact.level = 1;
+        r.document.fragments.styles = ["../proxy-font-fragments/styles.css"];
+      },
+      body: '<main class="oa-prose"><h1>Proxy font</h1></main>\n',
+    });
+    const result = await run(["validate", recipe.recipePath]);
+    expect(result.code).toBe(0);
+    expect(requests).toHaveLength(0);
+  });
+
+  it("accepts a @font-face src pointing at an allowlisted font CDN", async () => {
+    const stylesDir = join(projectDir, "cdn-font-fragments");
+    mkdirSync(stylesDir, { recursive: true });
+    writeFileSync(
+      join(stylesDir, "styles.css"),
+      '@font-face{font-family:"Fraunces";src:url("https://fonts.gstatic.com/s/fraunces/v9/x.woff2") format("woff2");font-display:swap}\n:root{--font-display:"Fraunces",Georgia,serif}\n',
+    );
+    const recipe = writeRecipe("cdn-font", {
+      mutate: (r) => {
+        r.artifact.level = 1;
+        r.document.fragments.styles = ["../cdn-font-fragments/styles.css"];
+      },
+      body: '<main class="oa-prose"><h1>CDN font</h1></main>\n',
+    });
+    const result = await run(["validate", recipe.recipePath]);
+    expect(result.code).toBe(0);
+    expect(requests).toHaveLength(0);
+  });
+
+  it("rejects a @font-face src pointing at a non-allowlisted host", async () => {
+    const stylesDir = join(projectDir, "bad-cdn-font-fragments");
+    mkdirSync(stylesDir, { recursive: true });
+    writeFileSync(
+      join(stylesDir, "styles.css"),
+      '@font-face{font-family:"Evil";src:url("https://evil.example/font.woff2") format("woff2")}\n',
+    );
+    const recipe = writeRecipe("bad-cdn-font", {
+      mutate: (r) => {
+        r.artifact.level = 1;
+        r.document.fragments.styles = ["../bad-cdn-font-fragments/styles.css"];
+      },
+      body: '<main class="oa-prose"><h1>Bad CDN font</h1></main>\n',
+    });
+    const result = await run(["validate", recipe.recipePath], {
+      expectFailure: true,
+    });
+    expect(result.stderr).toContain("@font-face");
+    expect(result.stderr).toContain("fonts.gstatic.com");
+    expect(requests).toHaveLength(0);
+  });
+
+  it("rejects a remote <script src> in the body", async () => {
+    const recipe = writeRecipe("remote-script", {
+      mutate: (r) => {
+        r.artifact.level = 1;
+      },
+      body: '<main><script src="https://evil.example/x.js"></script></main>\n',
+    });
+    const result = await run(["validate", recipe.recipePath], {
+      expectFailure: true,
+    });
+    expect(result.stderr).toContain("script");
+    expect(requests).toHaveLength(0);
+  });
+
+  it("rejects a non-allowlisted jsdelivr package in a <script src>", async () => {
+    const recipe = writeRecipe("bad-pkg", {
+      mutate: (r) => {
+        r.artifact.level = 1;
+      },
+      body: '<main><pre class="d3"></pre><script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script></main>\n',
+    });
+    const result = await run(["validate", recipe.recipePath], {
+      expectFailure: true,
+    });
+    expect(result.stderr).toContain("d3");
+    expect(requests).toHaveLength(0);
+  });
+
+  it("accepts an allowlisted jsdelivr <script src> in the body", async () => {
+    const recipe = writeRecipe("mermaid", {
+      mutate: (r) => {
+        r.artifact.level = 1;
+      },
+      body: '<main class="oa-prose"><pre class="mermaid">flowchart LR\nA-->B</pre><script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script></main>\n',
+    });
+    const result = await run(["validate", recipe.recipePath]);
+    expect(result.code).toBe(0);
+    expect(requests).toHaveLength(0);
+  });
+
+  it("accepts valid mermaid syntax in <pre class=mermaid>", async () => {
+    const recipe = writeRecipe("mermaid-ok", {
+      mutate: (r) => {
+        r.artifact.level = 1;
+      },
+      body:
+        '<main class="oa-prose">\n' +
+        '<pre class="mermaid">flowchart LR\nA-->B</pre>\n' +
+        '<pre class="mermaid">sequenceDiagram\nparticipant A\nA->>B: hi</pre>\n' +
+        '<pre class="mermaid">classDiagram\nclass A{+int x}</pre>\n' +
+        "</main>\n",
+    });
+    const result = await run(["validate", recipe.recipePath]);
+    expect(result.code).toBe(0);
+    expect(requests).toHaveLength(0);
+  });
+
+  it("rejects broken mermaid syntax at build time", async () => {
+    const recipe = writeRecipe("mermaid-bad", {
+      mutate: (r) => {
+        r.artifact.level = 1;
+      },
+      body: '<main class="oa-prose"><pre class="mermaid">flowchart LR\nA->>B [[[</pre></main>\n',
+    });
+    const result = await run(["validate", recipe.recipePath], {
+      expectFailure: true,
+    });
+    expect(result.stderr).toContain("mermaid syntax error");
+    expect(result.stderr).toContain("Parse error");
+    expect(requests).toHaveLength(0);
+  });
+
   it("passes a CSP-forbidden API name mentioned only in a script string", async () => {
     const scriptsDir = join(projectDir, "string-csp-fragments");
     mkdirSync(scriptsDir, { recursive: true });
