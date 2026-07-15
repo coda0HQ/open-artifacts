@@ -707,6 +707,46 @@ describe("Recipe builder", () => {
     expect(requests).toHaveLength(0);
   });
 
+  it("accepts a Google Fonts @import (fonts.googleapis.com CSS)", async () => {
+    const stylesDir = join(projectDir, "gfont-import-fragments");
+    mkdirSync(stylesDir, { recursive: true });
+    writeFileSync(
+      join(stylesDir, "styles.css"),
+      '@import url("https://fonts.googleapis.com/css2?family=Fraunces:wght@600&display=swap");\n:root{--font-display:"Fraunces",Georgia,serif}\n',
+    );
+    const recipe = writeRecipe("gfont-import", {
+      mutate: (r) => {
+        r.artifact.level = 1;
+        r.document.fragments.styles = ["../gfont-import-fragments/styles.css"];
+      },
+      body: '<main class="oa-prose"><h1>Google Fonts</h1></main>\n',
+    });
+    const result = await run(["validate", recipe.recipePath]);
+    expect(result.code).toBe(0);
+    expect(requests).toHaveLength(0);
+  });
+
+  it("accepts a same-origin @import of the /fonts proxy CSS shim", async () => {
+    const stylesDir = join(projectDir, "fonts-proxy-import-fragments");
+    mkdirSync(stylesDir, { recursive: true });
+    writeFileSync(
+      join(stylesDir, "styles.css"),
+      '@import url("/fonts/general-sans--400.css");\n:root{--font-display:"General Sans",system-ui,sans-serif}\n',
+    );
+    const recipe = writeRecipe("fonts-proxy-import", {
+      mutate: (r) => {
+        r.artifact.level = 1;
+        r.document.fragments.styles = [
+          "../fonts-proxy-import-fragments/styles.css",
+        ];
+      },
+      body: '<main class="oa-prose"><h1>Proxy import</h1></main>\n',
+    });
+    const result = await run(["validate", recipe.recipePath]);
+    expect(result.code).toBe(0);
+    expect(requests).toHaveLength(0);
+  });
+
   it("rejects a @font-face src pointing at a non-allowlisted host", async () => {
     const stylesDir = join(projectDir, "bad-cdn-font-fragments");
     mkdirSync(stylesDir, { recursive: true });

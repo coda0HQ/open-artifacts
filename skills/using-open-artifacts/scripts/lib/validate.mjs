@@ -33,11 +33,11 @@ const externalChecks = [
   // + Google Fonts CSS); everything else is blocked. validateFonts gives the
   // font-specific verdict. See references/fonts.md.
   [
-    /@import\b(?![^;]*\b(?:cdn\.fontshare\.com|fonts\.googleapis\.com)\b)/i,
+    /@import\b(?![^;]*(?:\b(?:cdn\.fontshare\.com|fonts\.googleapis\.com)\b|url\(\s*["']?\/fonts\/))/i,
     "CSS @import",
   ],
   [
-    /url\(\s*["']?(?:https?:)?\/\/(?!cdn\.fontshare\.com|fonts\.gstatic\.com)/i,
+    /url\(\s*["']?(?:https?:)?\/\/(?!cdn\.fontshare\.com|fonts\.gstatic\.com|fonts\.googleapis\.com)/i,
     "remote CSS url()",
   ],
   [/<base\b/i, "base element"],
@@ -1095,8 +1095,8 @@ export function validateBuild(loaded, composed) {
     // scan so a remote font URL surfaces as a font error, not as a generic
     // "remote CSS url()" hit.
     validateFonts(composed.authoredStyles);
-    // Script-src gate: the only sanctioned external-ish script is the
-    // same-origin /scripts/<pkg>@<ver>.js proxy for an allowlisted library.
+    // Script-src gate: the only sanctioned external script is an allowlisted
+    // cdn.jsdelivr.net/npm/<pkg>@<ver>/<path> for a library on the allowlist.
     validateScriptSrcs(composed.authoredBody);
     for (const [pattern, label] of externalChecks) {
       if (pattern.test(scanned)) fail(`${label} is incompatible with the CSP`);
