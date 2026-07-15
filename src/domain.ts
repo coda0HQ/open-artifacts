@@ -59,6 +59,24 @@ export interface VersionMeta {
   createdAt: string;
 }
 
+// Comments live outside the sandboxed artifact body (in the surrounding chrome)
+// and persist to D1 so a thread survives disconnects and reaches future viewers.
+export const MAX_COMMENT_BODY_BYTES = 8 * 1024;
+export const MAX_COMMENT_AUTHOR_LENGTH = 200;
+
+export interface CommentMeta {
+  id: string;
+  artifactId: string;
+  author: string | null;
+  body: string;
+  createdAt: string;
+}
+
+export interface CommentInput {
+  author: string | null;
+  body: string;
+}
+
 export type Validated<T> =
   | { ok: true; value: T }
   | { ok: false; error: string; status: 400 | 413 };
@@ -286,4 +304,39 @@ export function validateUpdate(
       force: force === true,
     },
   };
+}
+
+// Comment authoring validation. `body` is required and size-capped in UTF-8
+// bytes (matching the content cap convention); `author` is optional and
+// length-capped. Open for Phase 1: posting is not token-gated, documented at
+// the route. Moderation/deletion is out of scope here (see issue #5).
+export function validateComment(
+  body: Record<string, unknown>,
+): Validated<CommentInput> {
+  const { body: text, author } = body;
+
+  if (typeof text !== "string" || text.length === 0) {
+    return invalid("body is required and must be a non-empty string");
+  }
+  if (contentByteLength(text) > MAX_COMMENT_BODY_BYTES) {
+    return invalid(
+      `body exceeds the ${MAX_COMMENT_BODY_BYTES} byte limit`,
+      413,
+    );
+  }
+
+  let parsedAuthor: string | null = null;
+  if (author !== undefined && author !== null) {
+    if (
+      typeof author !== "string" ||
+      author.length > MAX_COMMENT_AUTHOR_LENGTH
+    ) {
+      return invalid(
+        `author must be a string of at most ${MAX_COMMENT_AUTHOR_LENGTH} characters`,
+      );
+    }
+    parsedAuthor = author;
+  }
+
+  return { ok: true, value: { author: parsedAuthor, body: text } };
 }

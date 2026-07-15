@@ -1,7 +1,13 @@
 import type { Context } from "hono";
 import { Hono } from "hono";
 import type { CreateInput } from "./domain";
-import { MAX_CONTENT_BYTES, validateCreate, validateUpdate } from "./domain";
+import {
+  MAX_COMMENT_BODY_BYTES,
+  MAX_CONTENT_BYTES,
+  validateComment,
+  validateCreate,
+  validateUpdate,
+} from "./domain";
 import type { ArtifactRecord, ArtifactStore } from "./store";
 import { D1R2Store } from "./store";
 import {
@@ -345,4 +351,44 @@ api.get("/artifacts/:id/raw", async (c) => {
     contentType: "text/plain; charset=utf-8",
   });
   return new Response(content.body, { headers });
+});
+
+// Comment thread on an artifact. The thread lives in the surrounding chrome
+// (not the sandboxed iframe body), so the host page POSTs and renders the list.
+// Phase 1: posting is open (not token-gated) and reads are open — the issue
+// lists the auth model as an open question. A persisted comment reaches every
+// future viewer because the host fetches the thread on page load. Live
+// (no-reload) fan-out across concurrent viewers is Phase 2 (Durable Object).
+const COMMENT_BODY_BYTES = MAX_COMMENT_BODY_BYTES + 1024; // JSON braces/escaping headroom over the cap
+
+api.get("/artifacts/:id/comments", async (c) => {
+  const store = storeFrom(c);
+  const record = await store.get(c.req.param("id"));
+  if (record === null) return c.json({ error: "artifact not found" }, 404);
+  const comments = await store.listComments(record.id);
+  return c.json({ comments });
+});
+
+api.post("/artifacts/:id/comments", async (c) => {
+  const store = storeFrom(c);
+  const record = await store.get(c.req.param("id"));
+  if (record === null) return c.json({ error: "artifact not found" }, 404);
+
+  const declaredLength = Number(c.req.header("content-length") ?? "0");
+  if (declaredLength > COMMENT_BODY_BYTES) {
+    return c.json({ error: "request body too large" }, 413);
+  }
+
+  let body: Record<string, unknown>;
+  try {
+    body = await c.req.json<Record<string, unknown>>();
+  } catch {
+    return c.json({ error: "request body must be JSON" }, 400);
+  }
+
+  const parsed = validateComment(body);
+  if (!parsed.ok) return c.json({ error: parsed.error }, parsed.status);
+
+  const comment = await store.addComment(record.id, parsed.value);
+  return c.json(comment, 201);
 });

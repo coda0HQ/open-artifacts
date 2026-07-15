@@ -122,6 +122,11 @@ app.get("/a/:id", async (c) => {
   const url = artifactUrl(c, record.id);
   const ogImage = ogImageUrl(c, record.id);
   const brandUrl = c.env.BRAND_URL ?? null;
+  // Inline the comment thread at serve time: the viewer page is sandboxed with
+  // connect-src 'none', so runtime fetch is impossible. Future viewers still
+  // see the persisted thread because it is stamped into the HTML here.
+  const comments =
+    content.encrypted === null ? await store.listComments(record.id) : [];
 
   if (content.encrypted !== null) {
     const page = unlockShell({
@@ -149,6 +154,8 @@ app.get("/a/:id", async (c) => {
     ogImage,
     hostname,
     brandUrl,
+    artifactId: record.id,
+    comments,
   });
   return new Response(page, { headers: htmlHeaders(true) });
 });

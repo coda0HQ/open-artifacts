@@ -1,12 +1,15 @@
 import type {
   ArtifactFormat,
   ArtifactMeta,
+  CommentInput,
+  CommentMeta,
   CreateInput,
   EncryptionParams,
   UpdateInput,
   VersionMeta,
 } from "./domain";
 import { contentByteLength } from "./domain";
+import { generateId } from "./tokens";
 
 export interface ArtifactRecord extends ArtifactMeta {
   tokenHash: string;
@@ -34,6 +37,8 @@ export interface ArtifactStore {
     input: UpdateInput,
   ): Promise<number | { conflict: true; currentVersion: number }>;
   delete(id: string): Promise<void>;
+  listComments(artifactId: string): Promise<CommentMeta[]>;
+  addComment(artifactId: string, input: CommentInput): Promise<CommentMeta>;
 }
 
 const SCHEMA = [
@@ -63,6 +68,15 @@ const SCHEMA = [
     created_at TEXT NOT NULL,
     PRIMARY KEY (artifact_id, version)
   )`,
+  `CREATE TABLE IF NOT EXISTS comments (
+    id TEXT PRIMARY KEY,
+    artifact_id TEXT NOT NULL,
+    author TEXT,
+    body TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_comments_artifact_created
+    ON comments(artifact_id, created_at)`,
 ];
 
 // Columns added after launch; migrate existing DBs in place. Each ALTER
@@ -440,6 +454,60 @@ export class D1R2Store implements ArtifactStore {
     await this.db.batch([
       this.db.prepare("DELETE FROM versions WHERE artifact_id = ?").bind(id),
       this.db.prepare("DELETE FROM artifacts WHERE id = ?").bind(id),
+      this.db.prepare("DELETE FROM comments WHERE artifact_id = ?").bind(id),
     ]);
   }
+
+  async listComments(artifactId: string): Promise<CommentMeta[]> {
+    await ensureSchema(this.db);
+    const { results } = await this.db
+      .prepare(
+        `SELECT id, artifact_id, author, body, created_at
+         FROM comments WHERE artifact_id = ? ORDER BY created_at ASC, id ASC`,
+      )
+      .bind(artifactId)
+      .all<CommentRow>();
+    return results.map(toComment);
+  }
+
+  async addComment(
+    artifactId: string,
+    input: CommentInput,
+  ): Promise<CommentMeta> {
+    await ensureSchema(this.db);
+    const id = generateId();
+    const now = new Date().toISOString();
+    await this.db
+      .prepare(
+        `INSERT INTO comments (id, artifact_id, author, body, created_at)
+         VALUES (?, ?, ?, ?, ?)`,
+      )
+      .bind(id, artifactId, input.author, input.body, now)
+      .run();
+    return {
+      id,
+      artifactId,
+      author: input.author,
+      body: input.body,
+      createdAt: now,
+    };
+  }
+}
+
+interface CommentRow {
+  id: string;
+  artifact_id: string;
+  author: string | null;
+  body: string;
+  created_at: string;
+}
+
+function toComment(row: CommentRow): CommentMeta {
+  return {
+    id: row.id,
+    artifactId: row.artifact_id,
+    author: row.author,
+    body: row.body,
+    createdAt: row.created_at,
+  };
 }
