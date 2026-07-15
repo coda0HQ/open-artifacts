@@ -263,6 +263,26 @@ describe("GET /a/:id (encrypted)", () => {
     expect(html).toContain("Password incorrect. Check it and try again.");
   });
 
+  it("renders exactly one feedback panel on an encrypted page (no duplicate in the iframe template)", async () => {
+    const envelope = await encrypt("<h1>Top Secret</h1>", "hunter2");
+    const created = await create({
+      content: envelope.content,
+      encrypted: {
+        salt: envelope.salt,
+        iv: envelope.iv,
+        iterations: envelope.iterations,
+      },
+    });
+    const html = await (
+      await exports.default.fetch(`${BASE}/a/${created.id}`)
+    ).text();
+    // The outer unlock page renders the panel; the iframe srcdoc template
+    // (built via wrapDocument with feedback:false) must not duplicate it.
+    // Count the panel element (id attribute), not the CSS class rules.
+    const occurrences = html.split('id="oa-feedback-backdrop"').length - 1;
+    expect(occurrences).toBe(1);
+  });
+
   it("round-trips: the shell's envelope decrypts with the right password", async () => {
     const plaintext = "<h1>Decryptable</h1>";
     const envelope = await encrypt(plaintext, "correct horse", 5000);

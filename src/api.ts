@@ -403,7 +403,11 @@ api.post("/artifacts/:id/feedback", async (c) => {
 
   const feedback = await store.addFeedback(id, parsed.value);
   return c.json(
-    { id: feedback.id, artifactId: feedback.id, status: feedback.status },
+    {
+      id: feedback.id,
+      artifactId: feedback.artifactId,
+      status: feedback.status,
+    },
     201,
   );
 });

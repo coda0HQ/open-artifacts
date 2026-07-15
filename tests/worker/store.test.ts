@@ -112,4 +112,19 @@ describe("feedback store round-trip", () => {
     const store = new D1R2Store(env.DB, env.CONTENT);
     expect(await store.getFeedback("no-such-feedback-id")).toBeNull();
   });
+
+  it("sweeps feedback rows when an artifact is deleted", async () => {
+    const store = new D1R2Store(env.DB, env.CONTENT);
+    const id = "fb-sweep";
+    await store.create(id, "hash", INPUT, null);
+    await store.addFeedback(id, { projectRef: null, body: "orphan me" });
+    await store.addFeedback(id, { projectRef: null, body: "and me" });
+    expect(await store.listFeedback(id, "pending")).toHaveLength(2);
+
+    await store.delete(id);
+
+    // After delete, the feedback is gone — no orphaned rows remain.
+    expect(await store.listFeedback(id, "pending")).toHaveLength(0);
+    expect(await store.getFeedback(id)).toBeNull();
+  });
 });

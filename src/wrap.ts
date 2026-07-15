@@ -372,6 +372,14 @@ export interface WrapOptions {
    * feedback form falls back to a manual project-path input.
    */
   projectRef?: string | null;
+  /**
+   * Whether to render the host-chrome feedback panel. Defaults to true for the
+   * normal viewer path. The encrypted unlock shell passes false for the
+   * iframe srcdoc template it builds via wrapDocument — the iframe is sandboxed
+   * with connect-src 'none', so a panel inside it could never POST; the outer
+   * unlock page renders its own functioning panel instead.
+   */
+  feedback?: boolean;
 }
 
 const FEEDBACK_ARTIFACT_ID_SLOT = "__OA_ARTIFACT_ID__";
@@ -594,6 +602,11 @@ document.getElementById("oa-content").innerHTML=marked.parse(${jsonForInlineScri
 
   const brand = brandFor(hostname);
   const ogDescription = description || title;
+  const showFeedback = options.feedback !== false;
+  const feedbackPanel = showFeedback ? feedbackPanelHtml() : "";
+  const feedbackScriptBody = showFeedback
+    ? feedbackScript(artifactId, projectRef ?? null)
+    : "";
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -620,10 +633,10 @@ document.getElementById("oa-content").innerHTML=marked.parse(${jsonForInlineScri
 <body>
 ${headerHtml(favicon, title, hostname, brandUrl)}
 ${body}
-${feedbackPanelHtml()}
+${feedbackPanel}
 <script>${THEME_SCRIPT}</script>
 <script>${LAYOUT_SCRIPT}</script>
-<script>${feedbackScript(artifactId, projectRef ?? null)}</script>
+<script>${escapeInlineScript(feedbackScriptBody)}</script>
 </body>
 </html>
 `;
@@ -689,6 +702,10 @@ export function unlockShell(options: UnlockShellOptions): string {
     hostname,
     brandUrl,
     projectRef,
+    // The iframe srcdoc built from this template is sandboxed with
+    // connect-src 'none' — a feedback panel inside it could never POST. The
+    // outer unlock page renders its own functioning panel instead.
+    feedback: false,
   });
 
   const unlockScript = `

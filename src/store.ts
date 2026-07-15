@@ -492,6 +492,7 @@ export class D1R2Store implements ArtifactStore {
     }
     await this.db.batch([
       this.db.prepare("DELETE FROM versions WHERE artifact_id = ?").bind(id),
+      this.db.prepare("DELETE FROM feedback WHERE artifact_id = ?").bind(id),
       this.db.prepare("DELETE FROM artifacts WHERE id = ?").bind(id),
     ]);
   }

@@ -635,8 +635,14 @@ describe("project-change feedback (type 2)", () => {
       }),
     );
     expect(res.status).toBe(201);
-    const body = (await res.json()) as { id: string; status: string };
+    const body = (await res.json()) as {
+      id: string;
+      artifactId: string;
+      status: string;
+    };
     expect(body.id).toMatch(/^[1-9A-HJ-NP-Za-km-z]{12}$/);
+    // The response echoes the parent artifact's id, not the feedback's own id.
+    expect(body.artifactId).toBe(created.id);
     expect(body.status).toBe("pending");
   });
 
