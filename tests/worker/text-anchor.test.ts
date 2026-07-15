@@ -76,5 +76,10 @@ describe("frame document carries the text-highlight runtime", () => {
     expect(html).toContain("CSS.highlights.set('oa-cm'");
     // The matcher source was injected verbatim.
     expect(html).toContain("function reAnchor");
+    // esbuild's keepNames wraps inner functions in __name(); the frame must
+    // ship a passthrough shim or the injected matcher throws at runtime.
+    if (html.includes("__name(")) {
+      expect(html).toContain("var __name=function(f){return f}");
+    }
   });
 });

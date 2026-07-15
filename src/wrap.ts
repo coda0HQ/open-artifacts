@@ -819,6 +819,10 @@ const FRAME_TEXT_CSS = `
 const FRAME_TEXT_SCRIPT = `
 (function(){
   if(document.querySelector('.oa-plane'))return;
+  // esbuild's keepNames wraps named inner functions in __name(); that helper
+  // lives in the worker bundle, not this sandboxed frame, so the injected
+  // matcher sources below reference it. A passthrough shim makes them run here.
+  var __name=function(f){return f};
   var buildTextAnchor=${buildTextAnchor.toString()};
   var reAnchor=${reAnchor.toString()};
   // Walk only rendered text — skip SCRIPT/STYLE so injected code never counts
