@@ -749,6 +749,52 @@ describe("Recipe builder", () => {
     expect(result.code).toBe(0);
   });
 
+  it("rejects an enlarged callout box at --text-lg", async () => {
+    const callout = writeRecipe("positioning", {
+      mutate: (r) => {
+        r.artifact.level = 2;
+      },
+    });
+    writeFileSync(
+      callout.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n.positioning{margin:1.5rem 0;padding:1rem 1.5rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);font-size:var(--text-lg);line-height:1.5}\n',
+    );
+    const result = await run(["validate", callout.recipePath], {
+      expectFailure: true,
+    });
+    expect(result.stderr).toContain("enlarged callout");
+    expect(result.stderr).toContain(".positioning");
+    expect(requests).toHaveLength(0);
+  });
+
+  it("passes a callout box kept at --text-base", async () => {
+    const callout = writeRecipe("positioning-base", {
+      mutate: (r) => {
+        r.artifact.level = 2;
+      },
+    });
+    writeFileSync(
+      callout.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n.positioning{margin:1.5rem 0;padding:1rem 1.5rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);font-size:var(--text-base);line-height:var(--leading-body)}\n',
+    );
+    const result = await run(["validate", callout.recipePath]);
+    expect(result.code).toBe(0);
+  });
+
+  it("passes a --text-lg lead on a standfirst selector", async () => {
+    const lead = writeRecipe("standfirst", {
+      mutate: (r) => {
+        r.artifact.level = 2;
+      },
+    });
+    writeFileSync(
+      lead.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n.standfirst{font-size:var(--text-lg);line-height:1.4}\n',
+    );
+    const result = await run(["validate", lead.recipePath]);
+    expect(result.code).toBe(0);
+  });
+
   it("rejects a heading with an inline icon but no centered-row layout", async () => {
     const crooked = writeRecipe("crooked-icon", {
       body: '<main class="oa-prose"><h2><svg viewBox="0 0 24 24" fill="currentColor"><path d="M11 7H13V9H11V7Z"/></svg> What it is</h2></main>\n',

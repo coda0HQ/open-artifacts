@@ -407,6 +407,19 @@ const TROPE_BACKDROP_RE = /(?:-webkit-)?backdrop-filter\s*:/i;
 const TROPE_FLOATING_POS_RE = /\bposition\s*:\s*(?:fixed|sticky)\b/i;
 const TROPE_FLOATING_NAME_RE =
   /\b(?:bar|toolbar|chrome|controls?|zoom|dock|statusbar|status-bar|topbar|navbar|nav-bar|floatingbar|actionbar|action-bar|headerbar|header-bar)\b/i;
+// Trope 4 — enlarged callout copy. A bordered/tinted prose box (positioning
+// statement, recommendation, awaiting-decision note, boxed aside) restates
+// body copy and must stay at --text-base; enlarging such boxes to --text-lg+
+// on every section is the "every boxed paragraph is a pull quote" defect. The
+// gate fires when a *non-display* selector enlarges text to >= the lead step.
+// --text-lg (1.25rem) is the lead tier; --text-xl and above are display tiers.
+// Sanctioned large-type surfaces pass: headings (h1–h6 + .oa-prose headings),
+// a hero/standfirst/display/quote set-piece, and font-size on :root/body.
+const TROPE_FONT_SIZE_RE =
+  /font-size\s*:\s*(?:var\(\s*--text-(?:lg|xl|2xl|3xl|display)\s*\)|1\.2\d*(?:rem|em)|1\.[3-9]\d*(?:rem|em)|[2-9](?:\.\d+)?(?:rem|em)|\d{2,}(?:px|pt))/i;
+const TROPE_LARGE_NAME_RE =
+  /\b(?:hero|standfirst|lead|lede|display|kicker|eyebrow|quote|pull-?quote|setpiece|set-piece|masthead|headline|title)\b/i;
+const TROPE_HEADING_SEL_RE = /(?:^|[>\s+~,(])(?:h[1-6]\b)/i;
 
 function parseRules(css) {
   const stripped = css.replace(/\/\*[\s\S]*?\*\//g, "");
@@ -475,6 +488,21 @@ function validateTropes(authoredStyles) {
       if (!floatingByPos && !floatingByName) {
         fail(
           `banned trope — glassmorphism: backdrop-filter on "${selector}" is decorative blur. backdrop-filter is sanctioned only for a bar floating over scrolling content (position:fixed/sticky, or a selector named bar/toolbar/controls/chrome); otherwise remove it.`,
+        );
+      }
+    }
+    // Trope 4 — enlarged callout copy. font-size >= the lead step on a
+    // non-display selector: a bordered/tinted prose box enlarged to read like
+    // a pull quote. Keep callouts at --text-base; emphasize via weight, not
+    // scale. Headings, a hero/standfirst/quote set-piece, and :root/body are
+    // sanctioned large-type surfaces and pass.
+    if (TROPE_FONT_SIZE_RE.test(decls)) {
+      const isHeading = TROPE_HEADING_SEL_RE.test(selector);
+      const isDisplay = TROPE_LARGE_NAME_RE.test(selector);
+      const isRootBody = /(?:^|[>\s+~,])(?::root|html|body)\b/i.test(selector);
+      if (!isHeading && !isDisplay && !isRootBody) {
+        fail(
+          `banned trope — enlarged callout: font-size >= --text-lg on "${selector}" turns a prose box into a pull quote. Callouts (positioning statements, recommendations, asides) stay at --text-base; emphasize with font-weight: 600, a surface tint, or a hairline border — not a larger font. Reserve --text-lg+ for leads, standfirsts, headings, and one quote set-piece per section.`,
         );
       }
     }

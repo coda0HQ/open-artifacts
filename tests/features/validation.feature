@@ -197,6 +197,22 @@ Feature: Build validation catches silent layout defects
     When the agent runs the artifact script with validate
     Then the build succeeds because a floating bar over scrolling content is sanctioned
 
+  Scenario: An enlarged callout box at --text-lg fails validation
+    Given an HTML recipe whose styles set font-size:var(--text-lg) on a .positioning callout
+    When the agent runs the artifact script with validate
+    Then the build fails naming the enlarged-callout trope and the offending selector
+    And no publish request is made
+
+  Scenario: A callout box kept at --text-base passes validation
+    Given an HTML recipe whose styles set font-size:var(--text-base) on a .positioning callout
+    When the agent runs the artifact script with validate
+    Then the build succeeds because a callout stays at body scale
+
+  Scenario: A --text-lg lead on a standfirst passes validation
+    Given an HTML recipe whose styles set font-size:var(--text-lg) on a .standfirst lead
+    When the agent runs the artifact script with validate
+    Then the build succeeds because leads and standfirsts are sanctioned large-type surfaces
+
   Scenario: A heading with an inline icon but no centered-row layout fails validation
     Given an HTML recipe whose body puts an inline <svg> in an <h2> that has neither
       the .oa-ico-text helper nor an authored display:flex/grid rule targeting it
