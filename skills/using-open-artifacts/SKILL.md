@@ -178,7 +178,14 @@ The strict CSP blocks ALL external requests (CDN scripts, fonts, remote
 images, fetch/XHR/WebSockets):
 
 - Inline all CSS and JS; embed images and fonts as `data:` URIs. Use system
-  font stacks or inline a face as a `@font-face` data URI.
+  font stacks or inline a face as a `@font-face` data URI. On a deploy that set
+  `OPEN_ARTIFACTS_WEB_FONTS="1"`, a web font may also be loaded same-origin via
+  the `/fonts/<family>--<weight>[--italic]` proxy or directly from an allowlisted
+  font CDN (Fontshare / Google Fonts), and mermaid via an allowlisted
+  `<script src="https://cdn.jsdelivr.net/npm/<pkg>@<ver>/<path>">` — see
+  `references/fonts.md` and `references/scripts.md`. The build gate restricts
+  `@font-face`/`@import`/`<script src>` to those hosts and packages so no
+  arbitrary external host is ever reachable.
 - **Icons: prefer [Remix Icon](https://remixicon.com/).** Read
   `${CLAUDE_SKILL_DIR}/references/icons.md` for a vendored ~90-icon inline-SVG
   subset (navigation, actions, status, social, common UI). Copy the whole

@@ -97,8 +97,10 @@ describe("GET /a/:id (plain HTML)", () => {
     const csp = res.headers.get("content-security-policy") ?? "";
     expect(csp).toContain("sandbox allow-scripts");
     expect(csp).toContain("default-src 'none'");
-    expect(csp).toContain("script-src 'unsafe-inline'");
-    expect(csp).toContain("style-src 'unsafe-inline'");
+    expect(csp).toContain("script-src 'self' 'unsafe-inline' cdn.jsdelivr.net");
+    expect(csp).toContain(
+      "style-src 'self' 'unsafe-inline' fonts.googleapis.com",
+    );
     expect(csp).toContain("img-src data: blob:");
     expect(csp).toContain("connect-src 'none'");
     expect(csp).toContain("base-uri 'none'");

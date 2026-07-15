@@ -17,6 +17,10 @@ export type Bindings = Env & {
   CREATE_TOKEN?: string;
   BRAND_URL?: string;
   PUBLIC_URL?: string;
+  // "1" enables the opt-in web-font surface: the /fonts proxy + an
+  // allow-same-origin sandbox so the browser can cache same-origin fonts.
+  // Absent (or any other value) keeps the strict opaque-origin sandbox.
+  OPEN_ARTIFACTS_WEB_FONTS?: string;
 };
 export type AppContext = { Bindings: Bindings };
 

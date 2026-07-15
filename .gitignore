@@ -11,3 +11,5 @@ dist/
 .artifacts/fragments.local/
 
 .claude/
+.vendor-tmp/
+skills/using-open-artifacts-workspace/
