@@ -7,11 +7,12 @@
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
-    "run_worker_first": ["/", "/api/*", "/a/*", "/og/*", "/fonts/*"]
+    "run_worker_first": ["/", "/api/*", "/a/*", "/og/*", "/fonts/*", "/vendor/*"]
   },
-  // "1" opts this deploy into the web-font/runtime-library surface: the /fonts
-  // proxy, allowlisted font CDNs, an allow-same-origin sandbox so the browser
-  // can cache fonts, and script-src cdn.jsdelivr.net for allowlisted libraries.
+  // "1" opts this deploy into the web-font surface: the /fonts proxy,
+  // allowlisted font CDNs, and an allow-same-origin sandbox so the browser can
+  // cache fonts. Runtime libraries (mermaid) are self-hosted at /vendor/* and
+  // always served; this flag only lifts the opaque-origin sandbox for fonts.
   // Self-hosters who don't want the opaque-origin protection lifted omit it.
   "vars": { "OPEN_ARTIFACTS_WEB_FONTS": "1" },
   "d1_databases": [

@@ -1,31 +1,31 @@
-Feature: Opt-in runtime libraries (mermaid via jsdelivr CDN)
-  As an artifact author on a deploy that opted into runtime libraries
-  I want to declare an allowlisted library loaded from jsdelivr
-  So that text-authored diagrams render
+Feature: Runtime libraries (mermaid self-hosted same-origin)
+  As an artifact author
+  I want to declare an allowlisted library loaded same-origin from /vendor
+  So that text-authored diagrams render with no external script host in the CSP
 
-  Scenario: Script surface is off by default
-    When a deploy does not set OPEN_ARTIFACTS_WEB_FONTS
-    Then the CSP omits cdn.jsdelivr.net from script-src
-    And a jsdelivr <script src> is blocked by the CSP at runtime
+  Scenario: The mermaid bundle is served same-origin
+    When a request hits GET /vendor/mermaid.bundle.mjs
+    Then the response is JavaScript served with nosniff
+    And no external script host appears in any artifact CSP
 
-  Scenario: Build gate rejects a non-jsdelivr remote <script src>
-    Given a recipe whose body contains <script src="https://evil/x.js">
+  Scenario: Build gate rejects a non-allowlisted same-origin /vendor path
+    Given a recipe whose body contains <script src="/vendor/evil.bundle.mjs"></script>
     When the build runs validate
     Then validation fails with a script-src message
     And no request is recorded
 
-  Scenario: Build gate rejects a jsdelivr package off the allowlist
-    Given a recipe whose body contains <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js">
+  Scenario: Build gate rejects an external remote <script src>
+    Given a recipe whose body contains <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
     When the build runs validate
-    Then validation fails naming "d3" as off the allowlist
+    Then validation fails naming the same-origin /vendor/ requirement
 
   Scenario: Build gate rejects an inline <script> in the body
     Given a recipe whose body contains <script>alert(1)</script>
     When the build runs validate
     Then validation fails with a body-fragment message
 
-  Scenario: Build gate accepts an allowlisted jsdelivr <script src>
-    Given a recipe whose body contains <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  Scenario: Build gate accepts an allowlisted same-origin <script src> for mermaid
+    Given a recipe whose body contains <script type="module" src="/vendor/mermaid.bundle.mjs"></script>
     And a <pre class="mermaid">flowchart LR\nA-->B</pre> diagram
     When the build runs validate
     Then validation passes

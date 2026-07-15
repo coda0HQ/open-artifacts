@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -80,6 +80,40 @@ const mermaidEntry = join(
 );
 const mermaidBundle = join(outDir, "mermaid.bundle.mjs");
 esbuild(mermaidEntry, mermaidBundle);
+
+// The bundle is an ESM with `export{<binding> as default}`. Two consumers load
+// it: the skill's build-time syntax gate (node `import()`, reads
+// `mod.default`), and the browser — a `<script type=module src="/vendor/...">
+// loaded same-origin under nonce-only CSP. The browser init is plain inline JS
+// in the scripts slot that calls `window.mermaid.run(...)`, but the ESM bundle
+// only `export`s its default; it never assigns `window.mermaid`. Append a
+// side-effect line that assigns the default-export binding to
+// `window.mermaid`/`globalThis.mermaid` so both consumers reach the same API:
+// the node gate still gets `mod.default`, and the browser gets the global.
+// Parsing the binding name from the emitted `export{...as default}` keeps this
+// robust across re-vendors (the minified name shifts on every bump).
+const emitted = readFileSync(mermaidBundle, "utf8");
+const exportMatch = emitted.match(
+  /export\s*\{\s*([A-Za-z_$][\w$]*)\s+as\s+default\s*\}/,
+);
+if (!exportMatch) {
+  throw new Error(
+    "could not find `export{<binding> as default}` in mermaid bundle; vendor step can't append the window.mermaid side-effect",
+  );
+}
+const binding = exportMatch[1];
+writeFileSync(
+  mermaidBundle,
+  `${emitted}\n;window.mermaid=globalThis.mermaid=${binding};\n`,
+);
+
+// Serve the same bundle same-origin from the Worker's static assets dir so it
+// loads under `script-src 'self'` (no external script host in CSP). The skill's
+// vendor copy stays the build-time source; this public copy is the browser
+// source. Kept in sync by this vendor step.
+const publicVendorDir = join(root, "public", "vendor");
+mkdirSync(publicVendorDir, { recursive: true });
+copyFileSync(mermaidBundle, join(publicVendorDir, "mermaid.bundle.mjs"));
 
 const linkedomEntry = join(npmInstall("linkedom"), "esm/index.js");
 const linkedomBundle = join(outDir, "linkedom.bundle.mjs");

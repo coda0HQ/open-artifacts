@@ -97,14 +97,16 @@ describe("GET /a/:id (plain HTML)", () => {
     const csp = res.headers.get("content-security-policy") ?? "";
     expect(csp).toContain("sandbox allow-scripts");
     expect(csp).toContain("default-src 'none'");
-    // script-src carries a per-request nonce + strict-dynamic and NO
-    // 'unsafe-inline' (issue #11): an artifact's inline JS can no longer
-    // createElement("script") to load an arbitrary jsdelivr package. (The
-    // test env opts into web fonts, so cdn.jsdelivr.net is present.)
-    expect(csp).toMatch(
-      /script-src 'self'( cdn\.jsdelivr\.net)? 'nonce-[^']+' 'strict-dynamic'/,
-    );
+    // script-src is nonce-only with 'self' (same-origin /vendor/... runtime
+    // bundles) and NO 'unsafe-inline', NO external host, NO 'strict-dynamic'
+    // (issue #11): with no external script host in the CSP, an artifact's inline
+    // JS cannot createElement("script", {src: <external>}) to load an arbitrary
+    // package — the bypass is closed without breaking user JS (the nonce is
+    // stamped on every user <script> at serve time).
+    expect(csp).toMatch(/script-src 'self' 'nonce-[^']+'/);
     expect(csp).not.toContain("'unsafe-inline' cdn.jsdelivr.net");
+    expect(csp).not.toContain("cdn.jsdelivr.net");
+    expect(csp).not.toContain("'strict-dynamic'");
     expect(csp).not.toContain("script-src 'unsafe-inline'");
     expect(csp).toContain(
       "style-src 'self' 'unsafe-inline' fonts.googleapis.com",
@@ -138,6 +140,61 @@ describe("GET /a/:id (plain HTML)", () => {
     // at runtime are inlined into the served HTML.
     expect(html).toContain("prefers-color-scheme");
     expect(html).toContain('data-theme="dark"');
+  });
+
+  it("stamps the per-request nonce on user-authored <script> in an HTML artifact", async () => {
+    // Under nonce-only script-src, a nonceless user inline <script> would be
+    // blocked — the rework of issue #11 stamps the per-request nonce onto
+    // every user <script> at serve time so user JS still runs.
+    const created = await create({
+      content: "<main><p>x</p><script>console.log(1)</script></main>",
+    });
+    const res = await exports.default.fetch(`${BASE}/a/${created.id}`);
+    const csp = res.headers.get("content-security-policy") ?? "";
+    const nonce = csp.match(/'nonce-([^']+)'/)?.[1] ?? "";
+    expect(nonce).not.toBe("");
+    const html = await res.text();
+    // The user-authored inline <script> carries the nonce.
+    expect(html).toContain(`<script nonce="${nonce}">console.log(1)</script>`);
+    // No nonceless <script> opening tag survives in the served body.
+    const userScript = html.match(/<script>\s*console\.log\(1\)<\/script>/);
+    expect(userScript).toBeNull();
+  });
+
+  it("does not stamp the nonce onto a <script substring inside a user JS string literal", async () => {
+    // Regression: the serve-time nonce stamper must be HTML-parser-aware. A
+    // <script substring appearing inside an already-open inline <script> body
+    // (e.g. in a JS string literal) is script text, not a start tag — stamping
+    // there would inject nonce="..." into the JS, break the string literal, and
+    // silently kill all user JS. Only top-level <script start tags are stamped.
+    const inner = 'var s = "<script>doStuff()</script>";';
+    const created = await create({
+      content: `<main><script>${inner}</script></main>`,
+    });
+    const res = await exports.default.fetch(`${BASE}/a/${created.id}`);
+    const csp = res.headers.get("content-security-policy") ?? "";
+    const nonce = csp.match(/'nonce-([^']+)'/)?.[1] ?? "";
+    expect(nonce).not.toBe("");
+    const html = await res.text();
+    // The outer (top-level) user <script> is stamped with the nonce.
+    expect(html).toContain(`<script nonce="${nonce}">var s = "`);
+    // The inner <script> inside the JS string is NOT stamped — the string
+    // literal survives intact so the inline JS parses.
+    expect(html).toContain(`"<script>doStuff()</script>"`);
+    expect(html).not.toContain(`<script nonce="${nonce}">doStuff()</script>`);
+  });
+
+  it("serves the self-hosted mermaid bundle same-origin with a JS MIME and nosniff", async () => {
+    const res = await exports.default.fetch(
+      `${BASE}/vendor/mermaid.bundle.mjs`,
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/javascript");
+    expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+    const body = await res.text();
+    // The bundle self-attaches window.mermaid so the browser init (plain inline
+    // JS in the scripts slot) can call window.mermaid.run().
+    expect(body).toContain("window.mermaid=");
   });
 
   it("supports both theme signals", async () => {
@@ -320,9 +377,11 @@ describe("GET /a/:id (encrypted)", () => {
     expect(nonceMatch).not.toBeNull();
     const nonce = nonceMatch?.[1] ?? "";
     // Parent CSP carries the nonce (the encrypted srcdoc iframe inherits the
-    // parent CSP, so the same nonce scheme covers the decrypted doc).
+    // parent CSP, so the same nonce scheme covers the decrypted doc — the
+    // unlock script stamps the nonce onto decrypted user <script> client-side).
     expect(csp).toContain(`'nonce-${nonce}'`);
-    expect(csp).toContain("'strict-dynamic'");
+    expect(csp).toContain("script-src 'self'");
+    expect(csp).not.toContain("'strict-dynamic'");
     expect(csp).not.toContain("'unsafe-inline' cdn.jsdelivr.net");
     const html = await res.text();
     // The unlock shell emits unlockScript + THEME_SCRIPT + LAYOUT_SCRIPT inline;
