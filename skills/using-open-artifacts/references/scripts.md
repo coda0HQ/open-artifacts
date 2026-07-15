@@ -82,12 +82,6 @@ The browser fetches the bundle directly from jsdelivr (the opt-in CSP adds
 gate restricts the URL to the allowlisted package, so an artifact cannot load
 arbitrary npm JS — only the named package's versioned files.
 
-The Worker resolves the slug to `https://cdn.jsdelivr.net/npm/<pkg>@<ver>/dist/<pkg>.min.js`
-*server-side*, fetches it *outside the sandbox*, caches the bytes in R2 under
-`scripts/<slug>.js`, and serves it same-origin. No third-party host ever appears
-in the artifact CSP; `connect-src` stays `'none'`. First load lazily
-materializes; subsequent loads serve from R2 / browser cache.
-
 ## Discipline
 
 - **One library, pinned.** Mermaid is ~3.5 MB minified. Don't load it for a

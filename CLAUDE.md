@@ -31,7 +31,7 @@ Run a single CLI test: `pnpm test:cli -- tests/cli/<file>.test.ts`.
 ## Architecture constraints
 
 - **Strict CSP on the viewer**: artifacts render under `sandbox allow-scripts; default-src 'none'` with an opaque origin. No external requests, no storage, no `fetch`. Any viewer-side data (e.g. a version picker) must be **inlined at serve time** — runtime fetching is impossible inside the sandbox.
-- **Run-worker-first**: `wrangler.jsonc` sets `run_worker_first: ["/", "/api/*", "/a/*", "/og/*"]` even though `public/` is a static assets dir — the Worker intercepts those routes for the coda0 rebrand and dynamic paths. Don't assume `public/` is served as-is for them.
+- **Run-worker-first**: `wrangler.jsonc` sets `run_worker_first: ["/", "/api/*", "/a/*", "/og/*", "/fonts/*"]` even though `public/` is a static assets dir — the Worker intercepts those routes for the coda0 rebrand, the `/fonts` proxy, and dynamic paths. Don't assume `public/` is served as-is for them.
 - **D1 schema auto-applies** on first request — no separate migration step. Local dev state lives in `.wrangler/state`.
 - **Max artifact content size: 4 MiB.**
 - Bindings: D1 = `DB`, R2 = `CONTENT`.
