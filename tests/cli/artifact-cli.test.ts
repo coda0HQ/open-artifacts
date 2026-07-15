@@ -1577,6 +1577,21 @@ describe("Recipe publishing", () => {
     expect(manifest()).toEqual(before);
   });
 
+  it("rejects update with a recipe path where an id is expected", async () => {
+    const built = writeRecipe();
+    await run(["create", built.recipePath]);
+    // The common mistake: passing the Recipe path as `update`'s first
+    // positional. The error must name the artifact id as the lookup key and
+    // list the known id so the author reaches for `update <id>`, not the path.
+    const result = await run(["update", "recipes/report.recipe.json"], {
+      expectFailure: true,
+    });
+    expect(result.stderr).toContain("no manifest entry with id");
+    expect(result.stderr).toContain("not its Recipe path");
+    expect(result.stderr).toContain("testid123456");
+    expect(requests).toHaveLength(1);
+  });
+
   it("keeps encrypted Recipes private and resolves a named password", async () => {
     const { recipePath } = writeRecipe("secret", {
       local: true,
