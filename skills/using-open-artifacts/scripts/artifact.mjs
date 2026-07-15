@@ -3,7 +3,14 @@
 // Used by the "artifacts" agent skill; also usable by humans.
 
 import { createHash, webcrypto } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -44,9 +51,9 @@ function readJson(path, fallback) {
   return JSON.parse(readFileSync(path, "utf8"));
 }
 
-function writeJson(path, value) {
+function writeJson(path, value, mode = 0o644) {
   mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`);
+  writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, { mode });
 }
 
 function loadConfig(flags) {
@@ -114,6 +121,13 @@ function saveManifest(manifest, local) {
 }
 
 function loadCredentials() {
+  if (existsSync(CREDENTIALS_PATH)) {
+    // One-time migration: a credentials file created by an older CLI version
+    // before 0600 enforcement shipped may still be group/world-readable.
+    // Tighten it on first load; chmodSync no-ops the mode bits to 0600.
+    const mode = statSync(CREDENTIALS_PATH).mode & 0o777;
+    if (mode & ~0o600) chmodSync(CREDENTIALS_PATH, 0o600);
+  }
   const value = readJson(CREDENTIALS_PATH, {});
   return {
     ...value,
@@ -125,7 +139,7 @@ function loadCredentials() {
 }
 
 function saveCredentials(credentials) {
-  writeJson(CREDENTIALS_PATH, credentials);
+  writeJson(CREDENTIALS_PATH, credentials, 0o600);
   ensureGitignored();
 }
 
