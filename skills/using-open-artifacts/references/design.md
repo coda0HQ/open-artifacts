@@ -878,6 +878,17 @@ pull in an arbitrary external host or package. Reach for installed-font stacks
 and hand-drawn SVG first; a web font only when an installed face can't carry
 the voice, a library only when text-authored diagrams justify the ~3.5 MB.
 
+**Known limitation — inline-JS bypass of the jsdelivr allowlist (follow-up
+PR).** `script-src` includes `'unsafe-inline'`, so an artifact's inline
+JavaScript can do `document.createElement("script").src = "https://cdn.jsdelivr.net/npm/<any-pkg>"`
+and load any npm package at runtime, bypassing the build-time allowlist gate
+(which only restricts *authored* `<script src>`). This is a strict subset of the
+`allow-same-origin` risk already accepted on opt-in deploys, so it does not add
+new capability on its own — but a future PR should close it by removing
+`'unsafe-inline'` from `script-src` and nonce/strict-dynamic-scoping the
+viewer-injected inline scripts. Until then, treat opt-in deploys as
+trusted-artifacts-only.
+
 - **No external requests of any kind** — the strict CSP blocks all CDN
   scripts, remote images, fetch/XHR/WebSockets. Inline all CSS and JS; embed
   images as `data:` URIs. Fonts are either installed-face stacks (see
