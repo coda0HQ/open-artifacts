@@ -176,6 +176,7 @@ function headerHtml(
   title: string,
   hostname: string,
   brandUrl?: string | null,
+  showFeedback = true,
 ): string {
   // The hosted host always names itself "coda0" and links its own root,
   // ignoring BRAND_URL entirely (same override rule as the landing page); a
@@ -186,10 +187,16 @@ function headerHtml(
   const chip = href
     ? `<a class="oa-brand" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" title="Made with ${escapeHtml(brand.name)}">${BRAND_SVG}<span class="oa-brand-text">${escapeHtml(brand.name)}</span></a>`
     : "";
+  // The feedback toggle is only rendered when the panel + script are too
+  // (showFeedback). The encrypted iframe srcdoc template is built with
+  // feedback:false, so the inner iframe never shows a dead button.
+  const feedbackButton = showFeedback
+    ? `<button id="oa-feedback-toggle" type="button" aria-label="Open project-change feedback" aria-haspopup="dialog" aria-expanded="false">${FEEDBACK_SVG}</button>`
+    : "";
   return `<header class="oa-header">
   <span class="oa-header-title"><span class="oa-header-fav">${escapeHtml(favicon)}</span>${escapeHtml(title)}</span>
   ${chip}
-  <button id="oa-feedback-toggle" type="button" aria-label="Open project-change feedback" aria-haspopup="dialog" aria-expanded="false">${FEEDBACK_SVG}</button>
+  ${feedbackButton}
   <button id="oa-theme-toggle" type="button" aria-label="Toggle theme"></button>
 </header>`;
 }
@@ -631,7 +638,7 @@ document.getElementById("oa-content").innerHTML=marked.parse(${jsonForInlineScri
 <style>${RESET_CSS}${FEEDBACK_CSS}${format === "markdown" ? MARKDOWN_CSS : ""}</style>
 </head>
 <body>
-${headerHtml(favicon, title, hostname, brandUrl)}
+${headerHtml(favicon, title, hostname, brandUrl, showFeedback)}
 ${body}
 ${feedbackPanel}
 <script>${THEME_SCRIPT}</script>

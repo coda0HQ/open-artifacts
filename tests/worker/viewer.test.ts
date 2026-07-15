@@ -283,6 +283,26 @@ describe("GET /a/:id (encrypted)", () => {
     expect(occurrences).toBe(1);
   });
 
+  it("does not render a dead feedback button inside the encrypted iframe template", async () => {
+    const envelope = await encrypt("<h1>Top Secret</h1>", "hunter2");
+    const created = await create({
+      content: envelope.content,
+      encrypted: {
+        salt: envelope.salt,
+        iv: envelope.iv,
+        iterations: envelope.iterations,
+      },
+    });
+    const html = await (
+      await exports.default.fetch(`${BASE}/a/${created.id}`)
+    ).text();
+    // The outer unlock page renders one toggle button (functional); the iframe
+    // srcdoc template (feedback:false) must not carry a dead, listener-less
+    // button inside the decrypted content.
+    const toggles = html.split('id="oa-feedback-toggle"').length - 1;
+    expect(toggles).toBe(1);
+  });
+
   it("round-trips: the shell's envelope decrypts with the right password", async () => {
     const plaintext = "<h1>Decryptable</h1>";
     const envelope = await encrypt(plaintext, "correct horse", 5000);

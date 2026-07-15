@@ -391,6 +391,15 @@ api.post("/artifacts/:id/feedback", async (c) => {
     return c.json({ error: "this instance requires authentication" }, 401);
   }
 
+  // Reject oversized bodies before parsing — mirrors the artifact create
+  // endpoint's pre-parse content-length guard so an attacker can't force the
+  // Worker to buffer/parse an arbitrarily large payload before validateFeedback
+  // rejects it.
+  const declaredLength = Number(c.req.header("content-length") ?? "0");
+  if (declaredLength > MAX_BODY_BYTES) {
+    return c.json({ error: "request body too large" }, 413);
+  }
+
   let body: Record<string, unknown>;
   try {
     body = await c.req.json<Record<string, unknown>>();
