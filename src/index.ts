@@ -10,12 +10,15 @@ import {
 import { fontFaceCss, materializeFont, parseSlug } from "./fonts";
 import { brandHomepageForCoda0, isCoda0Host } from "./home";
 import { renderOgCardPng } from "./og";
+import type { ArtifactRecord, ArtifactStore, StoredContent } from "./store";
 import {
   badVersionPage,
+  frameDocument,
+  hostHeaders,
+  hostShell,
   notFoundPage,
   unlockShell,
   userContentHeaders,
-  wrapDocument,
 } from "./wrap";
 
 const app = new Hono<AppContext>();
@@ -80,55 +83,76 @@ app.get("/fonts/:slug{[a-z0-9-]+\\.(?:woff2|css)}", async (c) => {
   });
 });
 
-app.get("/a/:id", async (c) => {
-  const store = storeFrom(c);
-  const record = await store.get(c.req.param("id"));
-  const hostname = new URL(c.req.url).hostname;
-  const webFonts = c.env.OPEN_ARTIFACTS_WEB_FONTS === "1";
-  const htmlHeaders = (sandbox: boolean) =>
-    userContentHeaders({
-      sandbox,
-      contentType: "text/html; charset=utf-8",
-      webFonts,
-    });
+// Shared by both /a/:id (the host page) and /a/:id/frame (the artifact
+// frame): resolve the record, the requested ?v= version, and that version's
+// stored content. Each route renders its own failure response — the host
+// page shows a branded status page, the frame returns a bare 404 — so this
+// only reports what went wrong, not how to display it.
+type ResolvedArtifact =
+  | {
+      ok: true;
+      record: ArtifactRecord;
+      version: number;
+      content: StoredContent;
+    }
+  | { ok: false; status: 400 | 404; badVersion: boolean };
 
-  if (record === null) {
-    return new Response(notFoundPage(hostname), {
-      status: 404,
-      headers: htmlHeaders(true),
-    });
-  }
+async function resolveArtifact(
+  store: ArtifactStore,
+  id: string,
+  rawVersion: string | undefined,
+): Promise<ResolvedArtifact> {
+  const record = await store.get(id);
+  if (record === null) return { ok: false, status: 404, badVersion: false };
 
-  const version = parseVersionParam(c.req.query("v"), record.currentVersion);
+  const version = parseVersionParam(rawVersion, record.currentVersion);
   if (typeof version !== "number") {
-    const page =
-      version.status === 400
-        ? badVersionPage(hostname)
-        : notFoundPage(hostname);
-    return new Response(page, {
+    return {
+      ok: false,
       status: version.status,
-      headers: htmlHeaders(true),
-    });
+      badVersion: version.status === 400,
+    };
   }
 
   const content = await store.getContent(record.id, version);
-  if (content === null) {
-    return new Response(notFoundPage(hostname), {
-      status: 404,
-      headers: htmlHeaders(true),
+  if (content === null) return { ok: false, status: 404, badVersion: false };
+
+  return { ok: true, record, version, content };
+}
+
+// The HOST PAGE: a normal-origin document (hostHeaders — connect-src 'self',
+// frame-src 'self', no sandbox) that embeds the artifact as a sandboxed
+// <iframe src="/a/:id/frame">, or (encrypted) a password form that decrypts
+// client-side and injects the artifact frame via srcdoc. It never renders the
+// artifact body itself.
+app.get("/a/:id", async (c) => {
+  const store = storeFrom(c);
+  const hostname = new URL(c.req.url).hostname;
+  const rawVersion = c.req.query("v");
+  const resolved = await resolveArtifact(store, c.req.param("id"), rawVersion);
+
+  if (!resolved.ok) {
+    const page = resolved.badVersion
+      ? badVersionPage(hostname)
+      : notFoundPage(hostname);
+    return new Response(page, {
+      status: resolved.status,
+      headers: hostHeaders(),
     });
   }
 
+  const { record, content } = resolved;
   const url = artifactUrl(c, record.id);
   const ogImage = ogImageUrl(c, record.id);
   const brandUrl = c.env.BRAND_URL ?? null;
   // Inline the comment thread at serve time for both plain and encrypted
-  // artifacts: the viewer page is sandboxed with connect-src 'none', so runtime
-  // fetch is impossible. Future viewers still see the persisted thread because
-  // it is stamped into the HTML here — including the encrypted unlock shell,
-  // whose surrounding chrome carries the drawer (the body is the only part that
-  // stays hidden until unlock).
+  // artifacts: the artifact frame is sandboxed with connect-src 'none', so
+  // runtime fetch from inside it is impossible. Future viewers still see the
+  // persisted thread because it is stamped into the host page here —
+  // including the encrypted unlock shell, whose surrounding chrome carries
+  // the drawer (only the body stays hidden until unlock).
   const comments = await store.listComments(record.id);
+  const frameSrc = `/a/${record.id}/frame${rawVersion !== undefined ? `?v=${encodeURIComponent(rawVersion)}` : ""}`;
 
   if (content.encrypted !== null) {
     const page = unlockShell({
@@ -143,25 +167,61 @@ app.get("/a/:id", async (c) => {
       artifactId: record.id,
       comments,
       envelope: { ...content.encrypted, ciphertext: content.body },
-      webFonts,
     });
-    return new Response(page, { headers: htmlHeaders(false) });
+    return new Response(page, { headers: hostHeaders() });
   }
 
-  const page = wrapDocument({
+  const page = hostShell({
     title: record.title,
     description: record.description,
     favicon: record.favicon,
-    format: record.format,
-    content: content.body,
     url,
     ogImage,
     hostname,
     brandUrl,
     artifactId: record.id,
     comments,
+    frameSrc,
   });
-  return new Response(page, { headers: htmlHeaders(true) });
+  return new Response(page, { headers: hostHeaders() });
+});
+
+// The ARTIFACT FRAME: the sandboxed, opaque-origin document embedded by the
+// host page's <iframe>. Plain artifacts only — the server never holds
+// plaintext for an encrypted artifact, so this always 404s for one; the
+// unlock shell instead builds the same frameDocument() client-side after
+// decrypting and assigns it to the iframe's `srcdoc`.
+app.get("/a/:id/frame", async (c) => {
+  const store = storeFrom(c);
+  const webFonts = c.env.OPEN_ARTIFACTS_WEB_FONTS === "1";
+  const resolved = await resolveArtifact(
+    store,
+    c.req.param("id"),
+    c.req.query("v"),
+  );
+
+  if (!resolved.ok) {
+    return new Response("not found", { status: resolved.status });
+  }
+  const { record, content } = resolved;
+  if (content.encrypted !== null) {
+    return new Response("not found", { status: 404 });
+  }
+
+  const page = frameDocument({
+    format: record.format,
+    content: content.body,
+  });
+  return new Response(page, {
+    headers: userContentHeaders({
+      sandbox: true,
+      contentType: "text/html; charset=utf-8",
+      webFonts,
+      // R1: the artifact frame must never become same-origin with the
+      // privileged host page, even when webFonts is on.
+      frameSandbox: true,
+    }),
+  });
 });
 
 // OpenGraph card image: a 1200x630 PNG rasterized from a self-contained card

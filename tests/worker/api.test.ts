@@ -320,7 +320,7 @@ describe("PUT /api/artifacts/:id", () => {
     const body = (await res.json()) as { version: number };
     expect(body.version).toBe(2);
 
-    const page = await exports.default.fetch(`${BASE}/a/${created.id}`);
+    const page = await exports.default.fetch(`${BASE}/a/${created.id}/frame`);
     expect(await page.text()).toContain("<h1>Updated</h1>");
   });
 
@@ -528,7 +528,7 @@ describe("compare-and-swap update safety (store layer)", () => {
     ).json()) as { versions: Array<{ version: number }> };
     expect(meta.versions.map((v) => v.version)).toEqual([1, 2]);
     const live = await (
-      await exports.default.fetch(`${BASE}/a/${created.id}`)
+      await exports.default.fetch(`${BASE}/a/${created.id}/frame`)
     ).text();
     expect(live).toContain("winner");
     expect(live).not.toContain("loser");

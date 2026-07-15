@@ -62,8 +62,8 @@ async function encrypt(
   };
 }
 
-describe("GET /a/:id (plain HTML)", () => {
-  it("wraps content in a complete skeleton with title, favicon, and reset", async () => {
+describe("GET /a/:id (plain HTML) — host page", () => {
+  it("wraps the chrome in a complete skeleton with title, favicon, and reset, embedding the artifact frame", async () => {
     const created = await create({ content: "<h1>Wrapped</h1>" });
     const res = await exports.default.fetch(`${BASE}/a/${created.id}`);
     expect(res.status).toBe(200);
@@ -76,7 +76,61 @@ describe("GET /a/:id (plain HTML)", () => {
     expect(html).toContain('rel="icon"');
     expect(html).toContain("data:image/svg+xml");
     expect(html).toContain("box-sizing");
-    expect(html).toContain("<h1>Wrapped</h1>");
+    // The artifact body itself lives only in the framed sub-document.
+    expect(html).not.toContain("<h1>Wrapped</h1>");
+    expect(html).toContain(
+      `<iframe id="oa-frame" src="/a/${created.id}/frame"`,
+    );
+  });
+
+  it("has a normal-origin CSP (connect-src 'self', frame-src 'self', no sandbox) and embeds a sandboxed artifact frame with the opposite CSP", async () => {
+    const created = await create({ content: "<h1>Wrapped</h1>" });
+    const hostRes = await exports.default.fetch(`${BASE}/a/${created.id}`);
+    const hostCsp = hostRes.headers.get("content-security-policy") ?? "";
+    expect(hostCsp).toContain("connect-src 'self'");
+    expect(hostCsp).toContain("frame-src 'self'");
+    expect(hostCsp).not.toMatch(/(^|;\s*)sandbox/);
+    expect(hostCsp).toContain("default-src 'none'");
+    expect(hostCsp).toContain("form-action 'none'");
+    expect(hostCsp).toContain("base-uri 'none'");
+
+    const frameRes = await exports.default.fetch(
+      `${BASE}/a/${created.id}/frame`,
+    );
+    expect(frameRes.status).toBe(200);
+    const frameCsp = frameRes.headers.get("content-security-policy") ?? "";
+    expect(frameCsp).toContain("sandbox allow-scripts");
+    expect(frameCsp).toContain("connect-src 'none'");
+    // R1: never allow-same-origin on the artifact frame, even with webFonts
+    // on (the test environment's wrangler.jsonc sets it to "1").
+    expect(frameCsp).not.toContain("allow-same-origin");
+    const frameHtml = await frameRes.text();
+    expect(frameHtml).toContain("<h1>Wrapped</h1>");
+    // No host chrome (og/title meta, header element, drawer) leaks into the
+    // frame — it renders no <header>, even though the frame's reset CSS
+    // still carries the (unused, harmless) .oa-header selector rules.
+    expect(frameHtml).not.toContain("<title>");
+    expect(frameHtml).not.toContain("<header");
+    expect(frameHtml).not.toContain("oa-cm-drawer");
+  });
+
+  it("carries crawler metadata on the host page, with og:url pointing at /a/:id (never /a/:id/frame)", async () => {
+    const created = await create({
+      content: "<h1>Wrapped</h1>",
+      description: "A crawlable page.",
+    });
+    const html = await (
+      await exports.default.fetch(`${BASE}/a/${created.id}`)
+    ).text();
+    expect(html).toContain(`<title>Viewer Test`);
+    expect(html).toContain(
+      `<meta property="og:image" content="${BASE}/og/${created.id}">`,
+    );
+    // The exact match (closing quote right after the id) proves og:url is
+    // the canonical page, never the "/frame" sub-route.
+    expect(html).toContain(
+      `<meta property="og:url" content="${BASE}/a/${created.id}">`,
+    );
   });
 
   it("escapes the title", async () => {
@@ -91,9 +145,9 @@ describe("GET /a/:id (plain HTML)", () => {
     expect(html).toContain("&lt;img");
   });
 
-  it("sends the sandboxing CSP and hardening headers", async () => {
+  it("frame sends the sandboxing CSP and hardening headers", async () => {
     const created = await create({ content: "<p>safe</p>" });
-    const res = await exports.default.fetch(`${BASE}/a/${created.id}`);
+    const res = await exports.default.fetch(`${BASE}/a/${created.id}/frame`);
     const csp = res.headers.get("content-security-policy") ?? "";
     expect(csp).toContain("sandbox allow-scripts");
     expect(csp).toContain("default-src 'none'");
@@ -165,7 +219,7 @@ describe("GET /a/:id (plain HTML)", () => {
     expect(res.status).toBe(404);
   });
 
-  it("serves a specific version via ?v=", async () => {
+  it("serves a specific version via ?v=, and the host page's frame src carries it through", async () => {
     const created = await create({ content: "<p>first</p>" });
     await exports.default.fetch(
       new Request(`${BASE}/api/artifacts/${created.id}`, {
@@ -178,23 +232,28 @@ describe("GET /a/:id (plain HTML)", () => {
       }),
     );
     const v1 = await (
-      await exports.default.fetch(`${BASE}/a/${created.id}?v=1`)
+      await exports.default.fetch(`${BASE}/a/${created.id}/frame?v=1`)
     ).text();
     expect(v1).toContain("<p>first</p>");
     const latest = await (
-      await exports.default.fetch(`${BASE}/a/${created.id}`)
+      await exports.default.fetch(`${BASE}/a/${created.id}/frame`)
     ).text();
     expect(latest).toContain("<p>second</p>");
+
+    const hostV1 = await (
+      await exports.default.fetch(`${BASE}/a/${created.id}?v=1`)
+    ).text();
+    expect(hostV1).toContain(`src="/a/${created.id}/frame?v=1"`);
   });
 });
 
-describe("GET /a/:id (markdown)", () => {
+describe("GET /a/:id/frame (markdown)", () => {
   it("embeds the markdown source and a client-side renderer", async () => {
     const created = await create({
       content: "# Heading\n\nSome **bold** text.",
       format: "markdown",
     });
-    const res = await exports.default.fetch(`${BASE}/a/${created.id}`);
+    const res = await exports.default.fetch(`${BASE}/a/${created.id}/frame`);
     const html = await res.text();
     expect(html).toContain("marked");
     expect(html).toContain("Some **bold** text.");
@@ -208,7 +267,7 @@ describe("GET /a/:id (markdown)", () => {
       format: "markdown",
     });
     const html = await (
-      await exports.default.fetch(`${BASE}/a/${created.id}`)
+      await exports.default.fetch(`${BASE}/a/${created.id}/frame`)
     ).text();
     expect(html).not.toContain("</script><script>alert(1)");
   });
@@ -252,15 +311,40 @@ describe("GET /a/:id (encrypted)", () => {
     expect(html).toContain(envelope.salt);
     expect(html).toContain("PBKDF2");
     expect(html).toContain("sandbox");
+    // The unlock shell is itself a host page (hostHeaders — connect-src
+    // 'self', no sandbox); the strict connect-src 'none' air-gap now lives on
+    // the <meta> CSP re-asserted inside the srcdoc'd artifact frame template
+    // (R2), embedded below as part of the decrypt script.
     const csp = res.headers.get("content-security-policy") ?? "";
     expect(csp).not.toMatch(/(^|;\s*)sandbox/);
     expect(csp).toContain("default-src 'none'");
-    expect(csp).toContain("connect-src 'none'");
+    expect(csp).toContain("connect-src 'self'");
+    // The re-asserted meta CSP (R2) rides along inside the JSON-embedded
+    // srcdoc template in the decrypt script — single quotes survive
+    // JSON.stringify unescaped, so both substrings still appear verbatim.
+    expect(html).toContain("Content-Security-Policy");
+    expect(html).toContain("connect-src 'none'");
     expect(html).toContain('<label class="oa-label" for="oa-password">');
     expect(html).toContain('aria-describedby="oa-help oa-error"');
     expect(html).toContain("min-height:44px");
     expect(html).toContain("color:var(--oa-danger)");
     expect(html).toContain("Password incorrect. Check it and try again.");
+  });
+
+  it("the frame sub-route refuses to serve an encrypted artifact as plaintext", async () => {
+    const envelope = await encrypt("<h1>Top Secret</h1>", "hunter2");
+    const created = await create({
+      content: envelope.content,
+      encrypted: {
+        salt: envelope.salt,
+        iv: envelope.iv,
+        iterations: envelope.iterations,
+      },
+    });
+    const res = await exports.default.fetch(`${BASE}/a/${created.id}/frame`);
+    expect(res.status).toBe(404);
+    const body = await res.text();
+    expect(body).not.toContain("Top Secret");
   });
 
   it("round-trips: the shell's envelope decrypts with the right password", async () => {

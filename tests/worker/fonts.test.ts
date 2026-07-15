@@ -69,12 +69,18 @@ describe("web-font surface — opt-in flag is set in wrangler.jsonc", () => {
     await env.CONTENT.delete(key);
   });
 
-  it("stamps allow-same-origin, font CDN allowlist, and style-src Google Fonts on the CSP", async () => {
+  it("stamps the font CDN allowlist and style-src Google Fonts on the frame CSP, without allow-same-origin", async () => {
     const created = await create({ content: "<h1>Fonts</h1>" });
-    const res = await exports.default.fetch(`${BASE}/a/${created.id}`);
+    // The artifact body — and its CSP — now live on the frame sub-route; the
+    // host page (/a/:id) never gets the webFonts-widened CSP at all.
+    const res = await exports.default.fetch(`${BASE}/a/${created.id}/frame`);
     expect(res.status).toBe(200);
     const csp = res.headers.get("content-security-policy") ?? "";
-    expect(csp).toContain("allow-same-origin");
+    // R1: the artifact frame must never become same-origin with the
+    // privileged host page, even with webFonts on — allow-same-origin is
+    // deliberately withheld here (frameSandbox), unlike the general
+    // contentSecurityPolicy({sandbox:true, webFonts:true}) default.
+    expect(csp).not.toContain("allow-same-origin");
     expect(csp).toMatch(
       /font-src 'self' data: cdn\.fontshare\.com fonts\.gstatic\.com/,
     );

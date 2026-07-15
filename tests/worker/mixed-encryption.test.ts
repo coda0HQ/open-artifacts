@@ -90,20 +90,34 @@ describe("mixed encryption across versions", () => {
     // v3: plain again
     await put(created.id, { content: "<h1>Plain v3</h1>" }, created.writeToken);
 
-    const v1res = await exports.default.fetch(`${BASE}/a/${created.id}?v=1`);
+    // Plain versions render their body only in the sandboxed artifact frame;
+    // the host page (/a/:id) embeds it via <iframe src=".../frame?v=N">.
+    const v1res = await exports.default.fetch(
+      `${BASE}/a/${created.id}/frame?v=1`,
+    );
     const v1 = await v1res.text();
     expect(v1).toContain("<h1>Plain v1</h1>");
     expect(v1res.headers.get("content-security-policy")).toContain(
       "sandbox allow-scripts",
     );
+    const v1host = await (
+      await exports.default.fetch(`${BASE}/a/${created.id}?v=1`)
+    ).text();
+    expect(v1host).toContain(`/a/${created.id}/frame?v=1`);
 
     const v2 = await exports.default.fetch(`${BASE}/a/${created.id}?v=2`);
     const v2html = await v2.text();
     expect(v2html).not.toContain("Secret v2");
     expect(v2html).toContain("Password");
     expect(v2html).toContain(env.salt);
+    // The frame sub-route never serves an encrypted version's plaintext.
+    expect(
+      (await exports.default.fetch(`${BASE}/a/${created.id}/frame?v=2`)).status,
+    ).toBe(404);
 
-    const v3res = await exports.default.fetch(`${BASE}/a/${created.id}?v=3`);
+    const v3res = await exports.default.fetch(
+      `${BASE}/a/${created.id}/frame?v=3`,
+    );
     const v3 = await v3res.text();
     expect(v3).toContain("<h1>Plain v3</h1>");
     expect(v3res.headers.get("content-security-policy")).toContain(

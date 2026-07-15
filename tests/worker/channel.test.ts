@@ -62,7 +62,7 @@ describe("channel binding", () => {
     expect(second.writeToken).toBeUndefined();
 
     const live = await (
-      await exports.default.fetch(`${BASE}/a/${first.id}`)
+      await exports.default.fetch(`${BASE}/a/${first.id}/frame`)
     ).text();
     expect(live).toContain("<h1>v2</h1>");
   });

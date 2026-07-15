@@ -236,9 +236,11 @@ describe("comments are inlined into the viewer page", () => {
     // The drawer and a count badge are present.
     expect(html).toContain('id="oa-cm-drawer"');
     expect(html).toContain("oa-cm-toggle");
-    // The strict CSP is unchanged: runtime fetch stays impossible.
+    // The host page carries the drawer, so its CSP is the host CSP
+    // (connect-src 'self' — the drawer is the only party that talks to the
+    // API); the artifact frame stays air-gapped at connect-src 'none'.
     expect(res.headers.get("content-security-policy") ?? "").toContain(
-      "connect-src 'none'",
+      "connect-src 'self'",
     );
   });
 

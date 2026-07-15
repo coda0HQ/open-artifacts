@@ -47,6 +47,14 @@ const WEB_FONT_CSP = {
 export function contentSecurityPolicy(options: {
   sandbox: boolean;
   webFonts?: boolean;
+  // Forces a strict sandbox (no allow-same-origin) even when webFonts is on.
+  // The artifact frame (GET /a/:id/frame) must never become same-origin with
+  // the privileged host page (R1) — allow-same-origin on a sandboxed frame
+  // grants it the response URL's origin, which would let it read the host
+  // page's localStorage/cookies across the air-gap. Web-font CSP directives
+  // (style-src/font-src/script-src) still widen so fonts load as ordinary
+  // cross-origin subresources; only the sandbox token is affected.
+  frameSandbox?: boolean;
 }): string {
   const webFonts = options.webFonts === true;
   const directives = [
@@ -61,10 +69,9 @@ export function contentSecurityPolicy(options: {
     "base-uri 'none'",
   ];
   if (options.sandbox) {
+    const allowSameOrigin = webFonts && options.frameSandbox !== true;
     directives.unshift(
-      webFonts
-        ? "sandbox allow-scripts allow-modals allow-forms allow-popups allow-same-origin"
-        : "sandbox allow-scripts allow-modals allow-forms allow-popups",
+      `sandbox allow-scripts allow-modals allow-forms allow-popups${allowSameOrigin ? " allow-same-origin" : ""}`,
     );
   }
   return directives.join("; ");
@@ -74,13 +81,47 @@ export function userContentHeaders(options: {
   sandbox: boolean;
   contentType: string;
   webFonts?: boolean;
+  frameSandbox?: boolean;
 }): Headers {
   return new Headers({
     "content-type": options.contentType,
     "content-security-policy": contentSecurityPolicy({
       sandbox: options.sandbox,
       webFonts: options.webFonts,
+      frameSandbox: options.frameSandbox,
     }),
+    "x-content-type-options": "nosniff",
+    "referrer-policy": "no-referrer",
+    "cache-control": "no-cache",
+  });
+}
+
+// The host page (GET /a/:id) is a normal-origin document: it holds
+// cross-frame state (theme localStorage) and is the only party that talks to
+// the API (comments fetch, in a later phase). It embeds the artifact as a
+// sandboxed <iframe src="/a/:id/frame">, never the artifact body itself, so
+// it carries no sandbox directive of its own — connect-src/frame-src widen
+// just enough for same-origin API calls and the embed; everything else stays
+// locked down like the artifact frame.
+export function hostContentSecurityPolicy(): string {
+  return [
+    "default-src 'none'",
+    "script-src 'unsafe-inline'",
+    "style-src 'unsafe-inline'",
+    "img-src data: blob:",
+    "font-src data:",
+    "media-src data: blob:",
+    "connect-src 'self'",
+    "frame-src 'self'",
+    "form-action 'none'",
+    "base-uri 'none'",
+  ].join("; ");
+}
+
+export function hostHeaders(): Headers {
+  return new Headers({
+    "content-type": "text/html; charset=utf-8",
+    "content-security-policy": hostContentSecurityPolicy(),
     "x-content-type-options": "nosniff",
     "referrer-policy": "no-referrer",
     "cache-control": "no-cache",
@@ -307,24 +348,86 @@ const LAYOUT_SCRIPT = `
 })();
 `;
 
-export interface WrapOptions {
+// Positions the embedded artifact frame below the sticky service header
+// rather than covering it — the header's actual rendered height is measured
+// at runtime into --oa-header-h (LAYOUT_SCRIPT); the CSS default (2.5rem)
+// covers first paint. Deliberately NOT `inset:0` (R3): that would place the
+// frame's top edge at the viewport top, sliding it under the header instead
+// of starting beneath it.
+const HOST_FRAME_CSS = `
+#oa-frame{position:fixed;top:var(--oa-header-h);inset-inline:0;bottom:0;width:100%;border:0}
+`;
+
+export interface FrameDocumentOptions {
+  format: ArtifactFormat;
+  content: string;
+  /** Stamp an explicit <meta http-equiv="Content-Security-Policy"> into the
+   *  frame document. Required for the encrypted srcdoc variant (R2): a
+   *  `srcdoc` child has no HTTP response of its own to carry a CSP header, so
+   *  without this it would inherit no CSP beyond the iframe's sandbox=
+   *  attribute. The plain HTTP-served /a/:id/frame route already gets its CSP
+   *  from the real response header and omits this. */
+  stampCsp?: boolean;
+}
+
+// The re-asserted CSP for a srcdoc'd artifact frame (R2). Deliberately fixed
+// (no webFonts variant): the meta tag is a belt-and-suspenders backstop, not
+// the primary air-gap, so it stays at the strictest baseline.
+const FRAME_META_CSP =
+  "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; connect-src 'none'; form-action 'none'; base-uri 'none'";
+
+// The inner ARTIFACT FRAME document: just the artifact body plus enough head
+// to render it (reset/markdown CSS, a theme script so the frame can paint
+// itself before the host sends anything). No og/title meta, no header, no
+// comments drawer, no LAYOUT_SCRIPT — those are host-page chrome that never
+// enters the sandboxed, opaque-origin document.
+export function frameDocument(options: FrameDocumentOptions): string {
+  const { format, content, stampCsp } = options;
+  const body =
+    format === "markdown"
+      ? `<main class="oa-md" id="oa-content"></main>
+<script>${escapeInlineScript(MARKED_SOURCE)}</script>
+<script>
+document.getElementById("oa-content").innerHTML=marked.parse(${jsonForInlineScript(content)});
+</script>`
+      : content;
+  const cspMeta = stampCsp
+    ? `<meta http-equiv="Content-Security-Policy" content="${FRAME_META_CSP}">\n`
+    : "";
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+${cspMeta}<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>${RESET_CSS}${format === "markdown" ? MARKDOWN_CSS : ""}</style>
+</head>
+<body>
+${body}
+<script>${THEME_SCRIPT}</script>
+</body>
+</html>
+`;
+}
+
+export interface HostShellOptions {
   title: string;
   description: string;
   favicon: string;
-  format: ArtifactFormat;
-  content: string;
   url: string;
   ogImage: string;
   /** Request hostname; selects the coda0 vs. Open Artifacts identity. */
   hostname: string;
   /** "Powered by Open Artifacts" link URL; omit to hide the brand entry. */
   brandUrl?: string | null;
-  /** Artifact id; enables the surrounding-chrome comment thread drawer. */
-  artifactId?: string | null;
+  /** Artifact id; drives the comment thread drawer and the frame's src. */
+  artifactId: string;
   /** Comments inlined at serve time (runtime fetch is impossible under the
-   *  strict viewer CSP, so the thread is stamped into the page for future
-   *  viewers — the same inlining pattern the version picker uses). */
+   *  strict artifact-frame CSP, so the thread is stamped into the page for
+   *  future viewers — the same inlining pattern the version picker uses). */
   comments?: CommentMeta[];
+  /** Path (+ query) to the artifact frame sub-route, e.g. "/a/:id/frame" or
+   *  "/a/:id/frame?v=2" to mirror a pinned version. */
+  frameSrc: string;
 }
 
 const OG_CARD_W = 1200;
@@ -494,37 +597,28 @@ ${OG_CTA}
 </svg>`;
 }
 
-export function wrapDocument(options: WrapOptions): string {
+// The outer HOST PAGE (GET /a/:id): a normal-origin document holding the
+// crawler-facing <head>, the reused header + comments drawer chrome, and an
+// <iframe> embedding the sandboxed artifact frame below the header. It never
+// renders the artifact body itself — that lives entirely in frameDocument(),
+// served (or srcdoc'd) into #oa-frame.
+export function hostShell(options: HostShellOptions): string {
   const {
     title,
     description,
     favicon,
-    format,
-    content,
     url,
     ogImage,
     hostname,
     brandUrl,
     artifactId,
+    frameSrc,
   } = options;
-  const body =
-    format === "markdown"
-      ? `<main class="oa-md" id="oa-content"></main>
-<script>${escapeInlineScript(MARKED_SOURCE)}</script>
-<script>
-document.getElementById("oa-content").innerHTML=marked.parse(${jsonForInlineScript(content)});
-</script>`
-      : content;
 
   const brand = brandFor(hostname);
   const ogDescription = description || title;
-  const showComments = artifactId !== undefined && artifactId !== null;
-  const commentsList = showComments ? (options.comments ?? []) : [];
-  const commentsCss = showComments ? COMMENTS_CSS : "";
-  const drawer = showComments
-    ? commentsDrawerHtml(artifactId as string, commentsList)
-    : "";
-  const commentsScript = showComments ? COMMENTS_SCRIPT : "";
+  const commentsList = options.comments ?? [];
+  const drawer = commentsDrawerHtml(artifactId, commentsList);
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -546,15 +640,15 @@ document.getElementById("oa-content").innerHTML=marked.parse(${jsonForInlineScri
 <meta name="twitter:title" content="${escapeHtml(title)}">
 <meta name="twitter:description" content="${escapeHtml(ogDescription)}">
 <meta name="twitter:image" content="${escapeHtml(ogImage)}">
-<style>${RESET_CSS}${format === "markdown" ? MARKDOWN_CSS : ""}${commentsCss}</style>
+<style>${RESET_CSS}${COMMENTS_CSS}${HOST_FRAME_CSS}</style>
 </head>
 <body>
-${headerHtml(favicon, title, hostname, brandUrl, artifactId ?? undefined, commentsList.length)}
-${body}
+${headerHtml(favicon, title, hostname, brandUrl, artifactId, commentsList.length)}
+<iframe id="oa-frame" src="${escapeHtml(frameSrc)}" sandbox="allow-scripts allow-modals allow-forms allow-popups" title="${escapeHtml(title)}"></iframe>
 ${drawer}
 <script>${THEME_SCRIPT}</script>
 <script>${LAYOUT_SCRIPT}</script>
-<script>${escapeInlineScript(commentsScript)}</script>
+<script>${escapeInlineScript(COMMENTS_SCRIPT)}</script>
 </body>
 </html>
 `;
@@ -591,7 +685,7 @@ const UNLOCK_CSS = `
 .oa-card button:disabled{opacity:.6;cursor:wait}
 .oa-error{color:var(--oa-danger);font-size:.85rem;font-weight:500;min-height:1.2em;margin-top:.7rem}
 @media (hover:hover) and (pointer:fine){.oa-card button:hover:not(:disabled){background:color-mix(in oklab,var(--oa-fg),var(--oa-bg) 14%)}}
-#oa-frame{position:fixed;inset:0;width:100%;height:100%;border:0;display:none}
+#oa-frame{position:fixed;top:var(--oa-header-h);inset-inline:0;bottom:0;width:100%;border:0;display:none}
 `;
 
 export interface UnlockShellOptions {
@@ -603,12 +697,17 @@ export interface UnlockShellOptions {
   ogImage: string;
   hostname: string;
   brandUrl?: string | null;
-  artifactId?: string | null;
+  artifactId: string;
   comments?: CommentMeta[];
   envelope: EncryptionParams & { ciphertext: string };
-  webFonts?: boolean;
 }
 
+// The unlock page is itself a HOST PAGE (chrome + password form); the server
+// never holds plaintext, so it cannot serve /a/:id/frame for an encrypted
+// artifact. Instead this builds the same frameDocument() artifact frame as a
+// template string, decrypts client-side, splices the plaintext into the
+// template, and assigns the result to the frame's `srcdoc` — the encrypted
+// delivery path from architecture.md's "Delivery mechanism" table.
 export function unlockShell(options: UnlockShellOptions): string {
   const {
     title,
@@ -622,24 +721,14 @@ export function unlockShell(options: UnlockShellOptions): string {
     artifactId,
     comments,
     envelope,
-    webFonts,
   } = options;
-  // The iframe srcdoc built from this template is sandboxed with
-  // default-src 'none' — a comments drawer inside it could never fetch and
-  // is invisible to the user (the body is hidden until unlock anyway). So the
-  // inner template omits artifactId/comments; the outer unlockShell page
-  // renders its own functioning drawer. This avoids serializing the thread
-  // twice into the encrypted page.
-  const template = wrapDocument({
-    title,
-    description,
-    favicon,
+  // stampCsp: true — a srcdoc'd document has no HTTP response of its own, so
+  // the CSP meta tag is the only thing re-asserting connect-src 'none' (R2)
+  // once the plaintext lands inside it.
+  const template = frameDocument({
     format,
     content: CONTENT_SLOT,
-    url,
-    ogImage,
-    hostname,
-    brandUrl,
+    stampCsp: true,
   });
 
   const unlockScript = `
@@ -689,13 +778,8 @@ input.focus();
 
   const brand = brandFor(hostname);
   const ogDescription = description || title;
-  const showComments = artifactId !== undefined && artifactId !== null;
-  const commentsList = showComments ? (comments ?? []) : [];
-  const commentsCss = showComments ? COMMENTS_CSS : "";
-  const drawer = showComments
-    ? commentsDrawerHtml(artifactId as string, commentsList)
-    : "";
-  const commentsScript = showComments ? COMMENTS_SCRIPT : "";
+  const commentsList = comments ?? [];
+  const drawer = commentsDrawerHtml(artifactId, commentsList);
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -717,10 +801,10 @@ input.focus();
 <meta name="twitter:title" content="${escapeHtml(title)}">
 <meta name="twitter:description" content="${escapeHtml(ogDescription)}">
 <meta name="twitter:image" content="${escapeHtml(ogImage)}">
-<style>${RESET_CSS}${UNLOCK_CSS}${commentsCss}</style>
+<style>${RESET_CSS}${UNLOCK_CSS}${COMMENTS_CSS}</style>
 </head>
 <body>
-${headerHtml(favicon, title, hostname, brandUrl, artifactId ?? undefined, commentsList.length)}
+${headerHtml(favicon, title, hostname, brandUrl, artifactId, commentsList.length)}
 <div class="oa-unlock">
   <form class="oa-card" id="oa-form">
     <div class="oa-emoji">${escapeHtml(favicon)}</div>
@@ -732,12 +816,12 @@ ${headerHtml(favicon, title, hostname, brandUrl, artifactId ?? undefined, commen
     <div class="oa-error" id="oa-error" role="alert"></div>
   </form>
 </div>
-<iframe id="oa-frame" sandbox="allow-scripts allow-modals${webFonts ? " allow-same-origin" : ""}" title="${escapeHtml(title)}"></iframe>
+<iframe id="oa-frame" sandbox="allow-scripts allow-modals" title="${escapeHtml(title)}"></iframe>
 ${drawer}
 <script>${unlockScript}</script>
 <script>${THEME_SCRIPT}</script>
 <script>${LAYOUT_SCRIPT}</script>
-<script>${escapeInlineScript(commentsScript)}</script>
+<script>${escapeInlineScript(COMMENTS_SCRIPT)}</script>
 </body>
 </html>
 `;
