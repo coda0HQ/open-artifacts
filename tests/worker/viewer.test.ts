@@ -184,6 +184,41 @@ describe("GET /a/:id (plain HTML)", () => {
     expect(html).not.toContain(`<script nonce="${nonce}">doStuff()</script>`);
   });
 
+  it("stamps the nonce on uppercase <SCRIPT> tags (direct-API case-agnostic path)", async () => {
+    // The skill compose pipeline lowercases tags, but a direct POST /api/artifacts
+    // submission can carry <SCRIPT>. The old 'unsafe-inline' CSP was case-agnostic;
+    // the nonce stamper must be too, or uppercase tags are silently blocked.
+    const created = await create({
+      content: `<main><SCRIPT>console.log("up")</SCRIPT></main>`,
+    });
+    const res = await exports.default.fetch(`${BASE}/a/${created.id}`);
+    const csp = res.headers.get("content-security-policy") ?? "";
+    const nonce = csp.match(/'nonce-([^']+)'/)?.[1] ?? "";
+    expect(nonce).not.toBe("");
+    const html = await res.text();
+    // The uppercase tag is stamped (original case preserved).
+    expect(html).toContain(
+      `<SCRIPT nonce="${nonce}">console.log("up")</SCRIPT>`,
+    );
+  });
+
+  it("does not stamp the nonce onto a tag whose name merely starts with 'script'", async () => {
+    // A <script-ish> custom element would, if naively prefix-matched, be rewritten
+    // to a real <script> + boolean attribute, entering script-data state and
+    // swallowing the rest of the page. The stamper must anchor on a real tag
+    // boundary (space / '/' / '>' / end-of-string) after "script".
+    const created = await create({
+      content: `<main><scriptish>keep me</scriptish></main>`,
+    });
+    const res = await exports.default.fetch(`${BASE}/a/${created.id}`);
+    const csp = res.headers.get("content-security-policy") ?? "";
+    const nonce = csp.match(/'nonce-([^']+)'/)?.[1] ?? "";
+    const html = await res.text();
+    // The custom element is NOT turned into a script; its content survives.
+    expect(html).toContain(`<scriptish>keep me</scriptish>`);
+    expect(html).not.toContain(`<script nonce="${nonce}">ish`);
+  });
+
   it("serves the self-hosted mermaid bundle same-origin with a JS MIME and nosniff", async () => {
     const res = await exports.default.fetch(
       `${BASE}/vendor/mermaid.runtime.js`,

@@ -473,6 +473,18 @@ ${OG_CTA}
 // JS source, breaking the string literal and silently killing all user JS. Only
 // <script start tags at the top level (outside any script body) are stamped,
 // matching the browser's own script-data-state boundaries.
+// Case-insensitive, boundary-anchored script-tag matchers. The lookahead
+// (?=[\s>/]|$) ensures we match an actual <script> tag (followed by a space,
+// '/', '>', or end-of-string), NOT a tag whose name merely starts with
+// "script" (e.g. <scripting>), which the HTML parser would otherwise treat as
+// a real <script> element after nonce injection and swallow the rest of the
+// page. Case-insensitive so a direct-API submission with <SCRIPT> (bypassing
+// the skill compose pipeline, which lowercases) still gets a nonce — the old
+// 'unsafe-inline' CSP was case-agnostic. Original case is preserved in output.
+const SCRIPT_OPEN_RE = /<script(?=[\s>/]|$)/gi;
+const SCRIPT_CLOSE_RE = /<\/script(?=[\s>/]|$)/gi;
+const SCRIPT_OPEN_LEN = "<script".length;
+
 function stampNonceOnUserScripts(html: string, nonce: string): string {
   let out = "";
   let i = 0;
@@ -481,24 +493,28 @@ function stampNonceOnUserScripts(html: string, nonce: string): string {
     if (inScript) {
       // Inside a script body: look for the closing </script> to exit. A
       // <script substring here is script text, not a start tag.
-      const close = html.indexOf("</script", i);
-      if (close === -1) {
+      SCRIPT_CLOSE_RE.lastIndex = i;
+      const close = SCRIPT_CLOSE_RE.exec(html);
+      if (close === null || close.index === undefined) {
         out += html.slice(i);
         break;
       }
+      const start = close.index;
       // Copy through the closing tag's '>'.
-      const gt = html.indexOf(">", close);
+      const gt = html.indexOf(">", start);
       const end = gt === -1 ? html.length : gt + 1;
       out += html.slice(i, end);
       i = end;
       inScript = false;
     } else {
       // Outside a script: find the next <script start tag.
-      const start = html.indexOf("<script", i);
-      if (start === -1) {
+      SCRIPT_OPEN_RE.lastIndex = i;
+      const open = SCRIPT_OPEN_RE.exec(html);
+      if (open === null || open.index === undefined) {
         out += html.slice(i);
         break;
       }
+      const start = open.index;
       out += html.slice(i, start);
       // Find the end of this start tag's attributes.
       const gt = html.indexOf(">", start);
@@ -506,7 +522,7 @@ function stampNonceOnUserScripts(html: string, nonce: string): string {
       const tag = html.slice(start, end);
       const stamped = /\bnonce\s*=/i.test(tag)
         ? tag
-        : `${tag.slice(0, "<script".length)} nonce="${nonce}"${tag.slice("<script".length)}`;
+        : `${tag.slice(0, SCRIPT_OPEN_LEN)} nonce="${nonce}"${tag.slice(SCRIPT_OPEN_LEN)}`;
       out += stamped;
       i = end;
       // If this start tag had no src (inline script), enter script-data state;
@@ -658,23 +674,43 @@ function jsonEmbed(s){return JSON.stringify(s).replace(/</g,"\\\\u003c")}
 // nonce into the JS source and corrupt it. Only top-level script start tags
 // (outside any script body) are stamped.
 function stampNonce(html){
-  var OPEN="<scr"+"ipt",CLOSE="</scr"+"ipt",TOK=OPEN.length;
+  // Case-insensitive + boundary-anchored match for an actual script start tag
+  // (followed by space / slash / '>' / end-of-string), NOT a tag whose name
+  // merely starts with "script". Case-insensitive so an uppercase tag from a
+  // direct API submission still gets a nonce. Original case preserved in
+  // output. Uses manual char comparison (no regex) to avoid the template-literal
+  // escaping pitfalls of the surrounding unlockScript.
+  var LT="<",S="scr"+"ipt",SL="/",TOK=(LT+S).length;
+  var low=html.toLowerCase();
+  function isTagCh(c){return c===" "||c==="\\t"||c==="\\n"||c==="\\r"||c===">"||c===SL||c==='"'||c==="'"}
+  function findTag(from,close){
+    var needle=close?(LT+SL+S):(LT+S);
+    var nlen=needle.length;
+    var j=from;
+    for(;;){
+      var at=low.indexOf(needle,j);
+      if(at===-1)return -1;
+      var after=html.charAt(at+nlen);
+      if(after===""||isTagCh(after))return at;
+      j=at+nlen;
+    }
+  }
   var out="",i=0,inS=false;
   while(i<html.length){
     if(inS){
-      var cl=html.indexOf(CLOSE,i);
+      var cl=findTag(i,true);
       if(cl===-1){out+=html.slice(i);break}
       var g=html.indexOf(">",cl);
       var e=g===-1?html.length:g+1;
       out+=html.slice(i,e);i=e;inS=false;
     }else{
-      var st=html.indexOf(OPEN,i);
+      var st=findTag(i,false);
       if(st===-1){out+=html.slice(i);break}
       out+=html.slice(i,st);
       var g2=html.indexOf(">",st);
       var e2=g2===-1?html.length:g2+1;
       var tag=html.slice(st,e2);
-      var stamped=/\\bnonce\\s*=/.test(tag)?tag:(OPEN+' nonce="'+OA.nonce+'"'+tag.slice(TOK));
+      var stamped=/\\bnonce\\s*=/.test(tag)?tag:((LT+S)+' nonce="'+OA.nonce+'"'+tag.slice(TOK));
       out+=stamped;i=e2;inS=true;
     }
   }
