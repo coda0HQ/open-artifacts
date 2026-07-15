@@ -1,3 +1,4 @@
+import { buildTextAnchor, reAnchor } from "./anchor";
 import type { ArtifactFormat, CommentMeta, EncryptionParams } from "./domain";
 import { MARKED_SOURCE } from "./generated/marked-source";
 import { type Brand, brandFor, isCoda0Host } from "./home";
@@ -399,13 +400,14 @@ document.getElementById("oa-content").innerHTML=marked.parse(${jsonForInlineScri
 <head>
 <meta charset="utf-8">
 ${cspMeta}<meta name="viewport" content="width=device-width, initial-scale=1">
-<style>${RESET_CSS}${format === "markdown" ? MARKDOWN_CSS : ""}${FRAME_ANCHOR_CSS}</style>
+<style>${RESET_CSS}${format === "markdown" ? MARKDOWN_CSS : ""}${FRAME_ANCHOR_CSS}${FRAME_TEXT_CSS}</style>
 </head>
 <body>
 ${body}
 <script>${THEME_SCRIPT}</script>
 <script>${FRAME_BRIDGE_SCRIPT}</script>
 <script>${FRAME_ANCHOR_SCRIPT}</script>
+<script>${FRAME_TEXT_SCRIPT}</script>
 </body>
 </html>
 `;
@@ -776,6 +778,82 @@ const FRAME_ANCHOR_SCRIPT = `
       });
       plane.appendChild(pin);
     });
+  };
+  if(window.__oaComments&&window.__oaComments.length)window.__oaRenderMarkers(window.__oaComments);
+})();
+`;
+
+// Text-range highlight via the CSS Custom Highlight API — no DOM mutation of
+// the untrusted author content. A restrained accent tint reads in both themes.
+const FRAME_TEXT_CSS = `
+::highlight(oa-cm){background-color:color-mix(in oklab,var(--oa-accent),transparent 72%)}
+`;
+
+// Frame side, normal-page mode: capture a text selection into a quote selector
+// (posted to the host) and highlight existing text anchors, re-resolved against
+// the live document text. No-op on canvas documents (pins handle those). The
+// pure matcher is injected verbatim from src/anchor.ts so tests pin its
+// behaviour to the exact code that runs here.
+const FRAME_TEXT_SCRIPT = `
+(function(){
+  if(document.querySelector('.oa-plane'))return;
+  var buildTextAnchor=${buildTextAnchor.toString()};
+  var reAnchor=${reAnchor.toString()};
+  // Walk only rendered text — skip SCRIPT/STYLE so injected code never counts
+  // toward offsets. All three walkers share this filter so offsets are consistent.
+  function walker(){
+    return document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT,{acceptNode:function(n){
+      var p=n.parentNode;
+      return p&&(p.nodeName==='SCRIPT'||p.nodeName==='STYLE')?NodeFilter.FILTER_REJECT:NodeFilter.FILTER_ACCEPT;
+    }});
+  }
+  function fullText(){
+    var w=walker();var s="",n;while((n=w.nextNode()))s+=n.textContent;return s;
+  }
+  function offsetOf(node,off){
+    var w=walker();var total=0,n;while((n=w.nextNode())){if(n===node)return total+off;total+=n.textContent.length;}
+    return total;
+  }
+  function rangeOf(start,end){
+    var w=walker();
+    var pos=0,n,range=document.createRange(),startSet=false;
+    while((n=w.nextNode())){
+      var len=n.textContent.length;
+      if(!startSet&&pos+len>=start){range.setStart(n,start-pos);startSet=true;}
+      if(startSet&&pos+len>=end){range.setEnd(n,end-pos);return range;}
+      pos+=len;
+    }
+    return startSet?range:null;
+  }
+  document.addEventListener('mouseup',function(e){
+    if(window.__oaArmed!=='text')return;
+    var sel=window.getSelection();
+    if(!sel||sel.isCollapsed||sel.rangeCount===0)return;
+    var r=sel.getRangeAt(0);
+    if(r.startContainer.nodeType!==3||r.endContainer.nodeType!==3)return;
+    var start=offsetOf(r.startContainer,r.startOffset);
+    var end=offsetOf(r.endContainer,r.endOffset);
+    if(end<=start)return;
+    window.__oaArmed=null;
+    var anchor=buildTextAnchor(fullText(),start,end);
+    var rect=r.getBoundingClientRect();
+    if(window.__oaSend)window.__oaSend({type:'oa:anchor:new',anchor:anchor,point:{x:rect.left+rect.width/2,y:rect.bottom}});
+  });
+  window.__oaRenderMarkers=function(list){
+    if(!window.CSS||!CSS.highlights||typeof Highlight==='undefined')return;
+    var run=function(){
+      var text=fullText(),vv=window.__oaViewedVersion||1,hl=new Highlight();
+      (list||[]).forEach(function(cm){
+        if(!cm.anchor||cm.anchor.mode!=='text')return;
+        if((cm.anchor.anchorVersion||1)>vv)return;
+        var m=reAnchor(text,cm.anchor);
+        if(m==='orphan')return;
+        var range=rangeOf(m.start,m.end);
+        if(range)hl.add(range);
+      });
+      CSS.highlights.set('oa-cm',hl);
+    };
+    if(window.requestIdleCallback)requestIdleCallback(run,{timeout:500});else run();
   };
   if(window.__oaComments&&window.__oaComments.length)window.__oaRenderMarkers(window.__oaComments);
 })();
