@@ -97,7 +97,15 @@ describe("GET /a/:id (plain HTML)", () => {
     const csp = res.headers.get("content-security-policy") ?? "";
     expect(csp).toContain("sandbox allow-scripts");
     expect(csp).toContain("default-src 'none'");
-    expect(csp).toContain("script-src 'self' 'unsafe-inline' cdn.jsdelivr.net");
+    // script-src carries a per-request nonce + strict-dynamic and NO
+    // 'unsafe-inline' (issue #11): an artifact's inline JS can no longer
+    // createElement("script") to load an arbitrary jsdelivr package. (The
+    // test env opts into web fonts, so cdn.jsdelivr.net is present.)
+    expect(csp).toMatch(
+      /script-src 'self'( cdn\.jsdelivr\.net)? 'nonce-[^']+' 'strict-dynamic'/,
+    );
+    expect(csp).not.toContain("'unsafe-inline' cdn.jsdelivr.net");
+    expect(csp).not.toContain("script-src 'unsafe-inline'");
     expect(csp).toContain(
       "style-src 'self' 'unsafe-inline' fonts.googleapis.com",
     );
@@ -106,6 +114,30 @@ describe("GET /a/:id (plain HTML)", () => {
     expect(csp).toContain("base-uri 'none'");
     expect(res.headers.get("x-content-type-options")).toBe("nosniff");
     expect(res.headers.get("referrer-policy")).toBe("no-referrer");
+  });
+
+  it("stamps the per-request nonce on every viewer-injected inline script", async () => {
+    const created = await create({ content: "<p>safe</p>" });
+    const res = await exports.default.fetch(`${BASE}/a/${created.id}`);
+    const csp = res.headers.get("content-security-policy") ?? "";
+    const nonceMatch = csp.match(/'nonce-([^']+)'/);
+    expect(nonceMatch).not.toBeNull();
+    const nonce = nonceMatch?.[1] ?? "";
+    const html = await res.text();
+    // Every inline <script> the viewer emits (THEME_SCRIPT, LAYOUT_SCRIPT) must
+    // carry the nonce attribute matching the CSP.
+    const inlineScripts = html.match(/<script(?:\s[^>]*)?>/gi) ?? [];
+    expect(inlineScripts.length).toBeGreaterThan(0);
+    for (const tag of inlineScripts) {
+      // Authored <script src> tags do not appear in plain-HTML artifacts; every
+      // inline script here is viewer-injected and must be nonce'd.
+      expect(tag).toContain(`nonce="${nonce}"`);
+    }
+    // Regression signal that the inline scripts are still present (a worker
+    // test cannot execute JS): the theme-stamping markers the scripts produce
+    // at runtime are inlined into the served HTML.
+    expect(html).toContain("prefers-color-scheme");
+    expect(html).toContain('data-theme="dark"');
   });
 
   it("supports both theme signals", async () => {
@@ -200,6 +232,15 @@ describe("GET /a/:id (markdown)", () => {
     expect(html).toContain("Some **bold** text.");
     const csp = res.headers.get("content-security-policy") ?? "";
     expect(csp).toContain("sandbox allow-scripts");
+    // The marked bootstrap inline scripts carry the per-request nonce too.
+    const nonceMatch = csp.match(/'nonce-([^']+)'/);
+    expect(nonceMatch).not.toBeNull();
+    const nonce = nonceMatch?.[1] ?? "";
+    const tags = html.match(/<script(?:\s[^>]*)?>/gi) ?? [];
+    expect(tags.length).toBeGreaterThan(0);
+    for (const tag of tags) {
+      expect(tag).toContain(`nonce="${nonce}"`);
+    }
   });
 
   it("safely embeds markdown containing a closing script tag", async () => {
@@ -261,6 +302,36 @@ describe("GET /a/:id (encrypted)", () => {
     expect(html).toContain("min-height:44px");
     expect(html).toContain("color:var(--oa-danger)");
     expect(html).toContain("Password incorrect. Check it and try again.");
+  });
+
+  it("stamps the per-request nonce on the unlock-shell inline scripts", async () => {
+    const envelope = await encrypt("<h1>Top Secret</h1>", "hunter2");
+    const created = await create({
+      content: envelope.content,
+      encrypted: {
+        salt: envelope.salt,
+        iv: envelope.iv,
+        iterations: envelope.iterations,
+      },
+    });
+    const res = await exports.default.fetch(`${BASE}/a/${created.id}`);
+    const csp = res.headers.get("content-security-policy") ?? "";
+    const nonceMatch = csp.match(/'nonce-([^']+)'/);
+    expect(nonceMatch).not.toBeNull();
+    const nonce = nonceMatch?.[1] ?? "";
+    // Parent CSP carries the nonce (the encrypted srcdoc iframe inherits the
+    // parent CSP, so the same nonce scheme covers the decrypted doc).
+    expect(csp).toContain(`'nonce-${nonce}'`);
+    expect(csp).toContain("'strict-dynamic'");
+    expect(csp).not.toContain("'unsafe-inline' cdn.jsdelivr.net");
+    const html = await res.text();
+    // The unlock shell emits unlockScript + THEME_SCRIPT + LAYOUT_SCRIPT inline;
+    // every one must carry the nonce.
+    const inlineScripts = html.match(/<script(?:\s[^>]*)?>/gi) ?? [];
+    expect(inlineScripts.length).toBeGreaterThan(0);
+    for (const tag of inlineScripts) {
+      expect(tag).toContain(`nonce="${nonce}"`);
+    }
   });
 
   it("round-trips: the shell's envelope decrypts with the right password", async () => {

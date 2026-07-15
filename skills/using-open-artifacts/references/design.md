@@ -841,9 +841,10 @@ Two passes is normal. Then publish.
 
 The viewer serves artifacts under a sandboxed iframe with two layers of
 restriction. The **CSP directive** is
-`default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'`
+`default-src 'none'; script-src 'self' 'nonce-<per-request>' 'strict-dynamic'; style-src 'unsafe-inline'`
 (also `img-src`/`font-src` allow `data:` for embedded assets): inline
-`<style>` and inline `<script>` are allowed, but `<link>` stylesheets, web
+`<style>` and the viewer-injected inline `<script>` (each stamped with a
+per-request `nonce=`) are allowed, but `<link>` stylesheets, web
 fonts, remote `<img>`/`<video>`/`<source>` src, and every `fetch`/XHR/
 WebSocket/EventSource are blocked by `default-src 'none'`. Separately, the
 iframe `sandbox` attribute blocks `localStorage`/`sessionStorage`/cookies via
@@ -856,7 +857,7 @@ Web fonts and runtime libraries (mermaid) are an opt-in, per-deploy surface.
 When the deploy sets `OPEN_ARTIFACTS_WEB_FONTS="1"`, the CSP widens to
 `font-src 'self' data: cdn.fontshare.com fonts.gstatic.com`,
 `style-src 'unsafe-inline' fonts.googleapis.com`, and
-`script-src 'self' 'unsafe-inline' cdn.jsdelivr.net`, and the sandbox gains
+`script-src 'self' cdn.jsdelivr.net 'nonce-<per-request>' 'strict-dynamic'`, and the sandbox gains
 `allow-same-origin` so the browser can cache fonts. Delivery paths:
 
 - **Fonts** — same-origin `/fonts/<slug>` proxy (for foundry-download-page
@@ -878,16 +879,14 @@ pull in an arbitrary external host or package. Reach for installed-font stacks
 and hand-drawn SVG first; a web font only when an installed face can't carry
 the voice, a library only when text-authored diagrams justify the ~3.5 MB.
 
-**Known limitation — inline-JS bypass of the jsdelivr allowlist (follow-up
-PR).** `script-src` includes `'unsafe-inline'`, so an artifact's inline
-JavaScript can do `document.createElement("script").src = "https://cdn.jsdelivr.net/npm/<any-pkg>"`
-and load any npm package at runtime, bypassing the build-time allowlist gate
-(which only restricts *authored* `<script src>`). This is a strict subset of the
-`allow-same-origin` risk already accepted on opt-in deploys, so it does not add
-new capability on its own — but a future PR should close it by removing
-`'unsafe-inline'` from `script-src` and nonce/strict-dynamic-scoping the
-viewer-injected inline scripts. Until then, treat opt-in deploys as
-trusted-artifacts-only.
+`script-src` carries no `'unsafe-inline'` — every viewer-injected inline
+`<script>` is stamped with a per-request `nonce=`, and `'strict-dynamic'` lets a
+nonce'd script load child scripts (so mermaid's own lazy loads still resolve)
+without re-allowing inline execution. An artifact's inline JS cannot
+`document.createElement("script")` to load an arbitrary jsdelivr package: a
+runtime-constructed `<script>` has no nonce and is blocked, so the build-time
+allowlist gate (which restricts *authored* `<script src>`) is no longer
+bypassable from inline JS.
 
 - **No external requests of any kind** — the strict CSP blocks all CDN
   scripts, remote images, fetch/XHR/WebSockets. Inline all CSS and JS; embed

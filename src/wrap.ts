@@ -26,6 +26,25 @@ function escapeInlineScript(source: string): string {
   return source.replace(/<\/script/gi, "<\\/script");
 }
 
+// Per-request nonce: base64 of 16 random bytes (~22 chars). Stamped on every
+// viewer-injected inline <script> and emitted as 'nonce-<value>' in script-src
+// so 'unsafe-inline' can be dropped. With 'strict-dynamic', a nonce'd script may
+// load child scripts (mermaid's own lazy loads) while a runtime
+// createElement("script") without the nonce stays blocked — closing the inline-JS
+// bypass of the jsdelivr allowlist (issue #11).
+export function generateNonce(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  // btoa is available in the Worker runtime; base64 keeps the nonce CSP-safe
+  // (no separators that would split the directive value).
+  return btoa(String.fromCharCode(...bytes));
+}
+
+function scriptSrcForNonce(webFonts: boolean, nonce: string): string {
+  const allowlist = webFonts ? "'self' cdn.jsdelivr.net" : "'self'";
+  return `${allowlist} 'nonce-${nonce}' 'strict-dynamic'`;
+}
+
 // Web fonts + runtime libraries are an opt-in per-deploy surface (env var
 // OPEN_ARTIFACTS_WEB_FONTS). When enabled, the sandbox gains allow-same-origin
 // so the browser can cache fonts, font-src widens to 'self' plus a bounded
@@ -42,16 +61,16 @@ function escapeInlineScript(source: string): string {
 const WEB_FONT_CSP = {
   fontSrc: "'self' data: cdn.fontshare.com fonts.gstatic.com",
   styleSrc: "'self' 'unsafe-inline' fonts.googleapis.com",
-  scriptSrc: "'self' 'unsafe-inline' cdn.jsdelivr.net",
 };
 export function contentSecurityPolicy(options: {
   sandbox: boolean;
   webFonts?: boolean;
+  nonce: string;
 }): string {
   const webFonts = options.webFonts === true;
   const directives = [
     "default-src 'none'",
-    `script-src ${webFonts ? WEB_FONT_CSP.scriptSrc : "'unsafe-inline'"}`,
+    `script-src ${scriptSrcForNonce(webFonts, options.nonce)}`,
     `style-src ${webFonts ? WEB_FONT_CSP.styleSrc : "'unsafe-inline'"}`,
     "img-src data: blob:",
     `font-src ${webFonts ? WEB_FONT_CSP.fontSrc : "data:"}`,
@@ -74,12 +93,14 @@ export function userContentHeaders(options: {
   sandbox: boolean;
   contentType: string;
   webFonts?: boolean;
+  nonce: string;
 }): Headers {
   return new Headers({
     "content-type": options.contentType,
     "content-security-policy": contentSecurityPolicy({
       sandbox: options.sandbox,
       webFonts: options.webFonts,
+      nonce: options.nonce,
     }),
     "x-content-type-options": "nosniff",
     "referrer-policy": "no-referrer",
@@ -251,6 +272,8 @@ export interface WrapOptions {
   hostname: string;
   /** "Powered by Open Artifacts" link URL; omit to hide the brand entry. */
   brandUrl?: string | null;
+  /** Per-request CSP nonce; stamped on every viewer-injected inline <script>. */
+  nonce: string;
 }
 
 const OG_CARD_W = 1200;
@@ -431,12 +454,13 @@ export function wrapDocument(options: WrapOptions): string {
     ogImage,
     hostname,
     brandUrl,
+    nonce,
   } = options;
   const body =
     format === "markdown"
       ? `<main class="oa-md" id="oa-content"></main>
-<script>${escapeInlineScript(MARKED_SOURCE)}</script>
-<script>
+<script nonce="${nonce}">${escapeInlineScript(MARKED_SOURCE)}</script>
+<script nonce="${nonce}">
 document.getElementById("oa-content").innerHTML=marked.parse(${jsonForInlineScript(content)});
 </script>`
       : content;
@@ -469,8 +493,8 @@ document.getElementById("oa-content").innerHTML=marked.parse(${jsonForInlineScri
 <body>
 ${headerHtml(favicon, title, hostname, brandUrl)}
 ${body}
-<script>${THEME_SCRIPT}</script>
-<script>${LAYOUT_SCRIPT}</script>
+<script nonce="${nonce}">${THEME_SCRIPT}</script>
+<script nonce="${nonce}">${LAYOUT_SCRIPT}</script>
 </body>
 </html>
 `;
@@ -507,6 +531,7 @@ export interface UnlockShellOptions {
   brandUrl?: string | null;
   envelope: EncryptionParams & { ciphertext: string };
   webFonts?: boolean;
+  nonce: string;
 }
 
 export function unlockShell(options: UnlockShellOptions): string {
@@ -521,6 +546,7 @@ export function unlockShell(options: UnlockShellOptions): string {
     brandUrl,
     envelope,
     webFonts,
+    nonce,
   } = options;
   const template = wrapDocument({
     title,
@@ -532,6 +558,7 @@ export function unlockShell(options: UnlockShellOptions): string {
     ogImage,
     hostname,
     brandUrl,
+    nonce,
   });
 
   const unlockScript = `
@@ -618,9 +645,9 @@ ${headerHtml(favicon, title, hostname, brandUrl)}
   </form>
 </div>
 <iframe id="oa-frame" sandbox="allow-scripts allow-modals${webFonts ? " allow-same-origin" : ""}" title="${escapeHtml(title)}"></iframe>
-<script>${unlockScript}</script>
-<script>${THEME_SCRIPT}</script>
-<script>${LAYOUT_SCRIPT}</script>
+<script nonce="${nonce}">${unlockScript}</script>
+<script nonce="${nonce}">${THEME_SCRIPT}</script>
+<script nonce="${nonce}">${LAYOUT_SCRIPT}</script>
 </body>
 </html>
 `;

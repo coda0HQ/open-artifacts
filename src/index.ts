@@ -12,6 +12,7 @@ import { brandHomepageForCoda0, isCoda0Host } from "./home";
 import { renderOgCardPng } from "./og";
 import {
   badVersionPage,
+  generateNonce,
   notFoundPage,
   unlockShell,
   userContentHeaders,
@@ -85,11 +86,15 @@ app.get("/a/:id", async (c) => {
   const record = await store.get(c.req.param("id"));
   const hostname = new URL(c.req.url).hostname;
   const webFonts = c.env.OPEN_ARTIFACTS_WEB_FONTS === "1";
+  // One nonce per request: stamped on every viewer-injected inline <script> and
+  // emitted in script-src so 'unsafe-inline' can be dropped (issue #11).
+  const nonce = generateNonce();
   const htmlHeaders = (sandbox: boolean) =>
     userContentHeaders({
       sandbox,
       contentType: "text/html; charset=utf-8",
       webFonts,
+      nonce,
     });
 
   if (record === null) {
@@ -135,6 +140,7 @@ app.get("/a/:id", async (c) => {
       brandUrl,
       envelope: { ...content.encrypted, ciphertext: content.body },
       webFonts,
+      nonce,
     });
     return new Response(page, { headers: htmlHeaders(false) });
   }
@@ -149,6 +155,7 @@ app.get("/a/:id", async (c) => {
     ogImage,
     hostname,
     brandUrl,
+    nonce,
   });
   return new Response(page, { headers: htmlHeaders(true) });
 });
