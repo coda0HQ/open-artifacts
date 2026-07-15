@@ -183,7 +183,10 @@ images, fetch/XHR/WebSockets):
   `${CLAUDE_SKILL_DIR}/references/icons.md` for a vendored ~90-icon inline-SVG
   subset (navigation, actions, status, social, common UI). Copy the whole
   `<svg>` block inline — it uses `fill="currentColor"` so it inherits color.
-  Never link the Remix Icon CDN (the CSP blocks it); only inline SVGs.
+  Never link the Remix Icon CDN (the CSP blocks it); only inline SVGs. To sit
+  an icon next to text, wrap them in the contract's centered row
+  (`<h2 class="oa-ico-text"><svg class="oa-ico">…</svg> Title</h2>`) — a bare
+  icon in a heading sits low and the build fails it.
 - Do not use localStorage/sessionStorage (the sandbox blocks them); keep
   state in memory.
 - Put the concise title in `artifact.title`.

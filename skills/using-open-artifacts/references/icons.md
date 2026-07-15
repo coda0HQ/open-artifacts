@@ -4,8 +4,25 @@ Vendored from [Remix Icon](https://remixicon.com/) (Remix Icon License — comme
 
 Usage:
 - Paste the `<svg>` where you need the icon. It inherits color via `fill="currentColor"` — set `color` on the parent.
-- Size with `width`/`height` or CSS `svg{width:1em;height:1em;vertical-align:middle}`.
 - The `ri-<name>` heading is for reference; the SVG is what you copy.
+
+**Aligning an icon with adjacent text — use the contract's two utilities**
+(both live in `tokens.css`, injected into every HTML artifact):
+
+```html
+<h2 class="oa-ico-text"><svg class="oa-ico" viewBox="0 0 24 24" …>…</svg> Section title</h2>
+<button class="oa-ico-text"><svg class="oa-ico" …>…</svg> Save</button>
+<li class="oa-ico-text"><svg class="oa-ico" …>…</svg> List item with a leading icon</li>
+```
+
+- `.oa-ico-text` makes the icon + label ONE centered row (`inline-flex; align-items:center; gap`). Put it on the heading / button / `<li>` / cell — or on a `<span>` wrapping the icon+text mid-sentence.
+- `.oa-ico` sizes the glyph to the text (`1em`) and stops it collapsing in the flex row.
+- **Never** rely on a bare inline `<svg>` or a hand-tuned `vertical-align` inside a heading: it defaults to the baseline and sits low, and vertical-align drifts at heading sizes — the "icon and text are crooked / not centered" defect. The build **fails** a heading that holds an `<svg>` next to text but is not laid out as a centered row.
+- The row layout must **center** the cross-axis: `.oa-ico-text` already does; a hand-authored rule needs `align-items:center` (bare `display:flex` leaves `align-items:stretch`, which drops the icon at the top of the line).
+- **Long headings that wrap:** `inline-flex` on the heading centers the icon against the whole wrapped block and drops `text-wrap:balance`. Keep the heading block-level and wrap only the icon+label in an inner span instead — the build accepts this too:
+  `<h2><span class="oa-ico-text"><svg class="oa-ico">…</svg> A long heading that wraps</span></h2>`
+- `.oa-ico` alone (no `.oa-ico-text` row) is fine for an icon inline in body copy — its `vertical-align` fallback handles that case.
+- The gate is scoped to headings (where the defect was reported); use the same `.oa-ico`/`.oa-ico-text` pattern for icons in buttons, list items, and table cells.
 
 ### ri-menu
 ```svg

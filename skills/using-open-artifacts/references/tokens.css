@@ -307,3 +307,29 @@ body {
 :where(.oa-prose) img {
   max-width: 100%;
 }
+
+/* ── Inline icons ───────────────────────────────────────────────────────
+   A vendored Remix <svg> (references/icons.md) set next to text is a glyph,
+   not a block. `.oa-ico` gives it a text-sized box and stops it collapsing in
+   a flex row; `.oa-ico-text` lays an icon + its label out as ONE centered row.
+   Use them together in a heading, button, list item, table cell, or
+   mid-sentence:
+     <h2 class="oa-ico-text"><svg class="oa-ico">…</svg> Section title</h2>
+   A bare inline <svg> defaults to vertical-align:baseline and sits low, and a
+   hand-tuned vertical-align still drifts at heading sizes — the recurring
+   "icon and text are crooked / not centered" defect. align-items:center puts
+   the glyph's optical center on the text midline at any size. Zero-specificity
+   :where() — a floor you can override; the vertical-align on .oa-ico is only
+   the inline fallback for when an icon is NOT inside an .oa-ico-text row. */
+:where(.oa-ico) {
+  width: 1em;
+  height: 1em;
+  flex: none;
+  vertical-align: -0.15em;
+}
+:where(.oa-ico-text) {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  max-width: 100%;
+}
