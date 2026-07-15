@@ -624,6 +624,12 @@ export function unlockShell(options: UnlockShellOptions): string {
     envelope,
     webFonts,
   } = options;
+  // The iframe srcdoc built from this template is sandboxed with
+  // default-src 'none' — a comments drawer inside it could never fetch and
+  // is invisible to the user (the body is hidden until unlock anyway). So the
+  // inner template omits artifactId/comments; the outer unlockShell page
+  // renders its own functioning drawer. This avoids serializing the thread
+  // twice into the encrypted page.
   const template = wrapDocument({
     title,
     description,
@@ -634,8 +640,6 @@ export function unlockShell(options: UnlockShellOptions): string {
     ogImage,
     hostname,
     brandUrl,
-    artifactId,
-    comments,
   });
 
   const unlockScript = `

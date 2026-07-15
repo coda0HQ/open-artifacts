@@ -463,7 +463,8 @@ export class D1R2Store implements ArtifactStore {
     const { results } = await this.db
       .prepare(
         `SELECT id, artifact_id, author, body, created_at
-         FROM comments WHERE artifact_id = ? ORDER BY created_at ASC, id ASC`,
+         FROM comments WHERE artifact_id = ?
+         ORDER BY created_at ASC, id ASC LIMIT 100`,
       )
       .bind(artifactId)
       .all<CommentRow>();
