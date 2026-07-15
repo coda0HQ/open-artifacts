@@ -52,7 +52,7 @@ gain. If the family isn't on Fontshare or Google Fonts, self-host it through the
 
 ## The contract
 
-Declare a web font by writing **one** `<link>` in your theme fragment:
+Declare a web font by writing **one** `@import` in your theme fragment:
 
 ```css
 @import url("/fonts/general-sans--400.css");
