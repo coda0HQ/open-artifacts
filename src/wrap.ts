@@ -411,10 +411,13 @@ function feedbackPanelHtml(): string {
 }
 
 function feedbackScript(artifactId: string, projectRef: string | null): string {
-  return FEEDBACK_SCRIPT.replace(
-    FEEDBACK_ARTIFACT_ID_SLOT,
+  // Use replacer FUNCTIONS, not string replacements: String.replace treats $-patterns
+  // ($&, $', $`, $1...) specially in a string replacement, and projectRef is
+  // user-controlled — a value containing e.g. "$&" would splice template text into
+  // the generated script. A replacer function returns the value verbatim.
+  return FEEDBACK_SCRIPT.replace(FEEDBACK_ARTIFACT_ID_SLOT, () =>
     jsonForInlineScript(artifactId),
-  ).replace(FEEDBACK_PROJECT_REF_SLOT, jsonForInlineScript(projectRef));
+  ).replace(FEEDBACK_PROJECT_REF_SLOT, () => jsonForInlineScript(projectRef));
 }
 
 const OG_CARD_W = 1200;

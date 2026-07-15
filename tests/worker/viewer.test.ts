@@ -303,6 +303,27 @@ describe("GET /a/:id (encrypted)", () => {
     expect(toggles).toBe(1);
   });
 
+  it("inlines a projectRef containing $-replacement patterns verbatim (no script corruption)", async () => {
+    // projectRef is user-controlled; String.replace treats $&/$'/$`/$1 specially
+    // in a string replacement. feedbackScript must use a replacer function so
+    // these patterns land verbatim in the JSON-inlined script, not spliced in.
+    const projectRef = "$&$`$'$1$$";
+    const created = await create({
+      content: "<h1>safe</h1>",
+      projectRef,
+    });
+    const html = await (
+      await exports.default.fetch(`${BASE}/a/${created.id}`)
+    ).text();
+    // The projectRef must appear as a JSON string literal verbatim, and the
+    // $-patterns must NOT have spliced template text into the script — the
+    // slot literals are gone (replaced) and the OA assignment is well-formed.
+    expect(html).toContain(JSON.stringify(projectRef));
+    expect(html).toContain("var OA={artifactId:");
+    expect(html).not.toContain("__OA_ARTIFACT_ID__");
+    expect(html).not.toContain("__OA_PROJECT_REF__");
+  });
+
   it("round-trips: the shell's envelope decrypts with the right password", async () => {
     const plaintext = "<h1>Decryptable</h1>";
     const envelope = await encrypt(plaintext, "correct horse", 5000);
