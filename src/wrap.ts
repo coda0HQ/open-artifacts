@@ -198,6 +198,27 @@ const COMMENTS_CSS = `
 .oa-cm-item .oa-cm-text{font-size:.9rem;line-height:1.5;color:var(--oa-fg);white-space:pre-wrap;word-break:break-word}
 @media (hover:hover) and (pointer:fine){.oa-header .oa-cm-toggle:hover{opacity:1;border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 25%)}}
 @media (max-width:30rem){.oa-cm-drawer{max-width:100%}}
+/* Anchored-comment chrome (task 011): the "add comment" tool, the compose
+   popover, delete controls, and the focused-thread state. Tokens only, both
+   themes, visible focus rings, no decorative motion. */
+.oa-cm-tool{position:relative;width:28px;height:28px;border-radius:6px;border:1px solid var(--oa-border);background:var(--oa-surface);color:var(--oa-fg);font-size:17px;line-height:1;cursor:pointer;opacity:.8;transition:opacity .15s,border-color .15s,background .15s;flex-shrink:0}
+.oa-cm-tool:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+.oa-cm-tool[aria-pressed="true"]{opacity:1;border-color:var(--oa-accent);color:var(--oa-accent)}
+.oa-cm-tool:active{transform:translateY(1px)}
+@media (hover:hover) and (pointer:fine){.oa-cm-tool:hover{opacity:1}}
+.oa-cm-compose{position:fixed;z-index:2147483646;width:min(19rem,calc(100vw - 1rem));display:flex;flex-direction:column;gap:.4rem;padding:.6rem;background:var(--oa-bg);border:1px solid var(--oa-border);border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.18)}
+.oa-cm-compose[hidden]{display:none}
+.oa-cm-compose input,.oa-cm-compose textarea{width:100%;padding:.4rem .5rem;border:1px solid var(--oa-border);border-radius:6px;background:var(--oa-surface);color:var(--oa-fg);font:inherit;font-size:.85rem}
+.oa-cm-compose textarea{resize:vertical;min-height:3.5rem}
+.oa-cm-compose input:focus-visible,.oa-cm-compose textarea:focus-visible{outline:none;border-color:var(--oa-accent);box-shadow:var(--oa-focus-ring)}
+.oa-cm-actions{display:flex;justify-content:flex-end;gap:.4rem}
+.oa-cm-actions button{padding:.35rem .7rem;border-radius:6px;border:1px solid var(--oa-border);background:var(--oa-surface);color:var(--oa-fg);font:inherit;font-size:.8rem;font-weight:600;cursor:pointer}
+.oa-cm-actions .oa-cm-post{background:var(--oa-accent);border-color:var(--oa-accent);color:#fff}
+.oa-cm-actions button:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+.oa-cm-item{position:relative}
+.oa-cm-item[data-focus]{border-radius:8px;box-shadow:0 0 0 2px var(--oa-accent)}
+.oa-cm-del{margin-top:.35rem;padding:.1rem .4rem;border:none;background:none;color:var(--oa-danger);font:inherit;font-size:.72rem;cursor:pointer;border-radius:4px}
+.oa-cm-del:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 `;
 
 const SUN_SVG =
@@ -655,6 +676,7 @@ ${commentsDataScript(commentsList)}
 <script>${LAYOUT_SCRIPT}</script>
 <script>${escapeInlineScript(COMMENTS_SCRIPT)}</script>
 <script>${escapeInlineScript(hostBridgeScript(artifactId))}</script>
+<script>${escapeInlineScript(HOST_UI_SCRIPT)}</script>
 </body>
 </html>
 `;
@@ -753,7 +775,7 @@ const FRAME_ANCHOR_SCRIPT = `
     return {x:Math.round((cx-r.left-m.e)/m.a),y:Math.round((cy-r.top-m.f)/m.a)};
   }
   document.addEventListener('click',function(e){
-    if(window.__oaArmed!=='point')return;
+    if(!window.__oaArmed)return;
     e.stopPropagation();e.preventDefault();
     window.__oaArmed=null;
     var w=screenToWorld(e.clientX,e.clientY);
@@ -825,8 +847,8 @@ const FRAME_TEXT_SCRIPT = `
     }
     return startSet?range:null;
   }
-  document.addEventListener('mouseup',function(e){
-    if(window.__oaArmed!=='text')return;
+  document.addEventListener('mouseup',function(){
+    if(!window.__oaArmed)return;
     var sel=window.getSelection();
     if(!sel||sel.isCollapsed||sel.rangeCount===0)return;
     var r=sel.getRangeAt(0);
@@ -911,6 +933,116 @@ function commentsDataScript(comments: CommentMeta[]): string {
     publicList,
   )}</script>`;
 }
+
+// Host-side interactive UI (tasks 009+010): the "add comment" tool that arms
+// the frame, the compose popover positioned at the frame-reported point, the
+// create/delete network calls (the host is the only party that fetches), local
+// identity + delete-token storage, and drawer rendering. All comment fields are
+// rendered with textContent (never innerHTML) — author/body/quote are untrusted.
+const HOST_UI_SCRIPT = `
+(function(){
+  var frame=document.getElementById("oa-frame");
+  var header=document.querySelector(".oa-header");
+  var drawer=document.getElementById("oa-cm-drawer");
+  var list=document.getElementById("oa-cm-list");
+  var toggle=document.querySelector(".oa-cm-toggle");
+  var ID=window.__oaBridgeId;
+  if(!frame||!ID)return;
+  function headerH(){return header?Math.round(header.getBoundingClientRect().height):40}
+  function getName(){try{return localStorage.getItem("oa-cm-name")||""}catch(e){return""}}
+  function setName(v){try{localStorage.setItem("oa-cm-name",v)}catch(e){}}
+  function saveToken(id,t){try{localStorage.setItem("oa-cm-dt-"+id,t)}catch(e){}}
+  function getToken(id){try{return localStorage.getItem("oa-cm-dt-"+id)}catch(e){return null}}
+  function dropToken(id){try{localStorage.removeItem("oa-cm-dt-"+id)}catch(e){}}
+
+  var state=(window.__oaInlinedComments?window.__oaInlinedComments():[])||[];
+
+  var arm=document.createElement("button");
+  arm.type="button";arm.className="oa-cm-tool";arm.textContent="+";
+  arm.setAttribute("aria-pressed","false");arm.title="Add a comment";arm.setAttribute("aria-label","Add a comment");
+  if(header&&toggle)header.insertBefore(arm,toggle);else if(header)header.appendChild(arm);
+  function setArmed(on){
+    arm.setAttribute("aria-pressed",on?"true":"false");
+    if(window.__oaToFrame)window.__oaToFrame({type:"oa:arm",mode:on?"on":null});
+  }
+  arm.addEventListener("click",function(){setArmed(arm.getAttribute("aria-pressed")!=="true")});
+
+  var pop=document.createElement("div");
+  pop.className="oa-cm-compose";pop.id="oa-cm-compose";pop.setAttribute("hidden","");
+  var nameEl=document.createElement("input");nameEl.type="text";nameEl.className="oa-cm-name";nameEl.placeholder="Your name (optional)";nameEl.setAttribute("aria-label","Your name");
+  var bodyEl=document.createElement("textarea");bodyEl.className="oa-cm-body";bodyEl.rows=3;bodyEl.placeholder="Add a comment…";bodyEl.setAttribute("aria-label","Comment");
+  var actions=document.createElement("div");actions.className="oa-cm-actions";
+  var cancel=document.createElement("button");cancel.type="button";cancel.className="oa-cm-cancel";cancel.textContent="Cancel";
+  var postBtn=document.createElement("button");postBtn.type="button";postBtn.className="oa-cm-post";postBtn.textContent="Comment";
+  actions.appendChild(cancel);actions.appendChild(postBtn);
+  pop.appendChild(nameEl);pop.appendChild(bodyEl);pop.appendChild(actions);
+  document.body.appendChild(pop);
+
+  var pending=null,posting=false;
+  function closePop(){pop.setAttribute("hidden","");pending=null;bodyEl.value=""}
+  cancel.addEventListener("click",closePop);
+  document.addEventListener("keydown",function(e){if(e.key==="Escape"&&!pop.hasAttribute("hidden"))closePop()});
+  window.__oaOnAnchorNew=function(msg){
+    pending=msg.anchor||null;setArmed(false);nameEl.value=getName();
+    var px=(msg.point&&msg.point.x)||16,py=((msg.point&&msg.point.y)||16)+headerH();
+    pop.style.left=Math.max(8,Math.min(px,window.innerWidth-260))+"px";
+    pop.style.top=Math.max(8,Math.min(py,window.innerHeight-170))+"px";
+    pop.removeAttribute("hidden");bodyEl.focus();
+  };
+  postBtn.addEventListener("click",function(){
+    var body=bodyEl.value.trim();if(!body||posting)return;
+    var author=nameEl.value.trim();if(author)setName(author);
+    posting=true;
+    fetch("/api/artifacts/"+ID+"/comments",{method:"POST",headers:{"content-type":"application/json"},
+      body:JSON.stringify({body:body,author:author||null,anchor:pending,anchorVersion:(pending&&pending.anchorVersion)||1})})
+      .then(function(r){return r.ok?r.json():Promise.reject(r.status)})
+      .then(function(cm){if(cm.deleteToken)saveToken(cm.id,cm.deleteToken);
+        state.push({id:cm.id,author:cm.author,body:cm.body,anchor:cm.anchor,createdAt:cm.createdAt});
+        sync();closePop();
+      }).catch(function(){}).then(function(){posting=false});
+  });
+
+  function bumpCount(){if(!toggle)return;
+    if(state.length>0){toggle.setAttribute("data-count",String(state.length));var c=toggle.querySelector(".oa-cm-count");if(c)c.textContent=String(state.length)}
+    else{toggle.removeAttribute("data-count");var c2=toggle.querySelector(".oa-cm-count");if(c2)c2.textContent="0"}
+  }
+  function itemEl(cm){
+    var item=document.createElement("div");item.className="oa-cm-item";item.setAttribute("data-id",cm.id);
+    var meta=document.createElement("div");meta.className="oa-cm-meta";
+    var who=document.createElement("span");
+    if(cm.author){who.className="oa-cm-author";who.textContent=cm.author}else{who.className="oa-cm-anon";who.textContent="anonymous"}
+    var time=document.createElement("span");time.className="oa-cm-time";time.textContent=cm.createdAt||"";
+    meta.appendChild(who);meta.appendChild(time);
+    var text=document.createElement("div");text.className="oa-cm-text";text.textContent=cm.body;
+    item.appendChild(meta);item.appendChild(text);
+    if(getToken(cm.id)){
+      var del=document.createElement("button");del.type="button";del.className="oa-cm-del";del.textContent="Delete";del.setAttribute("aria-label","Delete comment");
+      del.addEventListener("click",function(){remove(cm.id)});item.appendChild(del);
+    }
+    return item;
+  }
+  function renderList(){if(!list)return;list.textContent="";
+    if(!state.length){var p=document.createElement("p");p.className="oa-cm-empty";p.textContent="No comments yet.";list.appendChild(p);return}
+    state.forEach(function(cm){list.appendChild(itemEl(cm))});
+  }
+  function toFrame(){if(window.__oaToFrame)window.__oaToFrame({type:"oa:comments",list:state,viewedVersion:window.__oaViewedVersion||1})}
+  function sync(){renderList();bumpCount();toFrame()}
+  function remove(id){var tok=getToken(id);if(!tok)return;
+    fetch("/api/artifacts/"+ID+"/comments/"+id,{method:"DELETE",headers:{authorization:"Bearer "+tok}})
+      .then(function(r){if(!r.ok)return;state=state.filter(function(c){return c.id!==id});dropToken(id);sync()});
+  }
+  window.__oaOnAnchorOpen=function(msg){
+    if(drawer){drawer.setAttribute("data-open","");drawer.setAttribute("aria-hidden","false");if(toggle)toggle.setAttribute("aria-expanded","true")}
+    var id=msg&&msg.ids&&msg.ids[0];if(!id||!list)return;
+    var el=list.querySelector('[data-id="'+id+'"]');
+    if(el){el.scrollIntoView({block:"center"});el.setAttribute("data-focus","");setTimeout(function(){el.removeAttribute("data-focus")},1600)}
+  };
+
+  // Upgrade the server-rendered list so this browser's own comments gain a
+  // Delete control (the server can't know which delete tokens we hold).
+  renderList();
+})();
+`;
 
 const CONTENT_SLOT = "__OA_CONTENT_SLOT__";
 
@@ -1068,6 +1200,7 @@ ${commentsDataScript(commentsList)}
 <script>${LAYOUT_SCRIPT}</script>
 <script>${escapeInlineScript(COMMENTS_SCRIPT)}</script>
 <script>${escapeInlineScript(hostBridgeScript(artifactId))}</script>
+<script>${escapeInlineScript(HOST_UI_SCRIPT)}</script>
 </body>
 </html>
 `;
