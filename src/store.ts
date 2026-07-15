@@ -1,4 +1,5 @@
 import type {
+  Anchor,
   ArtifactFormat,
   ArtifactMeta,
   CommentInput,
@@ -38,7 +39,15 @@ export interface ArtifactStore {
   ): Promise<number | { conflict: true; currentVersion: number }>;
   delete(id: string): Promise<void>;
   listComments(artifactId: string): Promise<CommentMeta[]>;
-  addComment(artifactId: string, input: CommentInput): Promise<CommentMeta>;
+  addComment(
+    artifactId: string,
+    input: CommentInput,
+    deleteTokenHash?: string | null,
+  ): Promise<CommentMeta>;
+  getComment(
+    commentId: string,
+  ): Promise<{ artifactId: string; deleteTokenHash: string | null } | null>;
+  deleteComment(commentId: string): Promise<void>;
 }
 
 const SCHEMA = [
@@ -92,6 +101,10 @@ const MIGRATIONS = [
   `ALTER TABLE versions ADD COLUMN format TEXT NOT NULL DEFAULT 'html'`,
   `ALTER TABLE versions ADD COLUMN encrypted INTEGER NOT NULL DEFAULT 0`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_artifacts_channel_hash ON artifacts(channel_hash)`,
+  // Anchored comments (#5): nullable JSON anchor + per-comment delete-token hash.
+  // Legacy rows read NULL for both — unanchored and owner-removable only.
+  `ALTER TABLE comments ADD COLUMN anchor TEXT`,
+  `ALTER TABLE comments ADD COLUMN delete_token_hash TEXT`,
 ];
 
 // After the ALTERs above add columns to existing rows with empty defaults,
@@ -462,7 +475,7 @@ export class D1R2Store implements ArtifactStore {
     await ensureSchema(this.db);
     const { results } = await this.db
       .prepare(
-        `SELECT id, artifact_id, author, body, created_at
+        `SELECT id, artifact_id, author, body, anchor, created_at
          FROM comments WHERE artifact_id = ?
          ORDER BY created_at ASC, id ASC LIMIT 100`,
       )
@@ -474,24 +487,60 @@ export class D1R2Store implements ArtifactStore {
   async addComment(
     artifactId: string,
     input: CommentInput,
+    deleteTokenHash: string | null = null,
   ): Promise<CommentMeta> {
     await ensureSchema(this.db);
     const id = generateId();
     const now = new Date().toISOString();
+    const anchorJson = input.anchor ? JSON.stringify(input.anchor) : null;
     await this.db
       .prepare(
-        `INSERT INTO comments (id, artifact_id, author, body, created_at)
-         VALUES (?, ?, ?, ?, ?)`,
+        `INSERT INTO comments (id, artifact_id, author, body, anchor, delete_token_hash, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
       )
-      .bind(id, artifactId, input.author, input.body, now)
+      .bind(
+        id,
+        artifactId,
+        input.author,
+        input.body,
+        anchorJson,
+        deleteTokenHash,
+        now,
+      )
       .run();
     return {
       id,
       artifactId,
       author: input.author,
       body: input.body,
+      anchor: input.anchor,
       createdAt: now,
     };
+  }
+
+  // Delete authorization needs only the owning artifact and the stored token
+  // hash; the hash never leaves the server and is never part of CommentMeta.
+  async getComment(
+    commentId: string,
+  ): Promise<{ artifactId: string; deleteTokenHash: string | null } | null> {
+    await ensureSchema(this.db);
+    const row = await this.db
+      .prepare(
+        "SELECT artifact_id, delete_token_hash FROM comments WHERE id = ?",
+      )
+      .bind(commentId)
+      .first<{ artifact_id: string; delete_token_hash: string | null }>();
+    return row
+      ? { artifactId: row.artifact_id, deleteTokenHash: row.delete_token_hash }
+      : null;
+  }
+
+  async deleteComment(commentId: string): Promise<void> {
+    await ensureSchema(this.db);
+    await this.db
+      .prepare("DELETE FROM comments WHERE id = ?")
+      .bind(commentId)
+      .run();
   }
 }
 
@@ -500,6 +549,7 @@ interface CommentRow {
   artifact_id: string;
   author: string | null;
   body: string;
+  anchor: string | null;
   created_at: string;
 }
 
@@ -509,6 +559,7 @@ function toComment(row: CommentRow): CommentMeta {
     artifactId: row.artifact_id,
     author: row.author,
     body: row.body,
+    anchor: row.anchor ? (JSON.parse(row.anchor) as Anchor) : null,
     createdAt: row.created_at,
   };
 }

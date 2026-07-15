@@ -266,3 +266,113 @@ describe("comments are inlined into the viewer page", () => {
     expect(html).toContain(envelope.content);
   });
 });
+
+function deleteComment(
+  id: string,
+  commentId: string,
+  token: string,
+): Promise<Response> {
+  return exports.default.fetch(
+    new Request(`${BASE}/api/artifacts/${id}/comments/${commentId}`, {
+      method: "DELETE",
+      headers: { authorization: `Bearer ${token}` },
+    }),
+  );
+}
+
+describe("anchored comments", () => {
+  it("stores a point anchor and returns a delete token", async () => {
+    const created = await createArtifact();
+    const res = await postComment(created.id, {
+      body: "off-center",
+      anchor: { mode: "point", x: 100, y: 100, anchorVersion: 1 },
+    });
+    expect(res.status).toBe(201);
+    const comment = (await res.json()) as {
+      anchor: { mode: string; x: number; y: number };
+      deleteToken: string;
+    };
+    expect(comment.anchor).toMatchObject({ mode: "point", x: 100, y: 100 });
+    expect(comment.deleteToken).toMatch(/^wt_/);
+
+    const list = (await (await getComments(created.id)).json()) as {
+      comments: { anchor: { mode: string } | null }[];
+    };
+    expect(list.comments[0]?.anchor?.mode).toBe("point");
+  });
+
+  it("accepts unanchored but rejects a text anchor on an encrypted artifact", async () => {
+    const envelope = await encrypt("secret revenue $5M", "pw");
+    const created = await createEncrypted(envelope);
+
+    const ok = await postComment(created.id, { body: "nice work" });
+    expect(ok.status).toBe(201);
+
+    const rejected = await postComment(created.id, {
+      body: "leaky",
+      anchor: {
+        mode: "text",
+        quote: "secret revenue $5M",
+        prefix: "",
+        suffix: "",
+        start: 0,
+      },
+    });
+    expect(rejected.status).toBe(400);
+    const list = (await (await getComments(created.id)).json()) as {
+      comments: { body: string }[];
+    };
+    expect(list.comments.map((c) => c.body)).toEqual(["nice work"]);
+  });
+});
+
+describe("DELETE /api/artifacts/:id/comments/:commentId", () => {
+  it("deletes your own comment with its delete token", async () => {
+    const created = await createArtifact();
+    const posted = (await (
+      await postComment(created.id, { body: "mine" })
+    ).json()) as { id: string; deleteToken: string };
+
+    const res = await deleteComment(created.id, posted.id, posted.deleteToken);
+    expect(res.status).toBe(200);
+    const list = (await (await getComments(created.id)).json()) as {
+      comments: unknown[];
+    };
+    expect(list.comments.length).toBe(0);
+  });
+
+  it("rejects a delete with the wrong token (403)", async () => {
+    const created = await createArtifact();
+    const posted = (await (
+      await postComment(created.id, { body: "keep me" })
+    ).json()) as { id: string };
+
+    const res = await deleteComment(created.id, posted.id, "wt_bogustoken");
+    expect(res.status).toBe(403);
+    const list = (await (await getComments(created.id)).json()) as {
+      comments: unknown[];
+    };
+    expect(list.comments.length).toBe(1);
+  });
+
+  it("lets the artifact owner delete any comment with the write token", async () => {
+    const created = await createArtifact();
+    const posted = (await (
+      await postComment(created.id, { body: "moderate me" })
+    ).json()) as { id: string };
+
+    const res = await deleteComment(created.id, posted.id, created.writeToken);
+    expect(res.status).toBe(200);
+  });
+
+  it("404s when the comment belongs to a different artifact", async () => {
+    const a = await createArtifact();
+    const b = await createArtifact();
+    const posted = (await (
+      await postComment(a.id, { body: "on A" })
+    ).json()) as { id: string; deleteToken: string };
+
+    const res = await deleteComment(b.id, posted.id, posted.deleteToken);
+    expect(res.status).toBe(404);
+  });
+});

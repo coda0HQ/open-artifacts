@@ -389,6 +389,59 @@ api.post("/artifacts/:id/comments", async (c) => {
   const parsed = validateComment(body);
   if (!parsed.ok) return c.json({ error: parsed.error }, parsed.status);
 
-  const comment = await store.addComment(record.id, parsed.value);
-  return c.json(comment, 201);
+  // A text anchor stores a verbatim quote of the artifact body. On an encrypted
+  // artifact the server never holds plaintext, so accepting one would copy
+  // plaintext into D1 and break the zero-knowledge guarantee. Point anchors
+  // (world coordinates) and unanchored comments leak nothing and are allowed.
+  if (parsed.value.anchor?.mode === "text" && record.encrypted) {
+    return c.json(
+      { error: "text anchors are not allowed on encrypted artifacts" },
+      400,
+    );
+  }
+
+  // Per-comment delete token, mirroring the artifact write-token idiom: only the
+  // SHA-256 hash is stored; the plaintext is returned once so the poster can
+  // delete their own comment later.
+  const deleteToken = generateWriteToken();
+  const comment = await store.addComment(
+    record.id,
+    parsed.value,
+    await sha256Hex(deleteToken),
+  );
+  return c.json({ ...comment, deleteToken }, 201);
+});
+
+api.delete("/artifacts/:id/comments/:commentId", async (c) => {
+  const store = storeFrom(c);
+  const id = c.req.param("id");
+  const commentId = c.req.param("commentId");
+
+  const comment = await store.getComment(commentId);
+  if (comment === null || comment.artifactId !== id) {
+    return c.json({ error: "comment not found" }, 404);
+  }
+
+  const token = bearerToken(c);
+  if (token === null) {
+    return c.json({ error: "missing bearer token" }, 401);
+  }
+
+  // Authorized either by the comment's own delete token (delete-own) or by the
+  // artifact's write/channel token (owner moderation). Legacy Phase-1 comments
+  // have a null delete-token hash and are removable only by the owner.
+  const tokenHash = await sha256Hex(token);
+  const deleteMatch =
+    comment.deleteTokenHash !== null &&
+    timingSafeEqual(tokenHash, comment.deleteTokenHash);
+  const ownerMatch = deleteMatch
+    ? false
+    : (await authorizeWrite(c, store, id)).ok;
+
+  if (!deleteMatch && !ownerMatch) {
+    return c.json({ error: "not authorized to delete this comment" }, 403);
+  }
+
+  await store.deleteComment(commentId);
+  return c.json({ ok: true });
 });
