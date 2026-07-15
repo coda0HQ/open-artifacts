@@ -16,6 +16,13 @@ Feature: Agent skill for creating and maintaining artifacts
     Then the artifact content at the same URL is replaced
     And the manifest entry's content hash is refreshed
 
+  Scenario: Update with a Recipe path instead of an id is rejected with a pointer
+    Given a manifest entry for artifact "abc"
+    When the agent runs the artifact script with update and a Recipe path as the id
+    Then the build fails naming the artifact id as the lookup key
+    And the error lists the known id so the author reaches for update with the id
+    And no publish request is made
+
   Scenario: Detect stale artifacts after code changes
     Given a manifest entry watching "src/**/*.ts" with a recorded snapshot hash
     And files matching the watch glob have changed since the snapshot

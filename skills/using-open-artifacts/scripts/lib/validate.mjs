@@ -407,30 +407,26 @@ const TROPE_BACKDROP_RE = /(?:-webkit-)?backdrop-filter\s*:/i;
 const TROPE_FLOATING_POS_RE = /\bposition\s*:\s*(?:fixed|sticky)\b/i;
 const TROPE_FLOATING_NAME_RE =
   /\b(?:bar|toolbar|chrome|controls?|zoom|dock|statusbar|status-bar|topbar|navbar|nav-bar|floatingbar|actionbar|action-bar|headerbar|header-bar)\b/i;
-
-function parseRules(css) {
-  const stripped = css.replace(/\/\*[\s\S]*?\*\//g, "");
-  const rules = [];
-  let i = 0;
-  while (i < stripped.length) {
-    const brace = stripped.indexOf("{", i);
-    if (brace === -1) break;
-    const selector = stripped.slice(i, brace).trim();
-    let depth = 1;
-    let j = brace + 1;
-    for (; j < stripped.length && depth > 0; j += 1) {
-      if (stripped[j] === "{") depth += 1;
-      else if (stripped[j] === "}") depth -= 1;
-    }
-    const decls = stripped.slice(brace + 1, j - 1);
-    rules.push({ selector, decls });
-    i = j;
-  }
-  return rules;
-}
+// Trope 4 — enlarged callout copy. A bordered/tinted prose box (positioning
+// statement, recommendation, awaiting-decision note, boxed aside) restates
+// body copy and must stay at --text-base; enlarging such boxes to --text-lg+
+// on every section is the "every boxed paragraph is a pull quote" defect. The
+// gate fires when a *non-display* selector enlarges text to >= the lead step.
+// --text-lg (1.25rem) is the lead tier; --text-xl and above are display tiers.
+// Sanctioned large-type surfaces pass: headings (h1–h6 + .oa-prose headings),
+// a hero/standfirst/display/quote set-piece, and font-size on :root/body.
+const TROPE_FONT_SIZE_RE =
+  /font-size\s*:\s*(?:var\(\s*--text-(?:lg|xl|2xl|3xl|4xl|display)\s*\)|1\.2[5-9]\d*(?:rem|em)|1\.[3-9]\d*(?:rem|em)|[2-9](?:\.\d+)?(?:rem|em)|(?:[2-9]\d|\d{3,})(?:px|pt))/i;
+const TROPE_LARGE_NAME_RE =
+  /\b(?:hero|standfirst|lead|lede|display|kicker|eyebrow|quote|pull-?quote|setpiece|set-piece|masthead|headline|page-title|site-title)\b/i;
+const TROPE_HEADING_SEL_RE = /(?:^|[>\s+~,(])(?:h[1-6]\b)/i;
 
 function validateTropes(authoredStyles) {
-  for (const { selector, decls } of parseRules(authoredStyles)) {
+  // collectStyleRules (not parseRules) so tropes see the real selector of a
+  // rule nested in @media/@supports/@layer, not the at-rule prelude. Otherwise
+  // `@media{ h2{font-size:var(--text-xl)} }` flattens to selector "@media…"
+  // and the heading exemption never matches — a false enlarged-callout fail.
+  for (const { selector, decls } of collectStyleRules(authoredStyles)) {
     // Trope 1 — decorative side-stripe: border-left/right > 1px that is not a
     // blockquote quote-bar or a list-marker surface. Hairlines (<=1px, `thin`)
     // pass; `medium`/`thick` are >1px.
@@ -478,15 +474,31 @@ function validateTropes(authoredStyles) {
         );
       }
     }
+    // Trope 4 — enlarged callout copy. font-size >= the lead step on a
+    // non-display selector: a bordered/tinted prose box enlarged to read like
+    // a pull quote. Keep callouts at --text-base; emphasize via weight, not
+    // scale. Headings, a hero/standfirst/quote set-piece, and :root/body are
+    // sanctioned large-type surfaces and pass.
+    if (TROPE_FONT_SIZE_RE.test(decls)) {
+      const isHeading = TROPE_HEADING_SEL_RE.test(selector);
+      const isDisplay = TROPE_LARGE_NAME_RE.test(selector);
+      const isRootBody = /(?:^|[>\s+~,])(?::root|html|body)\b/i.test(selector);
+      if (!isHeading && !isDisplay && !isRootBody) {
+        fail(
+          `banned trope — enlarged callout: font-size >= --text-lg on "${selector}" turns a prose box into a pull quote. Callouts (positioning statements, recommendations, asides) stay at --text-base; emphasize with font-weight: 600, a surface tint, or a hairline border — not a larger font. Reserve --text-lg+ for leads, standfirsts, headings, and one quote set-piece per section.`,
+        );
+      }
+    }
   }
 }
 
 // Flatten a stylesheet into style rules at ANY nesting depth, recursing into
-// grouping/conditional at-rules (@media/@supports/@layer) so a flex rule
-// declared only inside one is still seen — parseRules (used by the trope gate)
-// walks top level only, which would make a responsive `@media { h2{...} }`
-// invisible. @font-face/@keyframes bodies hold no heading selectors, so
-// recursing into them is harmless.
+// grouping/conditional at-rules (@media/@supports/@layer) so a rule declared
+// only inside one is still seen with its real selector — a top-level-only walk
+// would make the @media prelude the "selector" and trip the trope gate's
+// heading exemption, falsely flagging `@media{ h2{font-size:var(--text-xl)} }`.
+// Used by both flexRowTargets and the trope gate. @font-face/@keyframes bodies
+// hold no heading selectors, so recursing into them is harmless.
 function collectStyleRules(css) {
   const stripped = css.replace(/\/\*[\s\S]*?\*\//g, "");
   const rules = [];

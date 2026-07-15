@@ -509,9 +509,18 @@ function findEntry(manifest, id) {
   const entry = manifest.artifacts.find((a) => a.id === id);
   // `manifest` is the merged view (shared + local), so the error names both
   // files — naming only MANIFEST.shared misleads --local users whose entry
-  // lives (or should live) in manifest.local.json.
-  if (!entry)
-    fail(`artifact ${id} not found in ${MANIFEST.shared} or ${MANIFEST.local}`);
+  // lives (or should live) in manifest.local.json. The lookup is by artifact
+  // *id* (e.g. `11SzRSnARq8c`), not by Recipe path — `update` and `migrate`
+  // take the id as their first positional, with the Recipe path optional.
+  if (!entry) {
+    const known = manifest.artifacts.map((a) => a.id).filter(Boolean);
+    const hint = known.length
+      ? ` (known id${known.length === 1 ? "" : "s"}: ${known.join(", ")})`
+      : "";
+    fail(
+      `no manifest entry with id "${id}" in ${MANIFEST.shared} or ${MANIFEST.local}${hint}. The id is the artifact's short id, not its Recipe path — use \`artifact.mjs update <id> [recipe]\`. To publish a brand-new Recipe, run \`create\` instead.`,
+    );
+  }
   return entry;
 }
 

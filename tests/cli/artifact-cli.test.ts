@@ -749,6 +749,128 @@ describe("Recipe builder", () => {
     expect(result.code).toBe(0);
   });
 
+  it("rejects an enlarged callout box at --text-lg", async () => {
+    const callout = writeRecipe("positioning", {
+      mutate: (r) => {
+        r.artifact.level = 2;
+      },
+    });
+    writeFileSync(
+      callout.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n.positioning{margin:1.5rem 0;padding:1rem 1.5rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);font-size:var(--text-lg);line-height:1.5}\n',
+    );
+    const result = await run(["validate", callout.recipePath], {
+      expectFailure: true,
+    });
+    expect(result.stderr).toContain("enlarged callout");
+    expect(result.stderr).toContain(".positioning");
+    expect(requests).toHaveLength(0);
+  });
+
+  it("passes a callout box kept at --text-base", async () => {
+    const callout = writeRecipe("positioning-base", {
+      mutate: (r) => {
+        r.artifact.level = 2;
+      },
+    });
+    writeFileSync(
+      callout.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n.positioning{margin:1.5rem 0;padding:1rem 1.5rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);font-size:var(--text-base);line-height:var(--leading-body)}\n',
+    );
+    const result = await run(["validate", callout.recipePath]);
+    expect(result.code).toBe(0);
+  });
+
+  it("passes a --text-lg lead on a standfirst selector", async () => {
+    const lead = writeRecipe("standfirst", {
+      mutate: (r) => {
+        r.artifact.level = 2;
+      },
+    });
+    writeFileSync(
+      lead.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n.standfirst{font-size:var(--text-lg);line-height:1.4}\n',
+    );
+    const result = await run(["validate", lead.recipePath]);
+    expect(result.code).toBe(0);
+  });
+
+  it("passes a callout at 16px (body-size pixels, not oversized)", async () => {
+    const pxCallout = writeRecipe("positioning-px", {
+      mutate: (r) => {
+        r.artifact.level = 2;
+      },
+    });
+    writeFileSync(
+      pxCallout.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n.positioning{padding:1rem;background:var(--surface);border:1px solid var(--border);font-size:16px;line-height:1.5}\n',
+    );
+    const result = await run(["validate", pxCallout.recipePath]);
+    expect(result.code).toBe(0);
+  });
+
+  it("rejects a callout at var(--text-4xl) (display-tier token)", async () => {
+    const big = writeRecipe("positioning-4xl", {
+      mutate: (r) => {
+        r.artifact.level = 2;
+      },
+    });
+    writeFileSync(
+      big.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n.positioning{padding:1rem;background:var(--surface);border:1px solid var(--border);font-size:var(--text-4xl)}\n',
+    );
+    const result = await run(["validate", big.recipePath], {
+      expectFailure: true,
+    });
+    expect(result.stderr).toContain("enlarged callout");
+    expect(requests).toHaveLength(0);
+  });
+
+  it("rejects a .card-title callout at --text-xl (generic title selector)", async () => {
+    const cardTitle = writeRecipe("card-title", {
+      mutate: (r) => {
+        r.artifact.level = 2;
+      },
+    });
+    writeFileSync(
+      cardTitle.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n.card-title{font-size:var(--text-xl);font-weight:600}\n',
+    );
+    const result = await run(["validate", cardTitle.recipePath], {
+      expectFailure: true,
+    });
+    expect(result.stderr).toContain("enlarged callout");
+    expect(requests).toHaveLength(0);
+  });
+
+  it("passes a .page-title at var(--text-3xl) (sanctioned page title)", async () => {
+    const pageTitle = writeRecipe("page-title", {
+      mutate: (r) => {
+        r.artifact.level = 2;
+      },
+    });
+    writeFileSync(
+      pageTitle.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n.page-title{font-size:var(--text-3xl)}\n',
+    );
+    const result = await run(["validate", pageTitle.recipePath]);
+    expect(result.code).toBe(0);
+  });
+
+  it("passes a heading font-size inside @media (real selector, not the at-rule prelude)", async () => {
+    const responsive = writeRecipe("responsive-heading", {
+      mutate: (r) => {
+        r.artifact.level = 2;
+      },
+    });
+    writeFileSync(
+      responsive.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n@media (min-width:768px){ h2 { font-size: var(--text-xl) } }\n',
+    );
+    const result = await run(["validate", responsive.recipePath]);
+    expect(result.code).toBe(0);
+  });
+
   it("rejects a heading with an inline icon but no centered-row layout", async () => {
     const crooked = writeRecipe("crooked-icon", {
       body: '<main class="oa-prose"><h2><svg viewBox="0 0 24 24" fill="currentColor"><path d="M11 7H13V9H11V7Z"/></svg> What it is</h2></main>\n',
@@ -1467,6 +1589,21 @@ describe("Recipe publishing", () => {
 
     expect(result.stderr).toContain("version conflict");
     expect(manifest()).toEqual(before);
+  });
+
+  it("rejects update with a recipe path where an id is expected", async () => {
+    const built = writeRecipe();
+    await run(["create", built.recipePath]);
+    // The common mistake: passing the Recipe path as `update`'s first
+    // positional. The error must name the artifact id as the lookup key and
+    // list the known id so the author reaches for `update <id>`, not the path.
+    const result = await run(["update", "recipes/report.recipe.json"], {
+      expectFailure: true,
+    });
+    expect(result.stderr).toContain("no manifest entry with id");
+    expect(result.stderr).toContain("not its Recipe path");
+    expect(result.stderr).toContain("testid123456");
+    expect(requests).toHaveLength(1);
   });
 
   it("keeps encrypted Recipes private and resolves a named password", async () => {

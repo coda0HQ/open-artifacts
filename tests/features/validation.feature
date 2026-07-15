@@ -197,6 +197,47 @@ Feature: Build validation catches silent layout defects
     When the agent runs the artifact script with validate
     Then the build succeeds because a floating bar over scrolling content is sanctioned
 
+  Scenario: An enlarged callout box at --text-lg fails validation
+    Given an HTML recipe whose styles set font-size:var(--text-lg) on a .positioning callout
+    When the agent runs the artifact script with validate
+    Then the build fails naming the enlarged-callout trope and the offending selector
+    And no publish request is made
+
+  Scenario: A callout box kept at --text-base passes validation
+    Given an HTML recipe whose styles set font-size:var(--text-base) on a .positioning callout
+    When the agent runs the artifact script with validate
+    Then the build succeeds because a callout stays at body scale
+
+  Scenario: A --text-lg lead on a standfirst passes validation
+    Given an HTML recipe whose styles set font-size:var(--text-lg) on a .standfirst lead
+    When the agent runs the artifact script with validate
+    Then the build succeeds because leads and standfirsts are sanctioned large-type surfaces
+
+  Scenario: A callout at 16px (body-size pixels) passes validation
+    Given an HTML recipe whose styles set font-size:16px on a .positioning callout
+    When the agent runs the artifact script with validate
+    Then the build succeeds because body-size pixels are below the lead step
+
+  Scenario: A callout at var(--text-4xl) fails validation
+    Given an HTML recipe whose styles set font-size:var(--text-4xl) on a .positioning callout
+    When the agent runs the artifact script with validate
+    Then the build fails naming the enlarged-callout trope
+
+  Scenario: A .card-title at var(--text-xl) fails validation
+    Given an HTML recipe whose styles set font-size:var(--text-xl) on a .card-title selector
+    When the agent runs the artifact script with validate
+    Then the build fails because a generic card-title is not a sanctioned display surface
+
+  Scenario: A .page-title at var(--text-3xl) passes validation
+    Given an HTML recipe whose styles set font-size:var(--text-3xl) on a .page-title selector
+    When the agent runs the artifact script with validate
+    Then the build succeeds because a page title is a sanctioned large-type surface
+
+  Scenario: A heading font-size nested in @media passes validation
+    Given an HTML recipe whose styles set font-size:var(--text-xl) on an h2 inside an @media block
+    When the agent runs the artifact script with validate
+    Then the build succeeds because the heading exemption matches the real selector, not the at-rule prelude
+
   Scenario: A heading with an inline icon but no centered-row layout fails validation
     Given an HTML recipe whose body puts an inline <svg> in an <h2> that has neither
       the .oa-ico-text helper nor an authored display:flex/grid rule targeting it

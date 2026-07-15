@@ -439,6 +439,19 @@ slabs. Designed pages ship visual material anyway, chosen from what inlines:
   or scenery — LLM-drawn figurative SVG is a top-tier tell.
 - **Typographic set-pieces** — an oversized pull quote, a giant numeral, a
   specimen block. Type at display scale IS imagery when composed.
+- **Callouts stay at body scale.** A bordered/tinted box that *restates*
+  prose — a positioning statement, a recommendation, an "awaiting decision"
+  note, a boxed aside — is a callout, not a set-piece. Keep it at
+  `--text-base` (1rem) with `--leading-body`, same measure and weight
+  family as the surrounding prose; distinguish it by surface (`var(--surface)`),
+  a full hairline border, or a leading label, **not by enlarging the type**.
+  Bumping such a box to `--text-lg`/`--text-xl` on every section is the
+  recurring "every boxed paragraph is a pull quote" defect: body copy reads
+  loud and inconsistent, and a real quote set-piece elsewhere loses its
+  impact. Reserve `--text-lg` and above for actual leads, standfirsts,
+  display quotes, and headings — at most one lead-size block per section,
+  and only where the text earns the scale. A callout that needs emphasis
+  promotes one phrase to `font-weight: 600`; it does not grow the whole box.
 - **CSS-drawn texture** — a `repeating-linear-gradient` hairline grid, a
   radial glow behind a hero, one `canvas` particle field (L3, one max).
 - Photography that the *user supplied* can be embedded as a `data:` URI when
