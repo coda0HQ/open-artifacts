@@ -85,10 +85,20 @@ async function resolveFontshareFile(
   const chosen = candidates[0] ?? null;
   if (chosen?.file === undefined || chosen.file === null) return null;
   // Fontshare file paths are protocol-relative ("//cdn.fontshare.com/wf/...");
-  // normalize to an absolute https URL.
+  // normalize to an absolute https URL. The `file` field is attacker-
+  // influenceable API input, so pin the host to cdn.fontshare.com — a rogue
+  // Fontshare response must not turn the Worker into an SSRF / cache-poisoning
+  // proxy to an arbitrary host.
   const file = chosen.file.startsWith("//")
     ? `https:${chosen.file}`
     : chosen.file;
+  let url: URL;
+  try {
+    url = new URL(file);
+  } catch {
+    return null;
+  }
+  if (url.hostname !== "cdn.fontshare.com") return null;
   return { path: file };
 }
 
@@ -129,6 +139,11 @@ export async function materializeFont(
 export function fontFaceCss(slug: string): string | null {
   const parsed = parseSlug(slug);
   if (parsed === null) return null;
-  const familyDisplay = parsed.family;
+  // Title-case the slug so the emitted font-family matches the display name
+  // in fonts.md examples (general-sans -> "General Sans"), not the raw slug.
+  const familyDisplay = parsed.family
+    .split("-")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
   return `@font-face{font-family:${JSON.stringify(familyDisplay)};src:url("/fonts/${slug}.woff2") format("woff2");font-weight:${parsed.weight};font-style:${parsed.style};font-display:swap}`;
 }
