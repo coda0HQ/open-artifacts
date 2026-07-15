@@ -749,6 +749,118 @@ describe("Recipe builder", () => {
     expect(result.code).toBe(0);
   });
 
+  it("rejects a heading with an inline icon but no centered-row layout", async () => {
+    const crooked = writeRecipe("crooked-icon", {
+      body: '<main class="oa-prose"><h2><svg viewBox="0 0 24 24" fill="currentColor"><path d="M11 7H13V9H11V7Z"/></svg> What it is</h2></main>\n',
+    });
+    const result = await run(["validate", crooked.recipePath], {
+      expectFailure: true,
+    });
+    expect(result.stderr).toContain("not laid out as a centered row");
+    expect(result.stderr).toContain("oa-ico-text");
+    expect(requests).toHaveLength(0);
+  });
+
+  it("passes a heading whose icon uses the .oa-ico-text helper", async () => {
+    const helper = writeRecipe("icon-helper", {
+      body: '<main class="oa-prose"><h2 class="oa-ico-text"><svg class="oa-ico" viewBox="0 0 24 24" fill="currentColor"><path d="M11 7H13V9H11V7Z"/></svg> What it is</h2></main>\n',
+    });
+    const result = await run(["validate", helper.recipePath]);
+    expect(result.code).toBe(0);
+  });
+
+  it("passes a heading centered by an authored flex rule", async () => {
+    const authoredFlex = writeRecipe("icon-authored-flex", {
+      body: '<main class="oa-prose"><section class="section"><h2><svg class="ico" viewBox="0 0 24 24" fill="currentColor"><path d="M11 7H13V9H11V7Z"/></svg> The request flow</h2></section></main>\n',
+    });
+    writeFileSync(
+      authoredFlex.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n.section > h2{display:flex;align-items:center;gap:8px}\n',
+    );
+    const result = await run(["validate", authoredFlex.recipePath]);
+    expect(result.code).toBe(0);
+  });
+
+  it("leaves headings with no inline icon untouched by the icon gate", async () => {
+    const textOnly = writeRecipe("icon-none", {
+      body: '<main class="oa-prose"><h2>Just text</h2><figure><svg viewBox="0 0 24 24" fill="currentColor"><path d="M11 7H13V9H11V7Z"/></svg></figure></main>\n',
+    });
+    const result = await run(["validate", textOnly.recipePath]);
+    expect(result.code).toBe(0);
+  });
+
+  it("rejects a heading whose flex rule omits align-items:center", async () => {
+    // display:flex alone defaults to align-items:stretch, dropping the fixed-
+    // height icon at the top of the line — still crooked.
+    const noAlign = writeRecipe("icon-flex-no-align", {
+      body: '<main class="oa-prose"><h2><svg class="ico" viewBox="0 0 24 24" fill="currentColor"><path d="M11 7H13V9H11V7Z"/></svg> Title</h2></main>\n',
+    });
+    writeFileSync(
+      noAlign.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\nh2{display:flex;gap:8px}\n',
+    );
+    const result = await run(["validate", noAlign.recipePath], {
+      expectFailure: true,
+    });
+    expect(result.stderr).toContain("not laid out as a centered row");
+    expect(requests).toHaveLength(0);
+  });
+
+  it("passes a heading centered by a flex rule nested in @media", async () => {
+    const mediaFlex = writeRecipe("icon-media-flex", {
+      body: '<main class="oa-prose"><h2 class="head"><svg class="ico" viewBox="0 0 24 24" fill="currentColor"><path d="M11 7H13V9H11V7Z"/></svg> Title</h2></main>\n',
+    });
+    writeFileSync(
+      mediaFlex.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n@media (min-width:1px){.head{display:flex;align-items:center;gap:8px}}\n',
+    );
+    const result = await run(["validate", mediaFlex.recipePath]);
+    expect(result.code).toBe(0);
+  });
+
+  it("passes a heading whose icon+label sit in an inner custom-flex span", async () => {
+    const innerFlex = writeRecipe("icon-inner-flex", {
+      body: '<main class="oa-prose"><h2><span class="row"><svg class="ico" viewBox="0 0 24 24" fill="currentColor"><path d="M11 7H13V9H11V7Z"/></svg> Title</span></h2></main>\n',
+    });
+    writeFileSync(
+      innerFlex.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n.row{display:inline-flex;align-items:center;gap:8px}\n',
+    );
+    const result = await run(["validate", innerFlex.recipePath]);
+    expect(result.code).toBe(0);
+  });
+
+  it("passes an icon-only heading with no adjacent text", async () => {
+    const iconOnly = writeRecipe("icon-only-heading", {
+      body: '<main class="oa-prose"><h2><svg class="oa-ico" viewBox="0 0 24 24" fill="currentColor"><path d="M11 7H13V9H11V7Z"/></svg></h2><p>Body.</p></main>\n',
+    });
+    const result = await run(["validate", iconOnly.recipePath]);
+    expect(result.code).toBe(0);
+  });
+
+  it("passes when icon-in-heading markup appears only inside an HTML comment", async () => {
+    const commented = writeRecipe("icon-commented", {
+      body: '<main class="oa-prose"><!-- example: <h2><svg viewBox="0 0 24 24"><path d="M1 1"/></svg> Title</h2> --><h2>Real text heading</h2></main>\n',
+    });
+    const result = await run(["validate", commented.recipePath]);
+    expect(result.code).toBe(0);
+  });
+
+  it("rejects a heading whose only flex rule targets a pseudo-element", async () => {
+    const pseudo = writeRecipe("icon-pseudo-flex", {
+      body: '<main class="oa-prose"><h2><svg class="ico" viewBox="0 0 24 24" fill="currentColor"><path d="M11 7H13V9H11V7Z"/></svg> Title</h2></main>\n',
+    });
+    writeFileSync(
+      pseudo.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\nh2::before{display:flex;align-items:center;content:""}\n',
+    );
+    const result = await run(["validate", pseudo.recipePath], {
+      expectFailure: true,
+    });
+    expect(result.stderr).toContain("not laid out as a centered row");
+    expect(requests).toHaveLength(0);
+  });
+
   it("validates a Markdown recipe that omits document.theme", async () => {
     const recipe = writeRecipe("no-theme-markdown", {
       format: "markdown",

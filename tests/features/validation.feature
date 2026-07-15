@@ -196,3 +196,54 @@ Feature: Build validation catches silent layout defects
     Given an HTML recipe whose styles use backdrop-filter on a position:sticky toolbar
     When the agent runs the artifact script with validate
     Then the build succeeds because a floating bar over scrolling content is sanctioned
+
+  Scenario: A heading with an inline icon but no centered-row layout fails validation
+    Given an HTML recipe whose body puts an inline <svg> in an <h2> that has neither
+      the .oa-ico-text helper nor an authored display:flex/grid rule targeting it
+    When the agent runs the artifact script with validate
+    Then the build fails naming the crooked-icon defect and pointing to the .oa-ico-text helper
+    And no publish request is made
+
+  Scenario: A heading whose icon uses the .oa-ico-text helper passes validation
+    Given an HTML recipe whose body wraps an <h2>'s icon and label in class="oa-ico-text"
+    When the agent runs the artifact script with validate
+    Then the build succeeds because the helper lays the icon and text out as a centered row
+
+  Scenario: A heading centered by an authored flex rule passes validation
+    Given an HTML recipe whose styles set display:flex; align-items:center on the section
+      heading selector and whose body puts an inline <svg> in that heading
+    When the agent runs the artifact script with validate
+    Then the build succeeds because the authored flex rule centers the icon with the text
+
+  Scenario: A heading with no icon is untouched by the icon-alignment gate
+    Given an HTML recipe whose headings contain only text and no inline <svg>
+    When the agent runs the artifact script with validate
+    Then the build succeeds and no icon-alignment message is emitted
+
+  Scenario: A heading whose flex rule omits align-items:center fails validation
+    Given an HTML recipe whose body puts an inline <svg> in an <h2> whose only layout
+      rule is display:flex with no centered cross-axis alignment
+    When the agent runs the artifact script with validate
+    Then the build fails because a stretched flex row still drops the icon off the midline
+
+  Scenario: A heading centered by a flex rule nested in a media query passes validation
+    Given an HTML recipe whose only centered-flex rule for the icon heading is declared
+      inside an @media block
+    When the agent runs the artifact script with validate
+    Then the build succeeds because the gate reads flex rules at any nesting depth
+
+  Scenario: A heading whose icon and label sit in an inner centered-flex span passes validation
+    Given an HTML recipe whose body keeps the <h2> block-level and wraps the icon and its
+      label in an inner span carrying a display:flex; align-items:center rule
+    When the agent runs the artifact script with validate
+    Then the build succeeds because an inner centered-row wrapper aligns the icon
+
+  Scenario: An icon-only heading with no adjacent text passes validation
+    Given an HTML recipe whose <h2> contains only an inline <svg> mark and no text
+    When the agent runs the artifact script with validate
+    Then the build succeeds because there is no adjacent text for the icon to be crooked against
+
+  Scenario: Icon-in-heading markup inside an HTML comment passes validation
+    Given an HTML recipe whose body shows icon-in-heading markup only inside an HTML comment
+    When the agent runs the artifact script with validate
+    Then the build succeeds because comments are stripped before the heading scan

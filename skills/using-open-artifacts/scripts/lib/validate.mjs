@@ -437,8 +437,7 @@ function validateTropes(authoredStyles) {
     let stripeHit = null;
     for (const re of [TROPE_SIDE_STRIPE_RE, TROPE_LONGHAND_WIDTH_RE]) {
       re.lastIndex = 0;
-      let m;
-      while ((m = re.exec(decls)) !== null) {
+      for (let m = re.exec(decls); m !== null; m = re.exec(decls)) {
         const tok = (m[2] ?? "").toString();
         const kw = tok.toLowerCase();
         const widthNum = parseFloat(tok) || 0;
@@ -479,6 +478,134 @@ function validateTropes(authoredStyles) {
         );
       }
     }
+  }
+}
+
+// Flatten a stylesheet into style rules at ANY nesting depth, recursing into
+// grouping/conditional at-rules (@media/@supports/@layer) so a flex rule
+// declared only inside one is still seen — parseRules (used by the trope gate)
+// walks top level only, which would make a responsive `@media { h2{...} }`
+// invisible. @font-face/@keyframes bodies hold no heading selectors, so
+// recursing into them is harmless.
+function collectStyleRules(css) {
+  const stripped = css.replace(/\/\*[\s\S]*?\*\//g, "");
+  const rules = [];
+  const walk = (text) => {
+    let i = 0;
+    while (i < text.length) {
+      const brace = text.indexOf("{", i);
+      if (brace === -1) break;
+      const prelude = text.slice(i, brace).trim();
+      let depth = 1;
+      let j = brace + 1;
+      for (; j < text.length && depth > 0; j += 1) {
+        if (text[j] === "{") depth += 1;
+        else if (text[j] === "}") depth -= 1;
+      }
+      const body = text.slice(brace + 1, j - 1);
+      if (prelude.startsWith("@")) walk(body);
+      else rules.push({ selector: prelude, decls: body });
+      i = j;
+    }
+  };
+  walk(stripped);
+  return rules;
+}
+
+// Rightmost tag/class of every authored rule that lays out a CENTERED flex row
+// — display:flex|inline-flex AND align-items|place-items:center in the same
+// rule. Both are required: display:flex alone defaults to align-items:stretch,
+// which drops a fixed-height `.oa-ico` at the top of the line (still crooked),
+// so a rule without centered cross-alignment does not count. Keys skip pseudo-
+// element / attribute-qualified compounds (`h2::before`, `h2[data-x]`) that do
+// not actually center this heading's children.
+function flexRowTargets(authoredStyles) {
+  const tags = new Set();
+  const classes = new Set();
+  for (const { selector, decls } of collectStyleRules(authoredStyles)) {
+    if (!/\bdisplay\s*:\s*(?:inline-)?flex\b/i.test(decls)) continue;
+    if (!/\b(?:align-items|place-items)\s*:\s*[^;}]*\bcenter\b/i.test(decls)) {
+      continue;
+    }
+    for (const part of selector.split(",")) {
+      // The rightmost compound is what the rule actually styles; a descendant
+      // selector like ".card h3" makes the h3 flex, ".card" (a flex parent of
+      // the h3) does not center the h3's own icon, so key on the last compound.
+      const key = part
+        .trim()
+        .split(/[\s>+~]+/)
+        .filter(Boolean)
+        .pop();
+      // A pseudo-element/-class or attribute-qualified key is conditional and
+      // does not unconditionally lay this heading out — do not register it.
+      if (!key || /[[:]/.test(key)) continue;
+      const tag = key.match(/^[a-z][a-z0-9]*/i);
+      if (tag) tags.add(tag[0].toLowerCase());
+      for (const cls of key.matchAll(/\.([A-Za-z_][\w-]*)/g)) {
+        classes.add(cls[1]);
+      }
+    }
+  }
+  return { tags, classes };
+}
+
+// Icon-in-heading alignment. An inline <svg> next to heading text defaults to
+// vertical-align: baseline and sits low; even a hand-tuned vertical-align drifts
+// at heading sizes (this is the "icon and heading text are crooked / not
+// centered" defect that shipped and had to be re-fixed by hand). The reliable
+// mechanism is a flex row with centered items — exactly what fixed it. This
+// gate fails a heading that holds an inline <svg> next to text but is not laid
+// out as a centered row. A heading passes when it (or an inner wrapper around
+// the icon+label) carries `.oa-ico-text`, OR its tag/a class it carries is
+// targeted by an authored centered-flex rule — so legitimately flex-authored
+// headings (`.section > h2 { display:flex; align-items:center }`) are never
+// flagged. Scoped to headings, the locus of the reported defect; buttons /
+// lists / cells are covered by the correct-by-default `.oa-ico`/`.oa-ico-text`
+// utilities and icons.md, kept out of the gate to avoid false positives on the
+// far more numerous already-flex controls.
+function validateIconAlignment(authoredBody, authoredStyles) {
+  const { tags: flexTags, classes: flexClasses } =
+    flexRowTargets(authoredStyles);
+  // Strip HTML comments so example markup in a comment (<!-- <h2><svg>… -->)
+  // does not trip the gate, matching every sibling gate.
+  const body = authoredBody.replace(/<!--[\s\S]*?-->/g, "");
+  const headingRe = /<h([1-6])\b([^>]*)>/gi;
+  for (let m = headingRe.exec(body); m; m = headingRe.exec(body)) {
+    const level = m[1];
+    // Headings hold phrasing content only (never a nested heading), so the next
+    // matching close tag bounds the heading exactly.
+    const closeIndex = body.indexOf(`</h${level}`, m.index + m[0].length);
+    const inner =
+      closeIndex === -1
+        ? body.slice(m.index + m[0].length)
+        : body.slice(m.index + m[0].length, closeIndex);
+    if (!/<svg\b/i.test(inner)) continue; // no icon, nothing to align
+    // Icon-only heading (a lone mark, no adjacent text) has nothing to be
+    // crooked against — skip. Drop svg subtrees, then look for real text.
+    const textOutsideSvg = inner
+      .replace(/<svg\b[\s\S]*?<\/svg>/gi, "")
+      .replace(/<[^>]+>/g, "")
+      .replace(/&[a-z#0-9]+;/gi, "")
+      .trim();
+    if (!textOutsideSvg) continue;
+    // A centered row can live on the heading itself OR on an inner wrapper
+    // around the icon+label, so collect every class token in the heading (its
+    // own open tag + any descendant open tag) and match against the flex-row
+    // selectors and the `.oa-ico-text` helper.
+    const classTokens = new Set();
+    for (const attr of `${m[0]} ${inner}`.matchAll(
+      /\bclass=["']([^"']*)["']/gi,
+    )) {
+      for (const cls of attr[1].split(/\s+/)) if (cls) classTokens.add(cls);
+    }
+    const centered =
+      flexTags.has(`h${level}`) ||
+      classTokens.has("oa-ico-text") ||
+      [...classTokens].some((cls) => flexClasses.has(cls));
+    if (centered) continue;
+    fail(
+      `an inline <svg> icon sits in a <h${level}> that is not laid out as a centered row — a bare or vertical-aligned icon drifts off the heading's midline (the "icon and text are crooked / not centered" defect). Wrap the icon and its label as a flex row: <h${level} class="oa-ico-text"><svg class="oa-ico">…</svg> Heading</h${level}> (the token contract's inline-flex + align-items:center helper), or set display:flex;align-items:center on the heading (or on a span wrapping the icon and text). Give the <svg> class="oa-ico" so it stays text-sized and never shrinks.`,
+    );
   }
 }
 
@@ -754,6 +881,7 @@ export function validateBuild(loaded, composed) {
     );
     validateScrollspy(composed.authoredScripts);
     validateTropes(composed.authoredStyles);
+    validateIconAlignment(composed.authoredBody, composed.authoredStyles);
     validateMeasureCap(loaded, composed);
   }
   if (artifact.canvas) validateCanvas(composed.authoredBody);
