@@ -784,16 +784,20 @@ describe("Recipe builder", () => {
   });
 
   it("rejects a non-allowlisted same-origin /vendor bundle in a <script src>", async () => {
+    // Use a REGULAR (non-module) <script src> so the allowlist-rejection path
+    // is what fires — a type="module" tag would trip the module-deferred check
+    // first and mask an allowlist bug.
     const recipe = writeRecipe("bad-pkg", {
       mutate: (r) => {
         r.artifact.level = 1;
       },
-      body: '<main><pre class="d3"></pre><script type="module" src="/vendor/d3.bundle.mjs"></script></main>\n',
+      body: '<main><pre class="d3"></pre><script src="/vendor/d3.bundle.mjs"></script></main>\n',
     });
     const result = await run(["validate", recipe.recipePath], {
       expectFailure: true,
     });
-    expect(result.stderr).toContain("d3");
+    expect(result.stderr).toContain("d3.bundle.mjs");
+    expect(result.stderr).toContain("allowlist");
     expect(requests).toHaveLength(0);
   });
 
