@@ -105,18 +105,46 @@ img,video,canvas{max-width:100%}
 .oa-header{position:sticky;top:0;z-index:2147483646;display:flex;align-items:center;gap:.6rem;padding:.375rem 1rem;background:color-mix(in oklab,var(--oa-bg),transparent 8%);backdrop-filter:blur(10px);border-bottom:1px solid var(--oa-border);font-size:.8rem}
 .oa-header .oa-header-title{flex:1;min-width:0;font-size:.8rem;font-weight:600;line-height:1.5;letter-spacing:normal;margin:0;color:var(--oa-fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .oa-header .oa-header-title .oa-header-fav{margin-right:.4rem;font-size:1em}
-.oa-header #oa-theme-toggle{position:relative;width:28px;height:28px;border-radius:6px;border:1px solid var(--oa-border);background:var(--oa-surface);color:var(--oa-fg);font-size:13px;line-height:1;cursor:pointer;opacity:.8;transition:opacity .15s,border-color .15s,background .15s;flex-shrink:0}
-.oa-header #oa-theme-toggle::before{content:"";position:absolute;inset:-6px}
-.oa-header #oa-theme-toggle:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
-.oa-header #oa-theme-toggle:active{transform:translateY(1px)}
-.oa-header #oa-theme-toggle svg{display:block}
+.oa-header #oa-theme-toggle,.oa-header #oa-feedback-toggle{position:relative;width:28px;height:28px;border-radius:6px;border:1px solid var(--oa-border);background:var(--oa-surface);color:var(--oa-fg);font-size:13px;line-height:1;cursor:pointer;opacity:.8;transition:opacity .15s,border-color .15s,background .15s;flex-shrink:0}
+.oa-header #oa-theme-toggle::before,.oa-header #oa-feedback-toggle::before{content:"";position:absolute;inset:-6px}
+.oa-header #oa-theme-toggle:focus-visible,.oa-header #oa-feedback-toggle:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+.oa-header #oa-theme-toggle:active,.oa-header #oa-feedback-toggle:active{transform:translateY(1px)}
+.oa-header #oa-theme-toggle svg,.oa-header #oa-feedback-toggle svg{display:block}
 .oa-brand{position:relative;display:inline-flex;align-items:center;gap:.35rem;min-height:28px;text-decoration:none;color:var(--oa-muted);font-size:.75rem;flex-shrink:0;padding:.2rem .5rem;border-radius:6px;transition:color .15s,background .15s}
 .oa-brand::before{content:"";position:absolute;inset:-6px 0}
 .oa-brand:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 .oa-brand:active{transform:translateY(1px)}
 .oa-brand svg{display:block;width:14px;height:14px}
-@media (hover:hover) and (pointer:fine){.oa-header #oa-theme-toggle:hover{opacity:1;border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 25%)}.oa-brand:hover{color:var(--oa-fg);background:var(--oa-surface)}}
+@media (hover:hover) and (pointer:fine){.oa-header #oa-theme-toggle:hover,.oa-header #oa-feedback-toggle:hover{opacity:1;border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 25%)}.oa-brand:hover{color:var(--oa-fg);background:var(--oa-surface)}}
 @media (max-width:30rem){.oa-brand .oa-brand-text{display:none}}
+`;
+
+// Project-change (type 2) feedback control. Lives in the host chrome (same
+// origin as the Worker, so it can POST), never inside the sandboxed iframe
+// (connect-src 'none', opaque origin — no fetch). The iframe may only
+// postMessage the host to open the panel. Dual-theme via the shared tokens;
+// keyboard-accessible (focusable fieldset, visible focus rings, Escape to
+// close). No decorative motion.
+const FEEDBACK_CSS = `
+.oa-feedback-backdrop{position:fixed;inset:0;z-index:2147483647;display:none;align-items:center;justify-content:center;background:color-mix(in oklab,#000,transparent 60%);padding:1.25rem}
+.oa-feedback-backdrop[data-open]{display:flex}
+.oa-feedback-card{width:100%;max-width:26rem;border:1px solid var(--oa-border);border-radius:12px;padding:1.5rem;background:var(--oa-surface)}
+.oa-feedback-card h2{font-size:1rem;line-height:1.3;margin:0 0 .3rem;color:var(--oa-fg)}
+.oa-feedback-card p{margin:0 0 1rem;color:var(--oa-muted);font-size:.85rem;line-height:1.55}
+.oa-feedback-card .oa-label{display:block;margin:0 0 .4rem;color:var(--oa-fg);font-size:.8rem;font-weight:600}
+.oa-feedback-card input,.oa-feedback-card textarea{width:100%;min-height:44px;padding:.55rem .7rem;border:1px solid var(--oa-border);border-radius:8px;background:var(--oa-bg);color:var(--oa-fg);font-size:.925rem;font-family:inherit;transition:border-color .15s,box-shadow .15s}
+.oa-feedback-card textarea{min-height:96px;resize:vertical}
+.oa-feedback-card input:focus-visible,.oa-feedback-card textarea:focus-visible{outline:none;border-color:var(--oa-accent);box-shadow:var(--oa-focus-ring)}
+.oa-feedback-row{display:flex;gap:.5rem;margin-top:1rem}
+.oa-feedback-card button{flex:1;min-height:44px;padding:.55rem .75rem;border:1px solid var(--oa-border);border-radius:8px;background:var(--oa-bg);color:var(--oa-fg);font-size:.925rem;font-weight:600;cursor:pointer;transition:background .15s,box-shadow .15s,opacity .15s}
+.oa-feedback-card button:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+.oa-feedback-card button[type=submit]{background:var(--oa-fg);color:var(--oa-bg);border-color:var(--oa-fg)}
+.oa-feedback-card button:active:not(:disabled){transform:translateY(1px)}
+.oa-feedback-card button:disabled{opacity:.6;cursor:wait}
+.oa-feedback-status{min-height:1.2em;margin-top:.7rem;font-size:.85rem;font-weight:500;color:var(--oa-muted)}
+.oa-feedback-status[data-error]{color:var(--oa-danger)}
+.oa-feedback-status[data-ok]{color:var(--oa-accent)}
+@media (hover:hover) and (pointer:fine){.oa-feedback-card button:not([type=submit]):hover:not(:disabled){background:color-mix(in oklab,var(--oa-surface),var(--oa-fg) 8%)}.oa-feedback-card button[type=submit]:hover:not(:disabled){background:color-mix(in oklab,var(--oa-fg),var(--oa-bg) 14%)}}
 `;
 
 const MARKDOWN_CSS = `
@@ -139,6 +167,10 @@ const MOON_SVG =
 const BRAND_SVG =
   '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M20.0833 15.1999L21.2854 15.9212C21.5221 16.0633 21.5989 16.3704 21.4569 16.6072C21.4146 16.6776 21.3557 16.7365 21.2854 16.7787L12.5144 22.0412C12.1977 22.2313 11.8021 22.2313 11.4854 22.0412L2.71451 16.7787C2.47772 16.6366 2.40093 16.3295 2.54301 16.0927C2.58523 16.0223 2.64413 15.9634 2.71451 15.9212L3.9166 15.1999L11.9999 20.0499L20.0833 15.1999ZM20.0833 10.4999L21.2854 11.2212C21.5221 11.3633 21.5989 11.6704 21.4569 11.9072C21.4146 11.9776 21.3557 12.0365 21.2854 12.0787L11.9999 17.6499L2.71451 12.0787C2.47772 11.9366 2.40093 11.6295 2.54301 11.3927C2.58523 11.3223 2.64413 11.2634 2.71451 11.2212L3.9166 10.4999L11.9999 15.3499L20.0833 10.4999ZM12.5144 1.30864L21.2854 6.5712C21.5221 6.71327 21.5989 7.0204 21.4569 7.25719C21.4146 7.32757 21.3557 7.38647 21.2854 7.42869L11.9999 12.9999L2.71451 7.42869C2.47772 7.28662 2.40093 6.97949 2.54301 6.7427C2.58523 6.67232 2.64413 6.61343 2.71451 6.5712L11.4854 1.30864C11.8021 1.11864 12.1977 1.11864 12.5144 1.30864ZM11.9999 3.33233L5.88723 6.99995L11.9999 10.6676L18.1126 6.99995L11.9999 3.33233Z"/></svg>';
 
+// A quiet speech-bubble for the project-change feedback control.
+const FEEDBACK_SVG =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>';
+
 function headerHtml(
   favicon: string,
   title: string,
@@ -157,6 +189,7 @@ function headerHtml(
   return `<header class="oa-header">
   <span class="oa-header-title"><span class="oa-header-fav">${escapeHtml(favicon)}</span>${escapeHtml(title)}</span>
   ${chip}
+  <button id="oa-feedback-toggle" type="button" aria-label="Open project-change feedback" aria-haspopup="dialog" aria-expanded="false">${FEEDBACK_SVG}</button>
   <button id="oa-theme-toggle" type="button" aria-label="Toggle theme"></button>
 </header>`;
 }
@@ -239,6 +272,87 @@ const LAYOUT_SCRIPT = `
 })();
 `;
 
+// Host-chrome project-change (type 2) feedback control. The host is same-origin
+// with the Worker, so it can POST; the sandboxed iframe cannot (connect-src
+// 'none', opaque origin), so it may only postMessage the host to open the
+// panel. projectRef is inlined at serve time — runtime fetching is impossible
+// inside the sandbox, so the host chrome carries it from the start. When no
+// projectRef was inlined, the field is left blank for manual entry (the
+// documented fallback for artifacts created without source-project metadata).
+const FEEDBACK_SCRIPT = `
+(function(){
+  var OA={artifactId:__OA_ARTIFACT_ID__,projectRef:__OA_PROJECT_REF__};
+  var toggle=document.getElementById("oa-feedback-toggle");
+  var backdrop=document.getElementById("oa-feedback-backdrop");
+  if(!toggle||!backdrop)return;
+  var form=backdrop.querySelector("#oa-feedback-form");
+  var projectInput=backdrop.querySelector("#oa-feedback-project");
+  var bodyInput=backdrop.querySelector("#oa-feedback-body");
+  var submit=backdrop.querySelector("#oa-feedback-submit");
+  var cancel=backdrop.querySelector("#oa-feedback-cancel");
+  var status=backdrop.querySelector("#oa-feedback-status");
+  var lastFocused=null;
+  if(OA.projectRef)projectInput.value=OA.projectRef;
+  function open(){
+    lastFocused=document.activeElement;
+    backdrop.setAttribute("data-open","");
+    toggle.setAttribute("aria-expanded","true");
+    if(!OA.projectRef){projectInput.focus();}else{bodyInput.focus();}
+  }
+  function close(){
+    backdrop.removeAttribute("data-open");
+    toggle.setAttribute("aria-expanded","false");
+    if(lastFocused&&lastFocused.focus)lastFocused.focus();
+  }
+  toggle.addEventListener("click",open);
+  cancel.addEventListener("click",close);
+  backdrop.addEventListener("click",function(e){if(e.target===backdrop)close();});
+  document.addEventListener("keydown",function(e){
+    if(e.key==="Escape"&&backdrop.hasAttribute("data-open"))close();
+  });
+  // The sandboxed iframe may postMessage the host to open the panel — it has
+  // no other channel (no fetch, no storage). Only accept from the in-page
+  // frame; origin is opaque, so the type is the gate, not the origin.
+  window.addEventListener("message",function(e){
+    if(e.data&&typeof e.data==="object"&&e.data.__oa_feedback==="open")open();
+  });
+  form.addEventListener("submit",async function(e){
+    e.preventDefault();
+    status.textContent="";
+    status.removeAttribute("data-error");
+    status.removeAttribute("data-ok");
+    var body=bodyInput.value.trim();
+    if(!body){
+      status.textContent="Describe the project change first.";
+      status.setAttribute("data-error","");
+      bodyInput.focus();
+      return;
+    }
+    submit.disabled=true;
+    submit.textContent="Sending\\u2026";
+    try{
+      var res=await fetch("/api/artifacts/"+OA.artifactId+"/feedback",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({projectRef:projectInput.value.trim()||null,body:body})});
+      if(res.status===201){
+        status.textContent="Feedback sent. The owner can act on it.";
+        status.setAttribute("data-ok","");
+        bodyInput.value="";
+        bodyInput.focus();
+      }else{
+        var j={};try{j=await res.json()}catch(e){}
+        status.textContent="Failed ("+res.status+"): "+(j.error||res.statusText);
+        status.setAttribute("data-error","");
+      }
+    }catch(err){
+      status.textContent="Network error: "+err.message;
+      status.setAttribute("data-error","");
+    }finally{
+      submit.disabled=false;
+      submit.textContent="Send";
+    }
+  });
+})();
+`;
+
 export interface WrapOptions {
   title: string;
   description: string;
@@ -251,6 +365,41 @@ export interface WrapOptions {
   hostname: string;
   /** "Powered by Open Artifacts" link URL; omit to hide the brand entry. */
   brandUrl?: string | null;
+  /**
+   * Source-project reference inlined at serve time so the host chrome's
+   * feedback control can attach it to a project-change (type 2) note. The
+   * artifact itself has no source-project field, so when this is null the
+   * feedback form falls back to a manual project-path input.
+   */
+  projectRef?: string | null;
+}
+
+const FEEDBACK_ARTIFACT_ID_SLOT = "__OA_ARTIFACT_ID__";
+const FEEDBACK_PROJECT_REF_SLOT = "__OA_PROJECT_REF__";
+
+function feedbackPanelHtml(): string {
+  return `<div class="oa-feedback-backdrop" id="oa-feedback-backdrop" role="dialog" aria-modal="true" aria-labelledby="oa-feedback-heading">
+  <form class="oa-feedback-card" id="oa-feedback-form">
+    <h2 id="oa-feedback-heading">Project change</h2>
+    <p>Send the owner of this artifact a note about the source project. It is queued for the owning agent to act on — not posted publicly.</p>
+    <label class="oa-label" for="oa-feedback-project">Project path</label>
+    <input id="oa-feedback-project" type="text" autocomplete="off" placeholder="src/path/to/project">
+    <label class="oa-label" for="oa-feedback-body" style="margin-top:.75rem">What should change?</label>
+    <textarea id="oa-feedback-body" required></textarea>
+    <div class="oa-feedback-row">
+      <button type="button" id="oa-feedback-cancel">Cancel</button>
+      <button type="submit" id="oa-feedback-submit">Send</button>
+    </div>
+    <div class="oa-feedback-status" id="oa-feedback-status" role="status"></div>
+  </form>
+</div>`;
+}
+
+function feedbackScript(artifactId: string, projectRef: string | null): string {
+  return FEEDBACK_SCRIPT.replace(
+    FEEDBACK_ARTIFACT_ID_SLOT,
+    jsonForInlineScript(artifactId),
+  ).replace(FEEDBACK_PROJECT_REF_SLOT, jsonForInlineScript(projectRef));
 }
 
 const OG_CARD_W = 1200;
@@ -431,7 +580,9 @@ export function wrapDocument(options: WrapOptions): string {
     ogImage,
     hostname,
     brandUrl,
+    projectRef,
   } = options;
+  const artifactId = url.split("/a/").pop() ?? "";
   const body =
     format === "markdown"
       ? `<main class="oa-md" id="oa-content"></main>
@@ -464,13 +615,15 @@ document.getElementById("oa-content").innerHTML=marked.parse(${jsonForInlineScri
 <meta name="twitter:title" content="${escapeHtml(title)}">
 <meta name="twitter:description" content="${escapeHtml(ogDescription)}">
 <meta name="twitter:image" content="${escapeHtml(ogImage)}">
-<style>${RESET_CSS}${format === "markdown" ? MARKDOWN_CSS : ""}</style>
+<style>${RESET_CSS}${FEEDBACK_CSS}${format === "markdown" ? MARKDOWN_CSS : ""}</style>
 </head>
 <body>
 ${headerHtml(favicon, title, hostname, brandUrl)}
 ${body}
+${feedbackPanelHtml()}
 <script>${THEME_SCRIPT}</script>
 <script>${LAYOUT_SCRIPT}</script>
+<script>${feedbackScript(artifactId, projectRef ?? null)}</script>
 </body>
 </html>
 `;
@@ -505,6 +658,7 @@ export interface UnlockShellOptions {
   ogImage: string;
   hostname: string;
   brandUrl?: string | null;
+  projectRef?: string | null;
   envelope: EncryptionParams & { ciphertext: string };
   webFonts?: boolean;
 }
@@ -519,9 +673,11 @@ export function unlockShell(options: UnlockShellOptions): string {
     ogImage,
     hostname,
     brandUrl,
+    projectRef,
     envelope,
     webFonts,
   } = options;
+  const artifactId = url.split("/a/").pop() ?? "";
   const template = wrapDocument({
     title,
     description,
@@ -532,6 +688,7 @@ export function unlockShell(options: UnlockShellOptions): string {
     ogImage,
     hostname,
     brandUrl,
+    projectRef,
   });
 
   const unlockScript = `
@@ -602,7 +759,7 @@ input.focus();
 <meta name="twitter:title" content="${escapeHtml(title)}">
 <meta name="twitter:description" content="${escapeHtml(ogDescription)}">
 <meta name="twitter:image" content="${escapeHtml(ogImage)}">
-<style>${RESET_CSS}${UNLOCK_CSS}</style>
+<style>${RESET_CSS}${FEEDBACK_CSS}${UNLOCK_CSS}</style>
 </head>
 <body>
 ${headerHtml(favicon, title, hostname, brandUrl)}
@@ -617,8 +774,10 @@ ${headerHtml(favicon, title, hostname, brandUrl)}
     <div class="oa-error" id="oa-error" role="alert"></div>
   </form>
 </div>
+${feedbackPanelHtml()}
 <iframe id="oa-frame" sandbox="allow-scripts allow-modals${webFonts ? " allow-same-origin" : ""}" title="${escapeHtml(title)}"></iframe>
 <script>${unlockScript}</script>
+<script>${feedbackScript(artifactId, projectRef ?? null)}</script>
 <script>${THEME_SCRIPT}</script>
 <script>${LAYOUT_SCRIPT}</script>
 </body>

@@ -1,7 +1,14 @@
 import type { Context } from "hono";
 import { Hono } from "hono";
 import type { CreateInput } from "./domain";
-import { MAX_CONTENT_BYTES, validateCreate, validateUpdate } from "./domain";
+import {
+  type FEEDBACK_STATUSES,
+  MAX_CONTENT_BYTES,
+  validateCreate,
+  validateFeedback,
+  validateFeedbackStatus,
+  validateUpdate,
+} from "./domain";
 import type { ArtifactRecord, ArtifactStore } from "./store";
 import { D1R2Store } from "./store";
 import {
@@ -132,6 +139,7 @@ async function publishToChannel(
       encrypted: input.encrypted,
       baseVersion: null,
       force: false,
+      projectRef: input.projectRef,
     });
     if (typeof result === "number") {
       return c.json({
@@ -345,4 +353,102 @@ api.get("/artifacts/:id/raw", async (c) => {
     contentType: "text/plain; charset=utf-8",
   });
   return new Response(content.body, { headers });
+});
+
+// Project-change (type 2) feedback channel. A viewer submits a note about the
+// source project behind an artifact; it is stored as an independent record,
+// NOT a new artifact version. The owning agent polls pending feedback via the
+// skill CLI, edits the project, then either regenerates (reusing the existing
+// channel/update path) or closes the feedback as "done".
+//
+// Auth tradeoff: feedback submission is intentionally permissive. A write
+// token (wt_/ch_) presented via Bearer is honored (so a creator's host chrome
+// authenticates); when NO token is presented, the route falls back to the
+// CREATE_TOKEN gate — anonymous submission is allowed only on an open
+// instance (no CREATE_TOKEN), and gated instances require either a write
+// token or the create token. This prevents unauthenticated abuse on locked
+// deployments while keeping the channel usable by viewers, who never hold a
+// write token, on self-hosted open instances.
+api.post("/artifacts/:id/feedback", async (c) => {
+  const store = storeFrom(c);
+  const id = c.req.param("id");
+  const record = await store.get(id);
+  if (record === null) return c.json({ error: "artifact not found" }, 404);
+
+  const token = bearerToken(c);
+  const createToken = c.env.CREATE_TOKEN;
+  if (token !== null) {
+    // A presented token must authorize against this artifact; the create token
+    // is NOT a write token (it cannot mutate an artifact), so reject it here.
+    if (looksLikeChannelToken(token)) {
+      return c.json({ error: "invalid write token" }, 403);
+    }
+    const tokenHash = await sha256Hex(token);
+    if (!timingSafeEqual(tokenHash, record.tokenHash)) {
+      return c.json({ error: "invalid write token" }, 403);
+    }
+  } else if (createToken !== undefined && createToken !== "") {
+    return c.json({ error: "this instance requires authentication" }, 401);
+  }
+
+  let body: Record<string, unknown>;
+  try {
+    body = await c.req.json<Record<string, unknown>>();
+  } catch {
+    return c.json({ error: "request body must be JSON" }, 400);
+  }
+
+  const parsed = validateFeedback(body);
+  if (!parsed.ok) return c.json({ error: parsed.error }, parsed.status);
+
+  const feedback = await store.addFeedback(id, parsed.value);
+  return c.json(
+    { id: feedback.id, artifactId: feedback.id, status: feedback.status },
+    201,
+  );
+});
+
+// Owner-only pending-list poll. Returns feedback records for an artifact,
+// optionally filtered by status; defaults to pending (the agent's poll loop).
+api.get("/artifacts/:id/feedback", async (c) => {
+  const store = storeFrom(c);
+  const auth = await authorizeWrite(c, store, c.req.param("id"));
+  if (!auth.ok) return auth.response;
+
+  const statusParam = c.req.query("status");
+  let status: undefined | (typeof FEEDBACK_STATUSES)[number] = "pending";
+  if (statusParam !== undefined) {
+    const parsed = validateFeedbackStatus(statusParam);
+    if (!parsed.ok) return c.json({ error: parsed.error }, parsed.status);
+    status = parsed.value;
+  }
+  const items = await store.listFeedback(auth.record.id, status);
+  return c.json({ artifactId: auth.record.id, feedback: items });
+});
+
+// Advance a feedback record's status through pending -> in_review ->
+// in_progress -> done. Owner-only. The transition itself is not enforced
+// in-order (the agent may jump straight to done); keep simple.
+api.post("/artifacts/:id/feedback/:fid/ack", async (c) => {
+  const store = storeFrom(c);
+  const auth = await authorizeWrite(c, store, c.req.param("id"));
+  if (!auth.ok) return auth.response;
+
+  const fid = c.req.param("fid");
+  const existing = await store.getFeedback(fid);
+  if (existing === null || existing.artifactId !== auth.record.id) {
+    return c.json({ error: "feedback not found" }, 404);
+  }
+
+  let body: Record<string, unknown>;
+  try {
+    body = await c.req.json<Record<string, unknown>>();
+  } catch {
+    return c.json({ error: "request body must be JSON" }, 400);
+  }
+  const parsed = validateFeedbackStatus(body.status);
+  if (!parsed.ok) return c.json({ error: parsed.error }, parsed.status);
+
+  const updated = await store.updateFeedbackStatus(fid, parsed.value);
+  return c.json({ id: fid, status: updated?.status ?? parsed.value });
 });

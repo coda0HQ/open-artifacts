@@ -501,6 +501,7 @@ describe("compare-and-swap update safety (store layer)", () => {
       encrypted: null,
       baseVersion: null,
       force: false,
+      projectRef: null,
     });
     expect(winner).toBe(2);
 
@@ -516,6 +517,7 @@ describe("compare-and-swap update safety (store layer)", () => {
       encrypted: null,
       baseVersion: null,
       force: false,
+      projectRef: null,
     });
     expect(typeof loser).toBe("object");
     expect(
@@ -620,5 +622,239 @@ describe("GET /api/artifacts/:id and /raw", () => {
       `${BASE}/api/artifacts/${created.id}/raw?v=1`,
     );
     expect(await res.text()).toBe("<p>one</p>");
+  });
+});
+
+describe("project-change feedback (type 2)", () => {
+  it("POSTs feedback on an open instance without a token and returns 201", async () => {
+    const created = await createArtifact();
+    const res = await exports.default.fetch(
+      jsonRequest("POST", `/api/artifacts/${created.id}/feedback`, {
+        projectRef: "src/dashboard",
+        body: "Add a dark chart variant",
+      }),
+    );
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { id: string; status: string };
+    expect(body.id).toMatch(/^[1-9A-HJ-NP-Za-km-z]{12}$/);
+    expect(body.status).toBe("pending");
+  });
+
+  it("does not create a new artifact version (independent record)", async () => {
+    const created = await createArtifact();
+    await exports.default.fetch(
+      jsonRequest("POST", `/api/artifacts/${created.id}/feedback`, {
+        projectRef: "src/x",
+        body: "change it",
+      }),
+    );
+    const meta = (await (
+      await exports.default.fetch(`${BASE}/api/artifacts/${created.id}`)
+    ).json()) as { version: number };
+    expect(meta.version).toBe(1);
+  });
+
+  it("rejects feedback with an empty body", async () => {
+    const created = await createArtifact();
+    const res = await exports.default.fetch(
+      jsonRequest("POST", `/api/artifacts/${created.id}/feedback`, {
+        projectRef: "src/x",
+        body: "",
+      }),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("404s for an unknown artifact", async () => {
+    const res = await exports.default.fetch(
+      jsonRequest("POST", "/api/artifacts/zzzzzzzzzzzz/feedback", {
+        body: "x",
+      }),
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("GET pending is owner-only (401 without a token)", async () => {
+    const created = await createArtifact();
+    await exports.default.fetch(
+      jsonRequest("POST", `/api/artifacts/${created.id}/feedback`, {
+        body: "note",
+      }),
+    );
+    const res = await exports.default.fetch(
+      `${BASE}/api/artifacts/${created.id}/feedback?status=pending`,
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it("lists pending feedback oldest-first with the write token", async () => {
+    const created = await createArtifact();
+    await exports.default.fetch(
+      jsonRequest("POST", `/api/artifacts/${created.id}/feedback`, {
+        projectRef: "src/a",
+        body: "first",
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 10));
+    await exports.default.fetch(
+      jsonRequest("POST", `/api/artifacts/${created.id}/feedback`, {
+        projectRef: null,
+        body: "second",
+      }),
+    );
+    const res = await exports.default.fetch(
+      `${BASE}/api/artifacts/${created.id}/feedback?status=pending`,
+      { headers: { authorization: `Bearer ${created.writeToken}` } },
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      feedback: Array<{ id: string; body: string }>;
+    };
+    expect(body.feedback).toHaveLength(2);
+    expect(body.feedback.map((f) => f.body)).toEqual(["first", "second"]);
+  });
+
+  it("advances feedback status through the lifecycle (owner-only)", async () => {
+    const created = await createArtifact();
+    const post = await exports.default.fetch(
+      jsonRequest("POST", `/api/artifacts/${created.id}/feedback`, {
+        body: "lifecycle note",
+      }),
+    );
+    const { id } = (await post.json()) as { id: string };
+
+    const ack = async (status: string, token?: string) =>
+      exports.default.fetch(
+        jsonRequest(
+          "POST",
+          `/api/artifacts/${created.id}/feedback/${id}/ack`,
+          { status },
+          token ? { authorization: `Bearer ${token}` } : {},
+        ),
+      );
+
+    const r1 = await ack("in_review", created.writeToken);
+    expect(r1.status).toBe(200);
+    expect(((await r1.json()) as { status: string }).status).toBe("in_review");
+
+    const r2 = await ack("in_progress", created.writeToken);
+    expect(((await r2.json()) as { status: string }).status).toBe(
+      "in_progress",
+    );
+
+    const r3 = await ack("done", created.writeToken);
+    expect(((await r3.json()) as { status: string }).status).toBe("done");
+
+    // Done feedback drops out of the pending poll.
+    const pending = await exports.default.fetch(
+      `${BASE}/api/artifacts/${created.id}/feedback?status=pending`,
+      { headers: { authorization: `Bearer ${created.writeToken}` } },
+    );
+    const pendingBody = (await pending.json()) as { feedback: unknown[] };
+    expect(pendingBody.feedback).toHaveLength(0);
+  });
+
+  it("ack is owner-only", async () => {
+    const created = await createArtifact();
+    const post = await exports.default.fetch(
+      jsonRequest("POST", `/api/artifacts/${created.id}/feedback`, {
+        body: "note",
+      }),
+    );
+    const { id } = (await post.json()) as { id: string };
+    const res = await exports.default.fetch(
+      jsonRequest("POST", `/api/artifacts/${created.id}/feedback/${id}/ack`, {
+        status: "in_review",
+      }),
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it("rejects an invalid status transition target", async () => {
+    const created = await createArtifact();
+    const post = await exports.default.fetch(
+      jsonRequest("POST", `/api/artifacts/${created.id}/feedback`, {
+        body: "note",
+      }),
+    );
+    const { id } = (await post.json()) as { id: string };
+    const res = await exports.default.fetch(
+      jsonRequest(
+        "POST",
+        `/api/artifacts/${created.id}/feedback/${id}/ack`,
+        { status: "bogus" },
+        { authorization: `Bearer ${created.writeToken}` },
+      ),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("a gated instance rejects anonymous feedback (401)", async () => {
+    const gatedEnv = { ...env, CREATE_TOKEN: "sekret-create" };
+    const ctx = createExecutionContext();
+    const createRes = await app.fetch(
+      jsonRequest(
+        "POST",
+        "/api/artifacts",
+        { content: "<p>x</p>", title: "t", favicon: "📊" },
+        { authorization: "Bearer sekret-create" },
+      ),
+      gatedEnv,
+      ctx,
+    );
+    await waitOnExecutionContext(ctx);
+    const { id } = (await createRes.json()) as { id: string };
+    const ctx2 = createExecutionContext();
+    const res = await app.fetch(
+      jsonRequest("POST", `/api/artifacts/${id}/feedback`, {
+        body: "anon note",
+      }),
+      gatedEnv,
+      ctx2,
+    );
+    await waitOnExecutionContext(ctx2);
+    expect(res.status).toBe(401);
+  });
+
+  it("a write token authorizes feedback on a gated instance", async () => {
+    const gatedEnv = { ...env, CREATE_TOKEN: "sekret-create" };
+    const ctx = createExecutionContext();
+    const createRes = await app.fetch(
+      jsonRequest(
+        "POST",
+        "/api/artifacts",
+        { content: "<p>x</p>", title: "t", favicon: "📊" },
+        { authorization: "Bearer sekret-create" },
+      ),
+      gatedEnv,
+      ctx,
+    );
+    await waitOnExecutionContext(ctx);
+    const { id, writeToken } = (await createRes.json()) as {
+      id: string;
+      writeToken: string;
+    };
+    const ctx2 = createExecutionContext();
+    const res = await app.fetch(
+      jsonRequest(
+        "POST",
+        `/api/artifacts/${id}/feedback`,
+        { body: "owner note" },
+        { authorization: `Bearer ${writeToken}` },
+      ),
+      gatedEnv,
+      ctx2,
+    );
+    await waitOnExecutionContext(ctx2);
+    expect(res.status).toBe(201);
+  });
+
+  it("inlines projectRef into the served viewer page", async () => {
+    const created = await createArtifact({ projectRef: "src/dashboard" });
+    const html = await (
+      await exports.default.fetch(`${BASE}/a/${created.id}`)
+    ).text();
+    expect(html).toContain("oa-feedback-toggle");
+    expect(html).toContain('"src/dashboard"');
   });
 });

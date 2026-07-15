@@ -11,6 +11,7 @@ const INPUT: CreateInput = {
   favicon: "📦",
   label: null,
   encrypted: null,
+  projectRef: null,
 };
 
 describe("D1R2Store.delete", () => {
@@ -59,5 +60,56 @@ describe("channel uniqueness", () => {
     await store.create("nochannel002", "hash2", INPUT, null);
     expect(await store.get("nochannel001")).not.toBeNull();
     expect(await store.get("nochannel002")).not.toBeNull();
+  });
+});
+
+describe("feedback store round-trip", () => {
+  it("stores feedback independently and lists pending oldest-first", async () => {
+    const store = new D1R2Store(env.DB, env.CONTENT);
+    const id = "fb-roundtrip1";
+    await store.create(id, "hash", INPUT, null);
+
+    const first = await store.addFeedback(id, {
+      projectRef: "src/dashboard",
+      body: "Add a dark chart variant",
+    });
+    expect(first.status).toBe("pending");
+    expect(first.artifactId).toBe(id);
+    // Ensure createdAt spacing so ordering is deterministic, not same-ms.
+    await new Promise((r) => setTimeout(r, 10));
+    const second = await store.addFeedback(id, {
+      projectRef: null,
+      body: "Rename the project",
+    });
+
+    const pending = await store.listFeedback(id, "pending");
+    expect(pending).toHaveLength(2);
+    expect(pending[0].id).toBe(first.id);
+    expect(pending[1].id).toBe(second.id);
+    expect(pending.map((f) => f.projectRef)).toEqual(["src/dashboard", null]);
+
+    // Status transitions; done records drop out of pending.
+    const reviewed = await store.updateFeedbackStatus(first.id, "in_review");
+    expect(reviewed?.status).toBe("in_review");
+    const afterProgress = await store.updateFeedbackStatus(
+      first.id,
+      "in_progress",
+    );
+    expect(afterProgress?.status).toBe("in_progress");
+    const closed = await store.updateFeedbackStatus(first.id, "done");
+    expect(closed?.status).toBe("done");
+    const remainingPending = await store.listFeedback(id, "pending");
+    expect(remainingPending).toHaveLength(1);
+    expect(remainingPending[0].id).toBe(second.id);
+
+    // Feedback is independent of artifact version: no version row was added.
+    const versions = await store.listVersions(id);
+    expect(versions).toHaveLength(1);
+    expect(versions[0].version).toBe(1);
+  });
+
+  it("getFeedback returns null for an unknown id", async () => {
+    const store = new D1R2Store(env.DB, env.CONTENT);
+    expect(await store.getFeedback("no-such-feedback-id")).toBeNull();
   });
 });

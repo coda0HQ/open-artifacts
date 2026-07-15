@@ -133,6 +133,7 @@ app.get("/a/:id", async (c) => {
       ogImage,
       hostname,
       brandUrl,
+      projectRef: record.projectRef,
       envelope: { ...content.encrypted, ciphertext: content.body },
       webFonts,
     });
@@ -149,6 +150,7 @@ app.get("/a/:id", async (c) => {
     ogImage,
     hostname,
     brandUrl,
+    projectRef: record.projectRef,
   });
   return new Response(page, { headers: htmlHeaders(true) });
 });
