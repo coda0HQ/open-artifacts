@@ -839,6 +839,44 @@ function commandList() {
 // back the plaintext — e.g. a locked design-direction comment at the top of
 // the page — when regenerating an update. No plaintext source copy is kept
 // on disk (the server is the source of truth); this is the on-demand read.
+// Poll a project-change (type 2) feedback queue for an artifact. GETs the
+// pending feedback records; the owning agent runs this to discover viewer
+// notes that may turn into source-project edits (and possibly a regen via
+// the existing `update` channel). The write token authorizes as the owner.
+async function commandFeedback(id, flags) {
+  const config = loadConfig(flags);
+  const credentials = loadCredentials();
+  const token = credentials.tokens[id];
+  const status = flags.status ?? "pending";
+  const url = `${config.apiUrl}/api/artifacts/${id}/feedback?status=${encodeURIComponent(status)}`;
+  const { status: resStatus, json } = await request(
+    "GET",
+    url,
+    undefined,
+    token,
+  );
+  if (resStatus === 401) {
+    fail(
+      `unauthorized: feedback polling requires the artifact's write token (${CREDENTIALS_PATH})`,
+    );
+  }
+  if (resStatus !== 200) {
+    fail(
+      `feedback poll failed (${resStatus}): ${json.error ?? "unknown error"}`,
+    );
+  }
+  const items = Array.isArray(json.feedback) ? json.feedback : [];
+  if (items.length === 0) {
+    console.error(`no ${status} feedback for ${id}`);
+    return;
+  }
+  for (const item of items) {
+    console.log(`${item.id}  [${item.status}]  ${item.url ?? ""}`);
+    if (item.projectRef) console.log(`  project: ${item.projectRef}`);
+    console.log(`  body: ${item.body}`);
+  }
+}
+
 async function commandShow(id, flags) {
   const config = loadConfig(flags);
   const credentials = loadCredentials();
@@ -1252,6 +1290,8 @@ commands:
   list                 list artifacts in the manifest
   show <id>            print the current published content (decrypts locally
                        for encrypted artifacts using the stored password)
+  feedback <id>        poll pending project-change (type 2) feedback for an
+                       artifact (owner-only; uses the stored write token)
   delete <id>          delete an artifact from the server and manifest
   install-hook         add a Claude Code Stop hook that runs status --hook
 
@@ -1263,6 +1303,8 @@ options:
   --api <url>          instance URL (default: OPEN_ARTIFACTS_URL or config)
   --force              overwrite on version conflict
   --v <n>              (show) view a specific version's content
+  --status <s>        (feedback) poll a status other than pending
+                     (in_review|in_progress|done)
   --hook               (status) emit Claude Code hook JSON instead of text
 `;
 
@@ -1279,6 +1321,7 @@ async function main() {
       force: { type: "boolean" },
       hook: { type: "boolean" },
       v: { type: "string" },
+      status: { type: "string" },
       help: { type: "boolean" },
     },
   });
@@ -1332,6 +1375,10 @@ async function main() {
     case "show":
       if (!rest[0]) fail("show requires an artifact id");
       await commandShow(rest[0], flags);
+      break;
+    case "feedback":
+      if (!rest[0]) fail("feedback requires an artifact id");
+      await commandFeedback(rest[0], flags);
       break;
     case "install-hook":
       commandInstallHook();

@@ -2015,3 +2015,47 @@ const authored = 1;
     expect(existsSync(join(projectDir, ".claude/settings.json"))).toBe(true);
   });
 });
+
+describe("feedback poll", () => {
+  it("GETs the pending feedback queue for an artifact with the write token", async () => {
+    seedLegacyManifest();
+    nextResponse = {
+      status: 200,
+      body: {
+        artifactId: "testid123456",
+        feedback: [
+          {
+            id: "fb0000000001",
+            artifactId: "testid123456",
+            projectRef: "src/dashboard",
+            body: "Add a dark chart variant",
+            status: "pending",
+            createdAt: "2026-07-15T00:00:00.000Z",
+          },
+        ],
+      },
+    };
+
+    const result = await run(["feedback", "testid123456"]);
+
+    expect(requests).toHaveLength(1);
+    expect(requests[0].method).toBe("GET");
+    expect(requests[0].path).toBe(
+      "/api/artifacts/testid123456/feedback?status=pending",
+    );
+    expect(requests[0].auth).toBe(`Bearer wt_${"x".repeat(43)}`);
+    expect(result.stdout).toContain("fb0000000001");
+    expect(result.stdout).toContain("Add a dark chart variant");
+    expect(result.stdout).toContain("src/dashboard");
+  });
+
+  it("reports an empty queue quietly", async () => {
+    seedLegacyManifest();
+    nextResponse = {
+      status: 200,
+      body: { artifactId: "testid123456", feedback: [] },
+    };
+    const result = await run(["feedback", "testid123456"]);
+    expect(result.stderr).toContain("no pending feedback");
+  });
+});
