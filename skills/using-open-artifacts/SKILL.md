@@ -1,6 +1,6 @@
 ---
 name: using-open-artifacts
-description: Publish self-contained HTML/Markdown pages as shareable artifacts on a self-hosted Open Artifacts instance, update them at the same URL, protect them with client-side password encryption, and keep them fresh when their source files change. Use when the user asks to publish, share, or update an artifact, report, dashboard, or page ("share this as a page", "publish an artifact", "make me a link", "password-protect this", "分享成网页", "发布 artifact"), or when `.artifacts/manifest.json` exists and project files changed.
+description: "Use this skill when the user has finished something — a writeup, report, prototype, dashboard, data analysis, or markdown doc — and wants it turned into a web page with a shareable URL they can send to other people. The page is mobile-responsive, supports light/dark themes and optional password protection, keeps one URL across edits, and auto-refreshes when its source files change. Trigger on any phrasing where the real goal is a shareable link or page to give someone: \"make this into a page I can send a link to\", \"turn this writeup into a link\", \"publish this as a web page\", \"turn this data analysis into a shareable link\", \"make a web page I can send to others\", \"create an artifact to share with the team\", or when `.artifacts/manifest.json` exists and project files changed. Do NOT trigger for generic file uploads, image screenshots, or unrelated senses of \"artifact\" (SBOM scans, build tarballs, Linear tracking items, Claude API content blocks)."
 ---
 
 # Artifacts
