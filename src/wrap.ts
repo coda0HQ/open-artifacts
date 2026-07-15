@@ -30,8 +30,10 @@ function escapeInlineScript(source: string): string {
 // OPEN_ARTIFACTS_WEB_FONTS). When enabled, the sandbox gains allow-same-origin
 // so the browser can cache fonts, font-src widens to 'self' plus a bounded
 // allowlist of font CDNs (Fontshare + Google Fonts, the two that serve woff2
-// over a stable CDN for Awwwards-listed families), style-src gains the Google
-// Fonts CSS host, and script-src gains 'self' cdn.jsdelivr.net so allowlisted
+// over a stable CDN for Awwwards-listed families), style-src gains 'self' plus
+// the Google Fonts CSS host (so the same-origin /fonts/<slug>.css shim and
+// Google Fonts @import load), and script-src gains 'self' cdn.jsdelivr.net so
+// allowlisted
 // runtime libraries (mermaid) load directly from jsdelivr. The trade-off:
 // artifacts lose the opaque-origin guarantee and can read the host origin's
 // localStorage/cookies, and an artifact can pull fonts from the allowlisted
@@ -39,7 +41,7 @@ function escapeInlineScript(source: string): string {
 // strict opaque-origin sandbox and font-src/script-src of a self-hosted deploy.
 const WEB_FONT_CSP = {
   fontSrc: "'self' data: cdn.fontshare.com fonts.gstatic.com",
-  styleSrc: "'unsafe-inline' fonts.googleapis.com",
+  styleSrc: "'self' 'unsafe-inline' fonts.googleapis.com",
   scriptSrc: "'self' 'unsafe-inline' cdn.jsdelivr.net",
 };
 export function contentSecurityPolicy(options: {
