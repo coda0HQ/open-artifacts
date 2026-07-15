@@ -404,6 +404,7 @@ ${cspMeta}<meta name="viewport" content="width=device-width, initial-scale=1">
 <body>
 ${body}
 <script>${THEME_SCRIPT}</script>
+<script>${FRAME_BRIDGE_SCRIPT}</script>
 </body>
 </html>
 `;
@@ -646,9 +647,11 @@ export function hostShell(options: HostShellOptions): string {
 ${headerHtml(favicon, title, hostname, brandUrl, artifactId, commentsList.length)}
 <iframe id="oa-frame" src="${escapeHtml(frameSrc)}" sandbox="allow-scripts allow-modals allow-forms allow-popups" title="${escapeHtml(title)}"></iframe>
 ${drawer}
+${commentsDataScript(commentsList)}
 <script>${THEME_SCRIPT}</script>
 <script>${LAYOUT_SCRIPT}</script>
 <script>${escapeInlineScript(COMMENTS_SCRIPT)}</script>
+<script>${escapeInlineScript(hostBridgeScript(artifactId))}</script>
 </body>
 </html>
 `;
@@ -667,6 +670,115 @@ const COMMENTS_SCRIPT = `
   document.addEventListener('keydown',function(e){if(e.key==='Escape'&&drawer.hasAttribute('data-open'))shut()});
 })();
 `;
+
+// The host↔frame bridge. The artifact frame is air-gapped (connect-src 'none'),
+// so it can never fetch; it asks the host over postMessage and the host — the
+// only party with network access — performs the request. The contract is a
+// FIXED allowlist mapped to a FIXED route table keyed on the serve-time id; the
+// frame never supplies a URL, method, or host, so the relay can't become an
+// open proxy. Messages are authenticated by window identity (event.source),
+// not origin, because a sandboxed opaque-origin frame reports origin "null".
+
+// Pure route table (exported for unit testing and reuse by the host script's
+// fetch path). Only ever produces /api/artifacts/:id/comments[/:commentId].
+export function bridgeRoute(
+  type: string,
+  id: string,
+  commentId?: string,
+): { method: string; path: string } | null {
+  const base = `/api/artifacts/${id}/comments`;
+  if (type === "comments:list") return { method: "GET", path: base };
+  if (type === "comments:create") return { method: "POST", path: base };
+  if (type === "comments:delete") {
+    if (commentId && /^[a-z0-9]+$/i.test(commentId))
+      return { method: "DELETE", path: `${base}/${commentId}` };
+    return null;
+  }
+  return null;
+}
+
+// Frame side: announce readiness, then apply host commands. The frame never
+// initiates network I/O; it only relays anchor intents out and renders what the
+// host sends back. Marker rendering (pins/highlights) is attached by the
+// canvas/text anchoring layers via window.__oaRenderMarkers; the bridge just
+// stores the latest list and calls the hook if present.
+const FRAME_BRIDGE_SCRIPT = `
+(function(){
+  var root=document.documentElement;
+  function send(msg){if(window.parent&&window.parent!==window)window.parent.postMessage(msg,"*")}
+  window.__oaSend=send;
+  window.__oaComments=[];
+  window.addEventListener("message",function(e){
+    if(e.source!==window.parent)return;
+    var msg=e.data;
+    if(!msg||typeof msg!=="object")return;
+    if(msg.type==="oa:theme"){
+      if(msg.theme==="light"||msg.theme==="dark")root.setAttribute("data-theme",msg.theme);
+    }else if(msg.type==="oa:arm"){
+      window.__oaArmed=msg.mode||null;
+      if(typeof window.__oaOnArm==="function")window.__oaOnArm(window.__oaArmed);
+    }else if(msg.type==="oa:comments"){
+      window.__oaComments=Array.isArray(msg.list)?msg.list:[];
+      window.__oaViewedVersion=typeof msg.viewedVersion==="number"?msg.viewedVersion:1;
+      if(typeof window.__oaRenderMarkers==="function")window.__oaRenderMarkers(window.__oaComments);
+    }
+  });
+  send({type:"oa:ready"});
+})();
+`;
+
+// Host side: the privileged endpoint. Guards every message by window identity,
+// switches over a fixed allowlist, and only ever sends the frame non-sensitive
+// data (theme + a public comment list; never delete tokens). anchor:new and
+// anchor:open are handled by the compose/drawer layers, which register hooks.
+function hostBridgeScript(artifactId: string): string {
+  return `
+(function(){
+  var frame=document.getElementById("oa-frame");
+  if(!frame)return;
+  var ID=${jsonForInlineScript(artifactId)};
+  window.__oaBridgeId=ID;
+  function post(msg){if(frame.contentWindow)frame.contentWindow.postMessage(msg,"*")}
+  window.__oaToFrame=post;
+  function theme(){return document.documentElement.getAttribute("data-theme")||"light"}
+  function inlined(){
+    var el=document.getElementById("oa-cm-data");
+    if(!el)return[];
+    try{return JSON.parse(el.textContent||"[]")}catch(e){return[]}
+  }
+  window.__oaInlinedComments=inlined;
+  window.addEventListener("message",function(e){
+    if(e.source!==frame.contentWindow)return;
+    var msg=e.data;
+    if(!msg||typeof msg!=="object")return;
+    if(msg.type==="oa:ready"){
+      post({type:"oa:theme",theme:theme()});
+      post({type:"oa:comments",list:inlined(),viewedVersion:window.__oaViewedVersion||1});
+    }else if(msg.type==="oa:anchor:new"){
+      if(typeof window.__oaOnAnchorNew==="function")window.__oaOnAnchorNew(msg);
+    }else if(msg.type==="oa:anchor:open"){
+      if(typeof window.__oaOnAnchorOpen==="function")window.__oaOnAnchorOpen(msg);
+    }
+  });
+})();
+`;
+}
+
+// The serve-time-inlined public comment list, embedded as JSON for the host
+// bridge to forward into the frame (marker rendering happens frame-side). Only
+// public fields cross — never the delete-token hash.
+function commentsDataScript(comments: CommentMeta[]): string {
+  const publicList = comments.map((cm) => ({
+    id: cm.id,
+    author: cm.author,
+    body: cm.body,
+    anchor: cm.anchor,
+    createdAt: cm.createdAt,
+  }));
+  return `<script type="application/json" id="oa-cm-data">${jsonForInlineScript(
+    publicList,
+  )}</script>`;
+}
 
 const CONTENT_SLOT = "__OA_CONTENT_SLOT__";
 
@@ -818,10 +930,12 @@ ${headerHtml(favicon, title, hostname, brandUrl, artifactId, commentsList.length
 </div>
 <iframe id="oa-frame" sandbox="allow-scripts allow-modals" title="${escapeHtml(title)}"></iframe>
 ${drawer}
+${commentsDataScript(commentsList)}
 <script>${unlockScript}</script>
 <script>${THEME_SCRIPT}</script>
 <script>${LAYOUT_SCRIPT}</script>
 <script>${escapeInlineScript(COMMENTS_SCRIPT)}</script>
+<script>${escapeInlineScript(hostBridgeScript(artifactId))}</script>
 </body>
 </html>
 `;
