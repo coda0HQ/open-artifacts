@@ -12,6 +12,13 @@ Feature: Multi-user interaction on a shared artifact
     Then the comment is inlined into the page at serve time
     And the thread is visible in the comments drawer
 
+  Scenario: The thread is inlined into the encrypted unlock shell chrome
+    Given a password-protected artifact has a persisted comment
+    When a viewer GETs /a/:id
+    Then the comment is inlined into the unlock shell chrome at serve time
+    And the comments drawer is visible around the (still-locked) body
+    And the ciphertext body is not leaked into the thread
+
   Scenario: Comment validation guards the API
     When a POST /api/artifacts/:id/comments omits the body
     Then the response status is 400

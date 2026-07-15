@@ -603,6 +603,8 @@ export interface UnlockShellOptions {
   ogImage: string;
   hostname: string;
   brandUrl?: string | null;
+  artifactId?: string | null;
+  comments?: CommentMeta[];
   envelope: EncryptionParams & { ciphertext: string };
   webFonts?: boolean;
 }
@@ -617,6 +619,8 @@ export function unlockShell(options: UnlockShellOptions): string {
     ogImage,
     hostname,
     brandUrl,
+    artifactId,
+    comments,
     envelope,
     webFonts,
   } = options;
@@ -630,6 +634,8 @@ export function unlockShell(options: UnlockShellOptions): string {
     ogImage,
     hostname,
     brandUrl,
+    artifactId,
+    comments,
   });
 
   const unlockScript = `
@@ -679,6 +685,13 @@ input.focus();
 
   const brand = brandFor(hostname);
   const ogDescription = description || title;
+  const showComments = artifactId !== undefined && artifactId !== null;
+  const commentsList = showComments ? (comments ?? []) : [];
+  const commentsCss = showComments ? COMMENTS_CSS : "";
+  const drawer = showComments
+    ? commentsDrawerHtml(artifactId as string, commentsList)
+    : "";
+  const commentsScript = showComments ? COMMENTS_SCRIPT : "";
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -700,10 +713,10 @@ input.focus();
 <meta name="twitter:title" content="${escapeHtml(title)}">
 <meta name="twitter:description" content="${escapeHtml(ogDescription)}">
 <meta name="twitter:image" content="${escapeHtml(ogImage)}">
-<style>${RESET_CSS}${UNLOCK_CSS}</style>
+<style>${RESET_CSS}${UNLOCK_CSS}${commentsCss}</style>
 </head>
 <body>
-${headerHtml(favicon, title, hostname, brandUrl)}
+${headerHtml(favicon, title, hostname, brandUrl, artifactId ?? undefined, commentsList.length)}
 <div class="oa-unlock">
   <form class="oa-card" id="oa-form">
     <div class="oa-emoji">${escapeHtml(favicon)}</div>
@@ -716,9 +729,11 @@ ${headerHtml(favicon, title, hostname, brandUrl)}
   </form>
 </div>
 <iframe id="oa-frame" sandbox="allow-scripts allow-modals${webFonts ? " allow-same-origin" : ""}" title="${escapeHtml(title)}"></iframe>
+${drawer}
 <script>${unlockScript}</script>
 <script>${THEME_SCRIPT}</script>
 <script>${LAYOUT_SCRIPT}</script>
+<script>${escapeInlineScript(commentsScript)}</script>
 </body>
 </html>
 `;

@@ -48,6 +48,62 @@ async function getComments(id: string): Promise<Response> {
   return exports.default.fetch(`${BASE}/api/artifacts/${id}/comments`);
 }
 
+const toB64 = (buf: ArrayBuffer | Uint8Array): string => {
+  const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+  return btoa(String.fromCharCode(...bytes));
+};
+
+async function encrypt(
+  plaintext: string,
+  password: string,
+  iterations = 10_000,
+): Promise<{ content: string; salt: string; iv: string; iterations: number }> {
+  const enc = new TextEncoder();
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const baseKey = await crypto.subtle.importKey(
+    "raw",
+    enc.encode(password),
+    "PBKDF2",
+    false,
+    ["deriveKey"],
+  );
+  const key = await crypto.subtle.deriveKey(
+    { name: "PBKDF2", hash: "SHA-256", salt, iterations },
+    baseKey,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt", "decrypt"],
+  );
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    key,
+    enc.encode(plaintext),
+  );
+  return {
+    content: toB64(ciphertext),
+    salt: toB64(salt),
+    iv: toB64(iv),
+    iterations,
+  };
+}
+
+async function createEncrypted(envelope: {
+  content: string;
+  salt: string;
+  iv: string;
+  iterations: number;
+}): Promise<CreateResult> {
+  return createArtifact({
+    content: envelope.content,
+    encrypted: {
+      salt: envelope.salt,
+      iv: envelope.iv,
+      iterations: envelope.iterations,
+    },
+  });
+}
+
 describe("POST /api/artifacts/:id/comments", () => {
   it("persists a comment and returns 201 with the stored shape", async () => {
     const created = await createArtifact();
@@ -192,5 +248,21 @@ describe("comments are inlined into the viewer page", () => {
       await exports.default.fetch(`${BASE}/a/${created.id}`)
     ).text();
     expect(html).toContain("No comments yet");
+  });
+
+  it("inlines the thread into the encrypted unlock shell chrome", async () => {
+    const envelope = await encrypt("<h1>Top Secret</h1>", "hunter2");
+    const created = await createEncrypted(envelope);
+    await postComment(created.id, { body: "secret comment", author: "Sam" });
+    const res = await exports.default.fetch(`${BASE}/a/${created.id}`);
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    // The surrounding chrome carries the drawer even before unlock — the body
+    // (ciphertext) stays hidden until the password is entered.
+    expect(html).toContain("secret comment");
+    expect(html).toContain('id="oa-cm-drawer"');
+    expect(html).toContain("oa-cm-toggle");
+    // The ciphertext is never leaked into the comment thread.
+    expect(html).toContain(envelope.content);
   });
 });
