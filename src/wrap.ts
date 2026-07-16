@@ -272,7 +272,7 @@ const COMMENTS_CSS = `
   .oa-cm-more:hover,.oa-cm-done:hover{background:color-mix(in oklab,var(--oa-fg),transparent 92%);color:var(--oa-fg)}
   .oa-cm-done[aria-pressed="true"]:hover{color:var(--oa-accent)}
 }
-.oa-cm-menu{position:absolute;top:100%;right:0;z-index:2;min-width:7.5rem;padding:.25rem;border:1px solid var(--oa-border);border-radius:8px;background:var(--oa-bg);box-shadow:0 4px 16px -4px rgba(0,0,0,.18),0 12px 28px -12px rgba(0,0,0,.22)}
+.oa-cm-menu{position:absolute;top:100%;right:0;z-index:2;min-width:7.5rem;padding:.25rem;border:1px solid var(--oa-border);border-radius:8px;background:var(--oa-bg)}
 .oa-cm-menu[hidden]{display:none}
 .oa-cm-menu button{display:block;width:100%;text-align:left;padding:.4rem .55rem;border:0;border-radius:6px;background:none;color:var(--oa-fg);font:inherit;font-size:.8rem;cursor:pointer}
 .oa-cm-menu button:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
@@ -295,11 +295,16 @@ const COMMENTS_CSS = `
 .oa-cm-compose{position:fixed;z-index:2147483646;width:min(22rem,calc(100vw - 1rem));display:flex;flex-direction:column;gap:.4rem;font-family:var(--oa-font)}
 .oa-cm-compose[hidden]{display:none}
 .oa-cm-compose ::placeholder{color:var(--oa-muted);opacity:1}
-.oa-cm-name{align-self:flex-start;max-width:70%;padding:.32rem .7rem;border:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 6%);border-radius:999px;background:var(--oa-bg);color:var(--oa-fg);font-family:var(--oa-font);font-size:.78rem;box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 2px 6px -1px rgba(0,0,0,.08),0 8px 18px -8px rgba(0,0,0,.18)}
+/* The name pill and the input row are the same object at two sizes: identical
+   surface, border, and pill radius, no shadow — the border carries the edge. */
+.oa-cm-name,.oa-cm-row{background:var(--oa-bg);border:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 6%);border-radius:999px}
+.oa-cm-name{align-self:flex-start;max-width:70%;padding:.32rem .7rem;color:var(--oa-fg);font-family:var(--oa-font);font-size:.78rem}
 .oa-cm-name[hidden]{display:none}
 .oa-cm-name:focus-visible{outline:none;border-color:var(--oa-accent);box-shadow:var(--oa-focus-ring)}
-.oa-cm-row{display:flex;align-items:center;gap:.35rem;padding:.25rem .25rem .25rem .95rem;background:var(--oa-bg);border:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 6%);border-radius:1.35rem;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 2px 6px -1px rgba(0,0,0,.08),0 14px 32px -12px rgba(0,0,0,.22)}
-.oa-cm-row:focus-within{border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 22%)}
+/* No :focus-within darkening: compose autofocuses the textarea, so it would
+   render the row permanently darker than the name pill. The caret marks focus;
+   the send button and name keep their own rings. */
+.oa-cm-row{display:flex;align-items:center;gap:.35rem;padding:.25rem .25rem .25rem .95rem}
 .oa-cm-body{flex:1;min-width:0;border:0;background:none;resize:none;color:var(--oa-fg);font-family:var(--oa-font);font-size:.9rem;line-height:1.45;padding:.5rem 0;max-height:8rem;overflow-y:auto}
 .oa-cm-body:focus{outline:none}
 .oa-cm-send{flex-shrink:0;width:32px;height:32px;border-radius:50%;border:0;display:grid;place-items:center;background:color-mix(in oklab,var(--oa-fg),var(--oa-bg) 80%);color:var(--oa-muted);cursor:default;transition:background .13s,color .13s,transform .1s}
@@ -955,7 +960,7 @@ const FRAME_BRIDGE_SCRIPT = `
 // collapsed-note-chip idiom), and translate(-50%,-50%) centres it. Unlike a
 // note it counter-scales unconditionally at every zoom (no CHIP_K threshold).
 const FRAME_ANCHOR_CSS = `
-.oa-cm-pin{position:absolute;left:calc(var(--x,0)*1px);top:calc(var(--y,0)*1px);transform:scale(calc(1/var(--k,1))) translate(-50%,-50%);transform-origin:0 0;z-index:2;width:18px;height:18px;padding:0;border:1.5px solid var(--oa-bg);border-radius:50% 50% 50% 2px;background:var(--oa-accent);cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.14),0 3px 8px -2px rgba(0,0,0,.2)}
+.oa-cm-pin{position:absolute;left:calc(var(--x,0)*1px);top:calc(var(--y,0)*1px);transform:scale(calc(1/var(--k,1))) translate(-50%,-50%);transform-origin:0 0;z-index:2;width:18px;height:18px;padding:0;border:1.5px solid var(--oa-bg);border-radius:50% 50% 50% 2px;background:var(--oa-accent);cursor:pointer}
 .oa-cm-pin:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 /* Comment tool armed (canvas): a Figma-style comment marker replaces the pan
    cursor, its tail as the hotspot so the pin lands where the tip points. */
@@ -1018,7 +1023,7 @@ const FRAME_ANCHOR_SCRIPT = `
 const FRAME_TEXT_CSS = `
 ::highlight(oa-cm){background-color:color-mix(in oklab,var(--oa-accent),transparent 72%)}
 /* font-family is pinned to --oa-font — never inherit the artifact face. */
-.oa-cm-sel{position:fixed;z-index:2147483647;display:inline-flex;align-items:center;gap:.35rem;padding:.28rem .55rem .28rem .45rem;border-radius:7px;border:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 8%);background:var(--oa-bg);color:var(--oa-fg);font-family:var(--oa-font);font-size:.78rem;font-weight:600;line-height:1;letter-spacing:-.01em;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.06),0 6px 16px -6px rgba(0,0,0,.22);transform:translate(-50%,.4rem);opacity:.98;transition:border-color .12s,background .12s,opacity .12s}
+.oa-cm-sel{position:fixed;z-index:2147483647;display:inline-flex;align-items:center;gap:.35rem;padding:.28rem .55rem .28rem .45rem;border-radius:7px;border:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 8%);background:var(--oa-bg);color:var(--oa-fg);font-family:var(--oa-font);font-size:.78rem;font-weight:600;line-height:1;letter-spacing:-.01em;cursor:pointer;transform:translate(-50%,.4rem);opacity:.98;transition:border-color .12s,background .12s,opacity .12s}
 .oa-cm-sel svg{display:block;width:14px;height:14px;flex-shrink:0}
 .oa-cm-sel:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 .oa-cm-sel:active{transform:translate(-50%,.4rem) translateY(1px)}
@@ -1195,16 +1200,16 @@ function hostBridgeScript(artifactId: string): string {
     var msg=e.data;
     if(!msg||typeof msg!=="object")return;
     if(msg.type==="oa:ready"){
-      // Canvas: comments are pins — hide the drawer toggle, show the pin tool.
-      // Document: comments are text-selection chips — hide the pin tool, keep
-      // the drawer. Encrypted unlock shells keep the tool as the unanchored
-      // compose entry (text anchors are rejected server-side).
+      // Canvas: comments are pins, so the pin tool appears — but the drawer
+      // stays as the way to read the whole thread (a pin off-screen or on a
+      // done comment is otherwise unreachable). Document: comments are
+      // text-selection chips, so the pin tool goes away. Encrypted unlock
+      // shells keep the tool as the unanchored compose entry (text anchors are
+      // rejected server-side).
       window.__oaMode=msg.mode==="canvas"?"canvas":"text";
-      var tg=document.querySelector(".oa-cm-toggle");
       var tool=document.querySelector(".oa-cm-tool");
       var unlock=document.querySelector(".oa-unlock");
       if(window.__oaMode==="canvas"){
-        if(tg)tg.style.display="none";
         if(tool)tool.style.display="";
       }else{
         if(tool&&!unlock)tool.style.display="none";
