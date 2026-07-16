@@ -32,9 +32,10 @@ Feature: Multi-user interaction on a shared artifact
 
   Scenario: The artifact body remains sandboxed
     Given a comments drawer is rendered around the artifact
-    Then the viewer page CSP still has connect-src none
-    And realtime fetching is impossible from the page (comments are inlined at serve time, not fetched at runtime)
-    # Phase 2 (live, no-reload fan-out via Durable Object) is deferred: it
-    # requires splitting the viewer into an outer host page + sandboxed iframe
-    # so a WebSocket can live in the outer page without widening the iframe CSP.
+    Then the host page CSP has connect-src 'self' (drawer may POST comments)
+    And the artifact frame CSP has connect-src 'none' (opaque sandbox, no runtime fetch)
+    And the frame cannot reach the API — comments reach it only via host postMessage of the serve-time-inlined thread
+    # Live no-reload fan-out across concurrent viewers is still deferred (Durable
+    # Object). The host/frame split already landed; a WebSocket can later live on
+    # the host without widening the iframe CSP.
     # Phase 3 (voice) is out of scope.

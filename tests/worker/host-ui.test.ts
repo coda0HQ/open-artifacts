@@ -29,8 +29,13 @@ describe("host page interactive UI (tasks 009/010/011)", () => {
     expect(html).toContain("oa-cm-compose");
     expect(html).toContain("__oaOnAnchorNew");
     expect(html).toContain("__oaOnAnchorOpen");
+    expect(html).toContain("__oaOnOrphans");
+    expect(html).toContain("window.__oaViewedVersion=");
     // The host is the only party that fetches — create/delete hit the API.
     expect(html).toContain('"/api/artifacts/"+ID+"/comments"');
+    // Create failures surface; unanchored compose is a first-class path.
+    expect(html).toContain("oa-cm-err");
+    expect(html).toContain("function openCompose");
   });
 
   it("renders comment text with textContent, never innerHTML", async () => {
@@ -69,5 +74,15 @@ describe("host page interactive UI (tasks 009/010/011)", () => {
     });
     expect(html).toContain("oa-cm-compose");
     expect(html).toContain("__oaBridgeId");
+    expect(html).toContain("window.__oaViewedVersion=");
+    // Arming on an unlock shell opens unanchored compose (no text selection).
+    expect(html).toContain('querySelector(".oa-unlock")');
+  });
+
+  it("shows version-drift and detached tags in the drawer renderer", async () => {
+    const html = await hostHtml();
+    expect(html).toContain("oa-cm-tag");
+    expect(html).toContain("oa-cm-detached");
+    expect(html).toContain("type:\"oa:theme\"");
   });
 });

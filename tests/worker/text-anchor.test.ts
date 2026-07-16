@@ -8,12 +8,13 @@ describe("buildTextAnchor", () => {
   it("captures the quote with bounded context", () => {
     const start = DOC.indexOf("quarterly revenue grew 12%");
     const end = start + "quarterly revenue grew 12%".length;
-    const a = buildTextAnchor(DOC, start, end);
+    const a = buildTextAnchor(DOC, start, end, 3);
     expect(a.mode).toBe("text");
     expect(a.quote).toBe("quarterly revenue grew 12%");
     expect(a.prefix.length).toBeLessThanOrEqual(32);
     expect(a.suffix.length).toBeLessThanOrEqual(32);
     expect(a.start).toBe(start);
+    expect(a.anchorVersion).toBe(3);
   });
 
   it("truncates a quote longer than 1000 characters", () => {
@@ -74,6 +75,8 @@ describe("frame document carries the text-highlight runtime", () => {
     ).text();
     expect(html).toContain("::highlight(oa-cm)");
     expect(html).toContain("CSS.highlights.set('oa-cm'");
+    // Orphan ids are reported to the host drawer (REQ-010).
+    expect(html).toContain("type:'oa:orphans'");
     // The matcher source was injected verbatim.
     expect(html).toContain("function reAnchor");
     // esbuild's keepNames wraps inner functions in __name(); the frame must

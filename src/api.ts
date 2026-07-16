@@ -400,13 +400,31 @@ api.post("/artifacts/:id/comments", async (c) => {
     );
   }
 
+  // Stamp/clamp anchorVersion to the artifact's version space so a client
+  // cannot forge a future version that hides markers for every real viewer
+  // (anchorVersion > viewedVersion filters them out). Prefer the client's
+  // claimed create-time version when it is in range; otherwise fall back to
+  // currentVersion.
+  let input = parsed.value;
+  if (input.anchor) {
+    const claimed = input.anchor.anchorVersion;
+    const stamped =
+      claimed >= 1 && claimed <= record.currentVersion
+        ? claimed
+        : record.currentVersion;
+    input = {
+      ...input,
+      anchor: { ...input.anchor, anchorVersion: stamped },
+    };
+  }
+
   // Per-comment delete token, mirroring the artifact write-token idiom: only the
   // SHA-256 hash is stored; the plaintext is returned once so the poster can
   // delete their own comment later.
   const deleteToken = generateWriteToken();
   const comment = await store.addComment(
     record.id,
-    parsed.value,
+    input,
     await sha256Hex(deleteToken),
   );
   return c.json({ ...comment, deleteToken }, 201);

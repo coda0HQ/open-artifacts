@@ -38,6 +38,7 @@ export function buildTextAnchor(
   fullText: string,
   start: number,
   end: number,
+  viewedVersion = 1,
 ): TextAnchor {
   const MAX_QUOTE = 1000;
   const MAX_CTX = 32;
@@ -46,7 +47,9 @@ export function buildTextAnchor(
     rawQuote.length > MAX_QUOTE ? rawQuote.slice(0, MAX_QUOTE) : rawQuote;
   const prefix = fullText.slice(Math.max(0, start - MAX_CTX), start);
   const suffix = fullText.slice(end, end + MAX_CTX);
-  return { mode: "text", quote, prefix, suffix, start, anchorVersion: 1 };
+  const anchorVersion =
+    Number.isInteger(viewedVersion) && viewedVersion >= 1 ? viewedVersion : 1;
+  return { mode: "text", quote, prefix, suffix, start, anchorVersion };
 }
 
 // Re-resolve a text anchor against the current document text: exact match with

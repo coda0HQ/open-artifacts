@@ -291,16 +291,35 @@ describe("anchored comments", () => {
     });
     expect(res.status).toBe(201);
     const comment = (await res.json()) as {
-      anchor: { mode: string; x: number; y: number };
+      anchor: { mode: string; x: number; y: number; anchorVersion: number };
       deleteToken: string;
     };
-    expect(comment.anchor).toMatchObject({ mode: "point", x: 100, y: 100 });
+    expect(comment.anchor).toMatchObject({
+      mode: "point",
+      x: 100,
+      y: 100,
+      anchorVersion: 1,
+    });
     expect(comment.deleteToken).toMatch(/^wt_/);
 
     const list = (await (await getComments(created.id)).json()) as {
       comments: { anchor: { mode: string } | null }[];
     };
     expect(list.comments[0]?.anchor?.mode).toBe("point");
+  });
+
+  it("clamps a forged future anchorVersion to the artifact currentVersion", async () => {
+    const created = await createArtifact();
+    const res = await postComment(created.id, {
+      body: "forged future",
+      anchor: { mode: "point", x: 1, y: 2, anchorVersion: 999_999 },
+    });
+    expect(res.status).toBe(201);
+    const comment = (await res.json()) as {
+      anchor: { anchorVersion: number };
+    };
+    // Fresh artifacts are at version 1 — the server must not store 999999.
+    expect(comment.anchor.anchorVersion).toBe(1);
   });
 
   it("accepts unanchored but rejects a text anchor on an encrypted artifact", async () => {
