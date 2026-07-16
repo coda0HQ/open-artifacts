@@ -217,19 +217,25 @@ const COMMENTS_CSS = `
 .oa-cm-tool[aria-pressed="true"]{opacity:1;border-color:var(--oa-accent);color:var(--oa-accent)}
 .oa-cm-tool:active{transform:translateY(1px)}
 @media (hover:hover) and (pointer:fine){.oa-cm-tool:hover{opacity:1}}
-.oa-cm-compose{position:fixed;z-index:2147483646;width:min(20rem,calc(100vw - 1rem));display:flex;flex-direction:column;gap:.5rem;padding:.7rem;background:var(--oa-bg);border:1px solid var(--oa-border);border-radius:12px;box-shadow:0 1px 1px rgba(0,0,0,.04),0 10px 30px -8px rgba(0,0,0,.28)}
+/* Compose: a single rounded pill — "Add a comment" + a circular send button
+   (muted until there is text, then accent) — floating over the artifact. The
+   name is a small quiet pill shown only the first time, before one is saved. */
+.oa-cm-compose{position:fixed;z-index:2147483646;width:min(22rem,calc(100vw - 1rem));display:flex;flex-direction:column;gap:.4rem}
 .oa-cm-compose[hidden]{display:none}
-.oa-cm-compose input,.oa-cm-compose textarea{width:100%;padding:.45rem .55rem;border:1px solid var(--oa-border);border-radius:7px;background:var(--oa-surface);color:var(--oa-fg);font:inherit;font-size:.85rem}
-.oa-cm-compose input{font-size:.8rem}
 .oa-cm-compose ::placeholder{color:var(--oa-muted);opacity:1}
-.oa-cm-compose textarea{resize:vertical;min-height:3.75rem;line-height:1.45}
-.oa-cm-compose input:focus-visible,.oa-cm-compose textarea:focus-visible{outline:none;border-color:var(--oa-accent);box-shadow:var(--oa-focus-ring)}
-.oa-cm-actions{display:flex;justify-content:flex-end;align-items:center;gap:.25rem}
-.oa-cm-actions button{padding:.4rem .75rem;border-radius:7px;border:1px solid transparent;background:none;color:var(--oa-muted);font:inherit;font-size:.8rem;font-weight:500;cursor:pointer;transition:background .12s,color .12s,border-color .12s}
-.oa-cm-actions button:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
-.oa-cm-actions button:active{transform:translateY(1px)}
-.oa-cm-actions .oa-cm-post{background:var(--oa-accent);border-color:var(--oa-accent);color:var(--oa-accent-on);font-weight:600}
-@media (hover:hover) and (pointer:fine){.oa-cm-actions .oa-cm-cancel:hover{color:var(--oa-fg);background:var(--oa-surface)}.oa-cm-actions .oa-cm-post:hover{background:color-mix(in oklab,var(--oa-accent),var(--oa-fg) 12%);border-color:color-mix(in oklab,var(--oa-accent),var(--oa-fg) 12%)}}
+.oa-cm-name{align-self:flex-start;max-width:70%;padding:.32rem .7rem;border:1px solid var(--oa-border);border-radius:999px;background:var(--oa-bg);color:var(--oa-fg);font:inherit;font-size:.78rem;box-shadow:0 6px 20px -8px rgba(0,0,0,.35)}
+.oa-cm-name[hidden]{display:none}
+.oa-cm-name:focus-visible{outline:none;border-color:var(--oa-accent);box-shadow:var(--oa-focus-ring)}
+.oa-cm-row{display:flex;align-items:flex-end;gap:.35rem;padding:.3rem .3rem .3rem .95rem;background:var(--oa-bg);border:1px solid var(--oa-border);border-radius:1.35rem;box-shadow:0 2px 6px rgba(0,0,0,.06),0 14px 34px -12px rgba(0,0,0,.4)}
+.oa-cm-row:focus-within{border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 22%)}
+.oa-cm-body{flex:1;min-width:0;border:0;background:none;resize:none;color:var(--oa-fg);font:inherit;font-size:.9rem;line-height:1.45;padding:.5rem 0;max-height:8rem;overflow-y:auto}
+.oa-cm-body:focus{outline:none}
+.oa-cm-send{flex-shrink:0;width:32px;height:32px;border-radius:50%;border:0;display:grid;place-items:center;background:var(--oa-surface);color:var(--oa-muted);cursor:default;transition:background .13s,color .13s,transform .1s}
+.oa-cm-send svg{width:16px;height:16px}
+.oa-cm-send[data-ready]{background:var(--oa-accent);color:var(--oa-accent-on);cursor:pointer}
+.oa-cm-send:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+.oa-cm-send[data-ready]:active{transform:scale(.93)}
+@media (hover:hover) and (pointer:fine){.oa-cm-send[data-ready]:hover{background:color-mix(in oklab,var(--oa-accent),var(--oa-fg) 12%)}}
 @media (prefers-reduced-motion:no-preference){.oa-cm-compose{transition:opacity .13s ease-out,transform .13s ease-out,display .13s allow-discrete}.oa-cm-compose[hidden]{opacity:0;transform:translateY(-4px) scale(.985)}@starting-style{.oa-cm-compose:not([hidden]){opacity:0;transform:translateY(-4px) scale(.985)}}}
 .oa-cm-item{position:relative}
 .oa-cm-item[data-focus]{border-radius:8px;box-shadow:0 0 0 2px var(--oa-accent)}
@@ -251,6 +257,9 @@ const COMMENT_SVG =
 // teardrop reads distinctly from the drawer toggle's rectangular chat bubble.
 const COMMENT_ADD_SVG =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M4 18V10a8 8 0 0 1 8-8 8 8 0 0 1 8 8 8 8 0 0 1-8 8H4z"/></svg>';
+// The compose send button's up-arrow (post the comment).
+const SEND_ARROW_SVG =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M12 19V6M6 12l6-6 6 6"/></svg>';
 const BRAND_SVG =
   '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M20.0833 15.1999L21.2854 15.9212C21.5221 16.0633 21.5989 16.3704 21.4569 16.6072C21.4146 16.6776 21.3557 16.7365 21.2854 16.7787L12.5144 22.0412C12.1977 22.2313 11.8021 22.2313 11.4854 22.0412L2.71451 16.7787C2.47772 16.6366 2.40093 16.3295 2.54301 16.0927C2.58523 16.0223 2.64413 15.9634 2.71451 15.9212L3.9166 15.1999L11.9999 20.0499L20.0833 15.1999ZM20.0833 10.4999L21.2854 11.2212C21.5221 11.3633 21.5989 11.6704 21.4569 11.9072C21.4146 11.9776 21.3557 12.0365 21.2854 12.0787L11.9999 17.6499L2.71451 12.0787C2.47772 11.9366 2.40093 11.6295 2.54301 11.3927C2.58523 11.3223 2.64413 11.2634 2.71451 11.2212L3.9166 10.4999L11.9999 15.3499L20.0833 10.4999ZM12.5144 1.30864L21.2854 6.5712C21.5221 6.71327 21.5989 7.0204 21.4569 7.25719C21.4146 7.32757 21.3557 7.38647 21.2854 7.42869L11.9999 12.9999L2.71451 7.42869C2.47772 7.28662 2.40093 6.97949 2.54301 6.7427C2.58523 6.67232 2.64413 6.61343 2.71451 6.5712L11.4854 1.30864C11.8021 1.11864 12.1977 1.11864 12.5144 1.30864ZM11.9999 3.33233L5.88723 6.99995L11.9999 10.6676L18.1126 6.99995L11.9999 3.33233Z"/></svg>';
 
@@ -847,7 +856,7 @@ const FRAME_ANCHOR_CSS = `
 .oa-cm-pin:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 /* Comment tool armed (canvas): a Figma-style comment marker replaces the pan
    cursor, its tail as the hotspot so the pin lands where the tip points. */
-html.oa-cm-arming,html.oa-cm-arming *{cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 24 24'%3E%3Cpath d='M4 18V10a8 8 0 0 1 8-8 8 8 0 0 1 8 8 8 8 0 0 1-8 8H4z' fill='%236457f0' stroke='%23fff' stroke-width='1.5' stroke-linejoin='round'/%3E%3C/svg%3E") 5 21,crosshair !important}
+html.oa-cm-arming,html.oa-cm-arming *{cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='30' height='30' viewBox='0 0 24 24'%3E%3Cpath d='M4 18V10a8 8 0 0 1 8-8 8 8 0 0 1 8 8 8 8 0 0 1-8 8H4z' fill='%23fff' stroke='%23fff' stroke-width='4' stroke-linejoin='round'/%3E%3Cpath d='M4 18V10a8 8 0 0 1 8-8 8 8 0 0 1 8 8 8 8 0 0 1-8 8H4z' fill='%23fff' stroke='%23000' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E") 5 22,crosshair !important}
 `;
 
 // Frame side, canvas mode: capture a click to drop a pin (world coords, read
@@ -1065,27 +1074,34 @@ const HOST_UI_SCRIPT = `
 
   var pop=document.createElement("div");
   pop.className="oa-cm-compose";pop.id="oa-cm-compose";pop.setAttribute("hidden","");
-  var nameEl=document.createElement("input");nameEl.type="text";nameEl.className="oa-cm-name";nameEl.placeholder="Your name (optional)";nameEl.setAttribute("aria-label","Your name");
-  var bodyEl=document.createElement("textarea");bodyEl.className="oa-cm-body";bodyEl.rows=3;bodyEl.placeholder="Add a comment…";bodyEl.setAttribute("aria-label","Comment");
-  var actions=document.createElement("div");actions.className="oa-cm-actions";
-  var cancel=document.createElement("button");cancel.type="button";cancel.className="oa-cm-cancel";cancel.textContent="Cancel";
-  var postBtn=document.createElement("button");postBtn.type="button";postBtn.className="oa-cm-post";postBtn.textContent="Comment";
-  actions.appendChild(cancel);actions.appendChild(postBtn);
-  pop.appendChild(nameEl);pop.appendChild(bodyEl);pop.appendChild(actions);
+  var nameEl=document.createElement("input");nameEl.type="text";nameEl.className="oa-cm-name";nameEl.placeholder="Your name (optional)";nameEl.setAttribute("aria-label","Your name");nameEl.setAttribute("hidden","");
+  var row=document.createElement("div");row.className="oa-cm-row";
+  var bodyEl=document.createElement("textarea");bodyEl.className="oa-cm-body";bodyEl.rows=1;bodyEl.placeholder="Add a comment";bodyEl.setAttribute("aria-label","Comment");
+  var sendBtn=document.createElement("button");sendBtn.type="button";sendBtn.className="oa-cm-send";sendBtn.setAttribute("aria-label","Post comment");sendBtn.innerHTML=${jsonForInlineScript(SEND_ARROW_SVG)};
+  row.appendChild(bodyEl);row.appendChild(sendBtn);
+  pop.appendChild(nameEl);pop.appendChild(row);
   document.body.appendChild(pop);
 
   var pending=null,posting=false;
-  function closePop(){pop.setAttribute("hidden","");pending=null;bodyEl.value=""}
-  cancel.addEventListener("click",closePop);
+  function autosize(){bodyEl.style.height="auto";bodyEl.style.height=Math.min(bodyEl.scrollHeight,128)+"px"}
+  function refreshSend(){if(bodyEl.value.trim())sendBtn.setAttribute("data-ready","");else sendBtn.removeAttribute("data-ready")}
+  function closePop(){pop.setAttribute("hidden","");pending=null;bodyEl.value="";autosize();refreshSend()}
+  bodyEl.addEventListener("input",function(){autosize();refreshSend()});
+  bodyEl.addEventListener("keydown",function(e){if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();submit()}});
   document.addEventListener("keydown",function(e){if(e.key==="Escape"&&!pop.hasAttribute("hidden"))closePop()});
+  document.addEventListener("mousedown",function(e){if(pop.hasAttribute("hidden"))return;if(pop.contains(e.target)||arm===e.target||arm.contains(e.target))return;closePop()});
   window.__oaOnAnchorNew=function(msg){
-    pending=msg.anchor||null;setArmed(false);nameEl.value=getName();
+    pending=msg.anchor||null;setArmed(false);
+    var saved=getName();
+    if(saved){nameEl.value=saved;nameEl.setAttribute("hidden","")}else{nameEl.value="";nameEl.removeAttribute("hidden")}
+    bodyEl.value="";refreshSend();
     var px=(msg.point&&msg.point.x)||16,py=((msg.point&&msg.point.y)||16)+headerH();
-    pop.style.left=Math.max(8,Math.min(px,window.innerWidth-260))+"px";
-    pop.style.top=Math.max(8,Math.min(py,window.innerHeight-170))+"px";
-    pop.removeAttribute("hidden");bodyEl.focus();
+    pop.style.left=Math.max(8,Math.min(px,window.innerWidth-360))+"px";
+    pop.style.top=Math.max(8,Math.min(py,window.innerHeight-120))+"px";
+    pop.removeAttribute("hidden");autosize();bodyEl.focus();
   };
-  postBtn.addEventListener("click",function(){
+  sendBtn.addEventListener("click",submit);
+  function submit(){
     var body=bodyEl.value.trim();if(!body||posting)return;
     var author=nameEl.value.trim();if(author)setName(author);
     posting=true;
@@ -1096,7 +1112,7 @@ const HOST_UI_SCRIPT = `
         state.push({id:cm.id,author:cm.author,body:cm.body,anchor:cm.anchor,createdAt:cm.createdAt});
         sync();closePop();
       }).catch(function(){}).then(function(){posting=false});
-  });
+  }
 
   function bumpCount(){if(!toggle)return;
     if(state.length>0){toggle.setAttribute("data-count",String(state.length));var c=toggle.querySelector(".oa-cm-count");if(c)c.textContent=String(state.length)}
