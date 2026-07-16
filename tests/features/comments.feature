@@ -89,6 +89,19 @@ Feature: Multi-user interaction on a shared artifact
     When the viewer marks one comment not done
     Then the header badge reads one without a reload
 
+  Scenario: An anchored comment posted without a version is stamped with the current one
+    Given an artifact that has been updated to version 2
+    When an API client POSTs a point-anchored comment omitting anchorVersion
+    Then the stored anchorVersion is 2, the version the poster must have seen
+    And the drawer shows no version-drift tag for it
+
+  Scenario: The frame receives the live comment list, not the serve-time seed
+    Given an encrypted artifact whose unlock shell is still locked
+    And the thread has changed since the page was served
+    When the viewer unlocks and the frame announces readiness
+    Then the frame is sent the current comment list
+    And a comment removed before unlock does not reappear as a marker
+
   Scenario: A valid comment carrying both a full-size body and an anchor is accepted
     Given a comment whose body is at the body cap and which also carries a text anchor
     When a client POSTs it to /api/artifacts/:id/comments

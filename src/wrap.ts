@@ -1214,7 +1214,7 @@ function hostBridgeScript(artifactId: string): string {
       // capture stays off (REQ-017 — encrypted interactive comments are unanchored).
       post({type:"oa:config",encrypted:!!unlock});
       post({type:"oa:theme",theme:theme()});
-      post({type:"oa:comments",list:inlined(),viewedVersion:window.__oaViewedVersion||1});
+      post({type:"oa:comments",list:(window.__oaLiveComments?window.__oaLiveComments():inlined()),viewedVersion:window.__oaViewedVersion||1});
     }else if(msg.type==="oa:anchor:new"){
       if(typeof window.__oaOnAnchorNew==="function")window.__oaOnAnchorNew(msg);
     }else if(msg.type==="oa:anchor:open"){
@@ -1288,6 +1288,10 @@ const HOST_UI_SCRIPT = `
   function deleteTokenFor(id){return getToken(id)||ownerToken()}
 
   var state=(window.__oaInlinedComments?window.__oaInlinedComments():[])||[];
+  // The bridge answers oa:ready from here rather than re-reading the serve-time
+  // seed: on the encrypted path the frame only exists after decrypt, so the
+  // thread may already have changed by the time it announces itself.
+  window.__oaLiveComments=function(){return state};
   var orphans={};
   // Done comments drop out of the default "Open" view; the filter is how they
   // come back. Markers in the frame follow the same rule (a done thread is

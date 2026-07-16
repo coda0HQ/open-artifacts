@@ -406,14 +406,21 @@ api.post("/artifacts/:id/comments", async (c) => {
 
   // Stamp/clamp anchorVersion to the artifact's version space so a client
   // cannot forge a future version that hides markers for every real viewer
-  // (anchorVersion > viewedVersion filters them out). Prefer the client's
-  // claimed create-time version when it is in range; otherwise fall back to
-  // currentVersion.
+  // (anchorVersion > viewedVersion filters them out). Keep an in-range claim;
+  // otherwise stamp currentVersion.
+  //
+  // The raw body is consulted because validateAnchor fills a missing
+  // anchorVersion with a placeholder the domain layer cannot know is right —
+  // it has no artifact. Trusting that value would record every version-less
+  // API post as v1: a false drift tag, and a marker on versions where the
+  // comment never existed.
   let input = parsed.value;
   if (input.anchor) {
+    const rawAnchor = body.anchor as Record<string, unknown> | null | undefined;
     const claimed = input.anchor.anchorVersion;
     const stamped =
-      claimed >= 1 && claimed <= record.currentVersion
+      typeof rawAnchor?.anchorVersion === "number" &&
+      claimed <= record.currentVersion
         ? claimed
         : record.currentVersion;
     input = {

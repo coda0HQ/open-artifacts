@@ -22,6 +22,21 @@ async function createArtifact(
   return (await res.json()) as { id: string };
 }
 
+describe("the frame's comment list has a single owner", () => {
+  it("sends the live host state on oa:ready, not the serve-time seed", async () => {
+    const { id } = await createArtifact();
+    const host = await (await exports.default.fetch(`${BASE}/a/${id}`)).text();
+    // On the encrypted path the bridge runs long before the frame exists (the
+    // srcdoc lands only after decrypt), so oa:ready can arrive after the thread
+    // has already changed. Posting inlined() there would resurrect deleted
+    // comments as markers. The seed stays as the pre-init fallback.
+    expect(host).toContain("window.__oaLiveComments=function(){return state}");
+    expect(host).toContain(
+      "list:(window.__oaLiveComments?window.__oaLiveComments():inlined())",
+    );
+  });
+});
+
 describe("the frame cannot drive a host request", () => {
   it("builds every request URL from the serve-time id, never from a message", async () => {
     const { id } = await createArtifact();

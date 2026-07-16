@@ -341,6 +341,34 @@ describe("anchored comments", () => {
     expect(comment.anchor.anchorVersion).toBe(1);
   });
 
+  it("stamps an omitted anchorVersion with the artifact's current version", async () => {
+    const created = await createArtifact();
+    // Bump to v2 — the v1 fixtures above cannot distinguish "omitted" from
+    // "explicitly claimed v1", which is exactly where this bug hides.
+    const put = await exports.default.fetch(
+      new Request(`${BASE}/api/artifacts/${created.id}`, {
+        method: "PUT",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${created.writeToken}`,
+        },
+        body: JSON.stringify({ content: "<h1>v2</h1>" }),
+      }),
+    );
+    expect(put.status).toBe(200);
+
+    // An API client that omits anchorVersion must be stamped with the version
+    // it necessarily saw, not v1 — otherwise the comment renders a false drift
+    // tag and its pin appears on versions where it was never made.
+    const res = await postComment(created.id, {
+      body: "no version claimed",
+      anchor: { mode: "point", x: 5, y: 6 },
+    });
+    expect(res.status).toBe(201);
+    const comment = (await res.json()) as { anchor: { anchorVersion: number } };
+    expect(comment.anchor.anchorVersion).toBe(2);
+  });
+
   function patchDone(
     id: string,
     commentId: string,
