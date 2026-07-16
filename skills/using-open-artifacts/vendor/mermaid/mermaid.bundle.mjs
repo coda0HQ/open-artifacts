@@ -3604,3 +3604,5 @@ mermaid/dist/mermaid.esm.mjs:
    * Wait for document loaded before starting the execution
    *)
 */
+
+;window.mermaid=globalThis.mermaid=vFt;

@@ -26,32 +26,61 @@ function escapeInlineScript(source: string): string {
   return source.replace(/<\/script/gi, "<\\/script");
 }
 
+// Per-request nonce: base64 of 16 random bytes (~22 chars). Stamped on every
+// inline <script> (viewer-injected AND user-authored) and emitted as
+// 'nonce-<value>' in script-src so 'unsafe-inline' can be dropped. script-src
+// is nonce-only with no 'strict-dynamic' and no external script host: the
+// only non-inline scripts allowed are same-origin ('self'), so mermaid loads
+// from /vendor/mermaid.runtime.js under 'self' while a runtime
+// createElement("script", {src: externalURL}) is blocked (no host allowlisted)
+// — closing the inline-JS jsdelivr bypass (issue #11) WITHOUT breaking user JS.
+export function generateNonce(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  // btoa is available in the Worker runtime; base64 keeps the nonce CSP-safe
+  // (no separators that would split the directive value).
+  return btoa(String.fromCharCode(...bytes));
+}
+
+function scriptSrcForNonce(nonce: string): string {
+  // 'self' lets the same-origin /vendor/mermaid.runtime.js script load; the
+  // nonce lets every inline <script> run. No 'strict-dynamic' (so trust does
+  // not propagate from a nonce'd script to a runtime-created one) and no
+  // external host (so a createElement("script", {src: <external>}) is blocked).
+  return `'self' 'nonce-${nonce}'`;
+}
+
 // Web fonts + runtime libraries are an opt-in per-deploy surface (env var
 // OPEN_ARTIFACTS_WEB_FONTS). When enabled, the sandbox gains allow-same-origin
 // so the browser can cache fonts, font-src widens to 'self' plus a bounded
 // allowlist of font CDNs (Fontshare + Google Fonts, the two that serve woff2
 // over a stable CDN for Awwwards-listed families), style-src gains 'self' plus
 // the Google Fonts CSS host (so the same-origin /fonts/<slug>.css shim and
-// Google Fonts @import load), and script-src gains 'self' cdn.jsdelivr.net so
-// allowlisted
-// runtime libraries (mermaid) load directly from jsdelivr. The trade-off:
-// artifacts lose the opaque-origin guarantee and can read the host origin's
-// localStorage/cookies, and an artifact can pull fonts from the allowlisted
-// CDNs (passive font bytes, not executable). Default (webFonts=false) keeps the
-// strict opaque-origin sandbox and font-src/script-src of a self-hosted deploy.
+// Google Fonts @import load). Runtime libraries (mermaid) are self-hosted:
+// the vendored bundle is served same-origin from /vendor/mermaid.runtime.js
+// (a static asset under public/), so script-src stays 'self' + nonce with no
+// external script host. The trade-off: artifacts lose the opaque-origin
+// guarantee and can read the host origin's localStorage/cookies, and an
+// artifact can pull passive font bytes from the allowlisted CDNs (fonts are
+// non-executable, so the allowlist has no code-execution surface). Default
+// (webFonts=false) keeps the strict opaque-origin sandbox and font-src of a
+// self-hosted deploy.
 const WEB_FONT_CSP = {
   fontSrc: "'self' data: cdn.fontshare.com fonts.gstatic.com",
   styleSrc: "'self' 'unsafe-inline' fonts.googleapis.com",
-  scriptSrc: "'self' 'unsafe-inline' cdn.jsdelivr.net",
 };
 export function contentSecurityPolicy(options: {
   sandbox: boolean;
   webFonts?: boolean;
+  nonce: string;
 }): string {
   const webFonts = options.webFonts === true;
   const directives = [
     "default-src 'none'",
-    `script-src ${webFonts ? WEB_FONT_CSP.scriptSrc : "'unsafe-inline'"}`,
+    // script-src is the same nonce-only form whether or not web fonts are on:
+    // 'self' (same-origin /vendor/... runtime scripts) + a per-request nonce
+    // (every inline <script>). No external script host, no 'strict-dynamic'.
+    `script-src ${scriptSrcForNonce(options.nonce)}`,
     `style-src ${webFonts ? WEB_FONT_CSP.styleSrc : "'unsafe-inline'"}`,
     "img-src data: blob:",
     `font-src ${webFonts ? WEB_FONT_CSP.fontSrc : "data:"}`,
@@ -74,12 +103,14 @@ export function userContentHeaders(options: {
   sandbox: boolean;
   contentType: string;
   webFonts?: boolean;
+  nonce: string;
 }): Headers {
   return new Headers({
     "content-type": options.contentType,
     "content-security-policy": contentSecurityPolicy({
       sandbox: options.sandbox,
       webFonts: options.webFonts,
+      nonce: options.nonce,
     }),
     "x-content-type-options": "nosniff",
     "referrer-policy": "no-referrer",
@@ -302,6 +333,8 @@ export interface WrapOptions {
   hostname: string;
   /** "Powered by Open Artifacts" link URL; omit to hide the brand entry. */
   brandUrl?: string | null;
+  /** Per-request CSP nonce; stamped on every viewer-injected inline script. */
+  nonce: string;
   /** All published versions, inlined into the chrome picker at serve time. */
   versions?: VersionMeta[];
   /** Version currently being served; marked selected in the picker. */
@@ -475,6 +508,86 @@ ${OG_CTA}
 </svg>`;
 }
 
+// Stamps the per-request nonce onto every user-authored <script> opening tag in
+// an HTML artifact body so it runs under nonce-only script-src (no
+// 'unsafe-inline'). The authored content from compose.mjs carries bare
+// <script>...</script> and <script src="..."> tags with no nonce; under
+// script-src 'self' 'nonce-<x>' a nonceless inline <script> is blocked, so user
+// JS would silently stop running. This injects nonce="<nonce>" right after the
+// <script token on every opening tag that does not already declare a nonce
+// (defense against a future stamping path double-stamping — the browser takes
+// the first nonce attribute, but a stray duplicate is still lint noise).
+// Closing </script> and the script bodies are untouched. Markdown artifacts
+// render via the nonce'd marked.parse bootstrap and carry no user <script>, so
+// only HTML format needs this.
+//
+// The scan is HTML-parser-aware: it tracks the script-data state so a `<script`
+// substring that appears INSIDE an already-open inline <script> body (e.g. in a
+// JS string literal like `el.innerHTML = "<script>...</script>"`) is NOT
+// treated as a start tag — stamping there would inject `nonce="..."` into the
+// JS source, breaking the string literal and silently killing all user JS. Only
+// <script start tags at the top level (outside any script body) are stamped,
+// matching the browser's own script-data-state boundaries.
+// Case-insensitive, boundary-anchored script-tag matchers. The lookahead
+// (?=[\s>/]|$) ensures we match an actual <script> tag (followed by a space,
+// '/', '>', or end-of-string), NOT a tag whose name merely starts with
+// "script" (e.g. <scripting>), which the HTML parser would otherwise treat as
+// a real <script> element after nonce injection and swallow the rest of the
+// page. Case-insensitive so a direct-API submission with <SCRIPT> (bypassing
+// the skill compose pipeline, which lowercases) still gets a nonce — the old
+// 'unsafe-inline' CSP was case-agnostic. Original case is preserved in output.
+const SCRIPT_OPEN_RE = /<script(?=[\s>/]|$)/gi;
+const SCRIPT_CLOSE_RE = /<\/script(?=[\s>/]|$)/gi;
+const SCRIPT_OPEN_LEN = "<script".length;
+
+function stampNonceOnUserScripts(html: string, nonce: string): string {
+  let out = "";
+  let i = 0;
+  let inScript = false;
+  while (i < html.length) {
+    if (inScript) {
+      // Inside a script body: look for the closing </script> to exit. A
+      // <script substring here is script text, not a start tag.
+      SCRIPT_CLOSE_RE.lastIndex = i;
+      const close = SCRIPT_CLOSE_RE.exec(html);
+      if (close === null || close.index === undefined) {
+        out += html.slice(i);
+        break;
+      }
+      const start = close.index;
+      // Copy through the closing tag's '>'.
+      const gt = html.indexOf(">", start);
+      const end = gt === -1 ? html.length : gt + 1;
+      out += html.slice(i, end);
+      i = end;
+      inScript = false;
+    } else {
+      // Outside a script: find the next <script start tag.
+      SCRIPT_OPEN_RE.lastIndex = i;
+      const open = SCRIPT_OPEN_RE.exec(html);
+      if (open === null || open.index === undefined) {
+        out += html.slice(i);
+        break;
+      }
+      const start = open.index;
+      out += html.slice(i, start);
+      // Find the end of this start tag's attributes.
+      const gt = html.indexOf(">", start);
+      const end = gt === -1 ? html.length : gt + 1;
+      const tag = html.slice(start, end);
+      const stamped = /\bnonce\s*=/i.test(tag)
+        ? tag
+        : `${tag.slice(0, SCRIPT_OPEN_LEN)} nonce="${nonce}"${tag.slice(SCRIPT_OPEN_LEN)}`;
+      out += stamped;
+      i = end;
+      // If this start tag had no src (inline script), enter script-data state;
+      // a <script src="..."></script> is empty but still bounded by </script>.
+      inScript = true;
+    }
+  }
+  return out;
+}
+
 export function wrapDocument(options: WrapOptions): string {
   const {
     title,
@@ -486,17 +599,18 @@ export function wrapDocument(options: WrapOptions): string {
     ogImage,
     hostname,
     brandUrl,
+    nonce,
     versions,
     currentVersion,
   } = options;
   const body =
     format === "markdown"
       ? `<main class="oa-md" id="oa-content"></main>
-<script>${escapeInlineScript(MARKED_SOURCE)}</script>
-<script>
+<script nonce="${nonce}">${escapeInlineScript(MARKED_SOURCE)}</script>
+<script nonce="${nonce}">
 document.getElementById("oa-content").innerHTML=marked.parse(${jsonForInlineScript(content)});
 </script>`
-      : content;
+      : stampNonceOnUserScripts(content, nonce);
 
   const brand = brandFor(hostname);
   const ogDescription = description || title;
@@ -526,9 +640,9 @@ document.getElementById("oa-content").innerHTML=marked.parse(${jsonForInlineScri
 <body>
 ${headerHtml(favicon, title, hostname, brandUrl, versions, currentVersion, url)}
 ${body}
-<script>${VERSION_SCRIPT}</script>
-<script>${THEME_SCRIPT}</script>
-<script>${LAYOUT_SCRIPT}</script>
+<script nonce="${nonce}">${VERSION_SCRIPT}</script>
+<script nonce="${nonce}">${THEME_SCRIPT}</script>
+<script nonce="${nonce}">${LAYOUT_SCRIPT}</script>
 </body>
 </html>
 `;
@@ -565,6 +679,7 @@ export interface UnlockShellOptions {
   brandUrl?: string | null;
   envelope: EncryptionParams & { ciphertext: string };
   webFonts?: boolean;
+  nonce: string;
   /** All published versions, inlined into the chrome picker at serve time. */
   versions?: VersionMeta[];
   /** Version currently being served; marked selected in the picker. */
@@ -583,6 +698,7 @@ export function unlockShell(options: UnlockShellOptions): string {
     brandUrl,
     envelope,
     webFonts,
+    nonce,
     versions,
     currentVersion,
   } = options;
@@ -600,6 +716,7 @@ export function unlockShell(options: UnlockShellOptions): string {
     ogImage,
     hostname,
     brandUrl,
+    nonce,
   });
 
   const unlockScript = `
@@ -608,9 +725,65 @@ const OA = {
   format: ${jsonForInlineScript(format)},
   template: ${jsonForInlineScript(template)},
   slot: ${jsonForInlineScript(CONTENT_SLOT)},
+  nonce: ${jsonForInlineScript(nonce)},
 };
 function fromB64(s){return Uint8Array.from(atob(s),function(c){return c.charCodeAt(0)})}
 function jsonEmbed(s){return JSON.stringify(s).replace(/</g,"\\\\u003c")}
+// The srcdoc iframe inherits the parent CSP, which is nonce-only with no
+// 'unsafe-inline'. Decrypted HTML artifact content carries bare user script
+// tags; stamp the per-request nonce onto every opening one that does not
+// already declare one so user JS runs inside the iframe. Mirrors the
+// serve-time stampNonceOnUserScripts in wrapDocument. Markdown is rendered by
+// the nonce'd marked bootstrap and has no user script.
+//
+// HTML-parser-aware: track script-data state so a script-start-tag substring
+// appearing INSIDE an already-open inline script body (e.g. inside a JS string
+// literal) is NOT treated as a start tag — stamping there would inject the
+// nonce into the JS source and corrupt it. Only top-level script start tags
+// (outside any script body) are stamped.
+function stampNonce(html){
+  // Case-insensitive + boundary-anchored match for an actual script start tag
+  // (followed by space / slash / '>' / end-of-string), NOT a tag whose name
+  // merely starts with "script". Case-insensitive so an uppercase tag from a
+  // direct API submission still gets a nonce. Original case preserved in
+  // output. Uses manual char comparison (no regex) to avoid the template-literal
+  // escaping pitfalls of the surrounding unlockScript.
+  var LT="<",S="scr"+"ipt",SL="/",TOK=(LT+S).length;
+  var low=html.toLowerCase();
+  function isTagCh(c){return c===" "||c==="\\t"||c==="\\n"||c==="\\r"||c===">"||c===SL||c==='"'||c==="'"}
+  function findTag(from,close){
+    var needle=close?(LT+SL+S):(LT+S);
+    var nlen=needle.length;
+    var j=from;
+    for(;;){
+      var at=low.indexOf(needle,j);
+      if(at===-1)return -1;
+      var after=html.charAt(at+nlen);
+      if(after===""||isTagCh(after))return at;
+      j=at+nlen;
+    }
+  }
+  var out="",i=0,inS=false;
+  while(i<html.length){
+    if(inS){
+      var cl=findTag(i,true);
+      if(cl===-1){out+=html.slice(i);break}
+      var g=html.indexOf(">",cl);
+      var e=g===-1?html.length:g+1;
+      out+=html.slice(i,e);i=e;inS=false;
+    }else{
+      var st=findTag(i,false);
+      if(st===-1){out+=html.slice(i);break}
+      out+=html.slice(i,st);
+      var g2=html.indexOf(">",st);
+      var e2=g2===-1?html.length:g2+1;
+      var tag=html.slice(st,e2);
+      var stamped=/\\bnonce\\s*=/.test(tag)?tag:((LT+S)+' nonce="'+OA.nonce+'"'+tag.slice(TOK));
+      out+=stamped;i=e2;inS=true;
+    }
+  }
+  return out;
+}
 async function decrypt(password){
   const baseKey=await crypto.subtle.importKey("raw",new TextEncoder().encode(password),"PBKDF2",false,["deriveKey"]);
   const key=await crypto.subtle.deriveKey(
@@ -633,7 +806,7 @@ form.addEventListener("submit",async function(event){
     const content=await decrypt(input.value);
     const doc=OA.format==="markdown"
       ? OA.template.split(JSON.stringify(OA.slot)).join(jsonEmbed(content))
-      : OA.template.split(OA.slot).join(content);
+      : stampNonce(OA.template.split(OA.slot).join(content));
     const frame=document.getElementById("oa-frame");
     frame.srcdoc=doc;
     frame.style.display="block";
@@ -686,10 +859,10 @@ ${headerHtml(favicon, title, hostname, brandUrl, versions, currentVersion, url)}
   </form>
 </div>
 <iframe id="oa-frame" sandbox="allow-scripts allow-modals${webFonts ? " allow-same-origin" : ""}" title="${escapeHtml(title)}"></iframe>
-<script>${unlockScript}</script>
-<script>${VERSION_SCRIPT}</script>
-<script>${THEME_SCRIPT}</script>
-<script>${LAYOUT_SCRIPT}</script>
+<script nonce="${nonce}">${unlockScript}</script>
+<script nonce="${nonce}">${VERSION_SCRIPT}</script>
+<script nonce="${nonce}">${THEME_SCRIPT}</script>
+<script nonce="${nonce}">${LAYOUT_SCRIPT}</script>
 </body>
 </html>
 `;

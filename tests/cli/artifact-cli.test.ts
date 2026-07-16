@@ -787,26 +787,58 @@ describe("Recipe builder", () => {
     expect(requests).toHaveLength(0);
   });
 
-  it("rejects a non-allowlisted jsdelivr package in a <script src>", async () => {
+  it("rejects a non-allowlisted same-origin /vendor bundle in a <script src>", async () => {
+    // Use a REGULAR (non-module) <script src> so the allowlist-rejection path
+    // is what fires — a type="module" tag would trip the module-deferred check
+    // first and mask an allowlist bug.
     const recipe = writeRecipe("bad-pkg", {
       mutate: (r) => {
         r.artifact.level = 1;
       },
-      body: '<main><pre class="d3"></pre><script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script></main>\n',
+      body: '<main><pre class="d3"></pre><script src="/vendor/d3.bundle.mjs"></script></main>\n',
     });
     const result = await run(["validate", recipe.recipePath], {
       expectFailure: true,
     });
-    expect(result.stderr).toContain("d3");
+    expect(result.stderr).toContain("d3.bundle.mjs");
+    expect(result.stderr).toContain("allowlist");
     expect(requests).toHaveLength(0);
   });
 
-  it("accepts an allowlisted jsdelivr <script src> in the body", async () => {
-    const recipe = writeRecipe("mermaid", {
+  it("rejects an external jsdelivr <script src> (no external host in CSP)", async () => {
+    const recipe = writeRecipe("jsdelivr-script", {
       mutate: (r) => {
         r.artifact.level = 1;
       },
       body: '<main class="oa-prose"><pre class="mermaid">flowchart LR\nA-->B</pre><script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script></main>\n',
+    });
+    const result = await run(["validate", recipe.recipePath], {
+      expectFailure: true,
+    });
+    expect(result.stderr).toContain("/vendor/mermaid.runtime.js");
+    expect(requests).toHaveLength(0);
+  });
+
+  it("rejects a module <script src> for mermaid (deferred load-order bug)", async () => {
+    const recipe = writeRecipe("mermaid-module", {
+      mutate: (r) => {
+        r.artifact.level = 1;
+      },
+      body: '<main class="oa-prose"><pre class="mermaid">flowchart LR\nA-->B</pre><script type="module" src="/vendor/mermaid.runtime.js"></script></main>\n',
+    });
+    const result = await run(["validate", recipe.recipePath], {
+      expectFailure: true,
+    });
+    expect(result.stderr).toContain('type="module"');
+    expect(requests).toHaveLength(0);
+  });
+
+  it("accepts an allowlisted same-origin regular mermaid <script src> in the body", async () => {
+    const recipe = writeRecipe("mermaid", {
+      mutate: (r) => {
+        r.artifact.level = 1;
+      },
+      body: '<main class="oa-prose"><pre class="mermaid">flowchart LR\nA-->B</pre><script src="/vendor/mermaid.runtime.js"></script></main>\n',
     });
     const result = await run(["validate", recipe.recipePath]);
     expect(result.code).toBe(0);
