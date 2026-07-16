@@ -225,27 +225,28 @@ const COMMENTS_CSS = `
 @media (hover:hover) and (pointer:fine){.oa-cm-drawer .oa-cm-close:hover{opacity:1;border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 25%)}}
 .oa-cm-list{flex:1;min-height:0;overflow-y:auto;margin:.5rem 1rem .75rem;padding:.2rem;border:1px solid var(--oa-border);border-radius:10px;background:var(--oa-surface);display:flex;flex-direction:column}
 .oa-cm-empty{color:var(--oa-muted);font-size:.85rem;text-align:center;margin:2rem 1rem}
-.oa-cm-item{position:relative;display:flex;gap:.55rem;align-items:flex-start;padding:.55rem .55rem .55rem .5rem;border-radius:6px;transition:background .1s}
+.oa-cm-item{position:relative;padding:.55rem .65rem;border-radius:6px;transition:background .1s}
 .oa-cm-item+.oa-cm-item{border-top:1px solid color-mix(in oklab,var(--oa-border),transparent 45%)}
 @media (hover:hover) and (pointer:fine){.oa-cm-item:hover{background:color-mix(in oklab,var(--oa-fg),transparent 94%)}}
-.oa-cm-item .oa-cm-main{flex:1;min-width:0}
 .oa-cm-item .oa-cm-meta{display:flex;gap:.4rem;align-items:center;margin-bottom:.15rem;min-height:1.25rem}
 .oa-cm-item .oa-cm-author{font-size:.8rem;font-weight:600;color:var(--oa-fg)}
 .oa-cm-item .oa-cm-anon{font-size:.8rem;font-weight:500;color:var(--oa-muted)}
-.oa-cm-item .oa-cm-time{font-size:.72rem;color:var(--oa-muted);margin-left:auto;flex-shrink:0}
+/* Trailing cluster: time + done + more, pushed right as a group. */
+.oa-cm-item .oa-cm-trail{display:inline-flex;align-items:center;gap:.25rem;margin-left:auto;flex-shrink:0}
+.oa-cm-item .oa-cm-time{font-size:.72rem;color:var(--oa-muted);flex-shrink:0}
 .oa-cm-item .oa-cm-text{font-size:.875rem;line-height:1.5;color:var(--oa-fg);white-space:pre-wrap;word-break:break-word}
 .oa-cm-item[data-done] .oa-cm-text{color:var(--oa-muted);text-decoration:line-through;text-decoration-thickness:1px}
 .oa-cm-item[data-done] .oa-cm-author,.oa-cm-item[data-done] .oa-cm-anon{color:var(--oa-muted)}
-/* Circle + check: open for every viewer. */
-.oa-cm-done{flex-shrink:0;width:20px;height:20px;margin-top:.15rem;padding:0;border-radius:50%;border:1.5px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 18%);background:transparent;color:transparent;display:grid;place-items:center;cursor:pointer;transition:border-color .12s,background .12s,color .12s,box-shadow .12s}
-.oa-cm-done svg{width:11px;height:11px;display:block}
+/* Circle + check next to time. Empty: muted ring + faint check; done: filled accent. */
+.oa-cm-done{flex-shrink:0;width:18px;height:18px;padding:0;border-radius:50%;border:1.5px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 28%);background:transparent;color:color-mix(in oklab,var(--oa-muted),transparent 35%);display:grid;place-items:center;cursor:pointer;transition:border-color .12s,background .12s,color .12s,box-shadow .12s}
+.oa-cm-done svg{width:10px;height:10px;display:block}
 .oa-cm-done[aria-pressed="true"]{background:var(--oa-accent);border-color:var(--oa-accent);color:var(--oa-accent-on)}
 .oa-cm-done:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
-@media (hover:hover) and (pointer:fine){.oa-cm-done:hover{border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 40%)}.oa-cm-done[aria-pressed="true"]:hover{background:color-mix(in oklab,var(--oa-accent),var(--oa-fg) 10%)}}
+@media (hover:hover) and (pointer:fine){.oa-cm-done:hover{border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 50%);color:var(--oa-muted)}.oa-cm-done[aria-pressed="true"]:hover{background:color-mix(in oklab,var(--oa-accent),var(--oa-fg) 10%);color:var(--oa-accent-on)}}
 /* Three-dot menu — holds Delete (when the browser holds a delete token). */
 .oa-cm-actions{position:relative;flex-shrink:0}
-.oa-cm-more{width:24px;height:24px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--oa-muted);display:grid;place-items:center;cursor:pointer;opacity:.7;transition:opacity .12s,background .12s,color .12s}
-.oa-cm-more svg{width:14px;height:14px;display:block}
+.oa-cm-more{width:22px;height:22px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--oa-muted);display:grid;place-items:center;cursor:pointer;opacity:.7;transition:opacity .12s,background .12s,color .12s}
+.oa-cm-more svg{width:13px;height:13px;display:block}
 .oa-cm-more:focus-visible{outline:none;box-shadow:var(--oa-focus-ring);opacity:1}
 @media (hover:hover) and (pointer:fine){.oa-cm-more{opacity:0}.oa-cm-item:hover .oa-cm-more,.oa-cm-more[aria-expanded="true"]{opacity:1}.oa-cm-more:hover{background:color-mix(in oklab,var(--oa-fg),transparent 92%);color:var(--oa-fg)}}
 .oa-cm-menu{position:absolute;top:100%;right:0;z-index:2;min-width:7.5rem;padding:.25rem;border:1px solid var(--oa-border);border-radius:8px;background:var(--oa-bg);box-shadow:0 4px 16px -4px rgba(0,0,0,.18),0 12px 28px -12px rgba(0,0,0,.22)}
@@ -406,7 +407,7 @@ function commentsDrawerHtml(
           const who = c.author
             ? `<span class="oa-cm-author">${escapeHtml(c.author)}</span>`
             : '<span class="oa-cm-anon">anonymous</span>';
-          return `<div class="oa-cm-item"${done} data-id="${escapeHtml(c.id)}"><button class="oa-cm-done" type="button" aria-pressed="${pressed}" aria-label="${c.done ? "Mark not done" : "Mark done"}">${DONE_CHECK_SVG}</button><div class="oa-cm-main"><div class="oa-cm-meta">${who}<span class="oa-cm-time">${escapeHtml(c.createdAt)}</span></div><div class="oa-cm-text">${escapeHtml(c.body)}</div></div></div>`;
+          return `<div class="oa-cm-item"${done} data-id="${escapeHtml(c.id)}"><div class="oa-cm-meta">${who}<span class="oa-cm-trail"><span class="oa-cm-time">${escapeHtml(c.createdAt)}</span><button class="oa-cm-done" type="button" aria-pressed="${pressed}" aria-label="${c.done ? "Mark not done" : "Mark done"}">${DONE_CHECK_SVG}</button></span></div><div class="oa-cm-text">${escapeHtml(c.body)}</div></div>`;
         })
         .join("")
     : '<p class="oa-cm-empty">No comments yet.</p>';
@@ -1321,13 +1322,6 @@ const HOST_UI_SCRIPT = `
   function itemEl(cm){
     var item=document.createElement("div");item.className="oa-cm-item";item.setAttribute("data-id",cm.id);
     if(cm.done)item.setAttribute("data-done","");
-    var doneBtn=document.createElement("button");
-    doneBtn.type="button";doneBtn.className="oa-cm-done";
-    doneBtn.setAttribute("aria-pressed",cm.done?"true":"false");
-    doneBtn.setAttribute("aria-label",cm.done?"Mark not done":"Mark done");
-    doneBtn.innerHTML=${jsonForInlineScript(DONE_CHECK_SVG)};
-    doneBtn.addEventListener("click",function(e){e.stopPropagation();toggleDone(cm.id)});
-    var main=document.createElement("div");main.className="oa-cm-main";
     var meta=document.createElement("div");meta.className="oa-cm-meta";
     var who=document.createElement("span");
     if(cm.author){who.className="oa-cm-author";who.textContent=cm.author}else{who.className="oa-cm-anon";who.textContent="anonymous"}
@@ -1337,8 +1331,16 @@ const HOST_UI_SCRIPT = `
       if(av!==vv){var tag=document.createElement("span");tag.className="oa-cm-tag";tag.textContent="\\u00b7 v"+av;meta.appendChild(tag);}
       if(orphans[cm.id]){var det=document.createElement("span");det.className="oa-cm-detached";det.textContent="detached";meta.appendChild(det)}
     }
+    var trail=document.createElement("span");trail.className="oa-cm-trail";
     var time=document.createElement("span");time.className="oa-cm-time";time.textContent=relTime(cm.createdAt);time.title=cm.createdAt||"";
-    meta.appendChild(time);
+    trail.appendChild(time);
+    var doneBtn=document.createElement("button");
+    doneBtn.type="button";doneBtn.className="oa-cm-done";
+    doneBtn.setAttribute("aria-pressed",cm.done?"true":"false");
+    doneBtn.setAttribute("aria-label",cm.done?"Mark not done":"Mark done");
+    doneBtn.innerHTML=${jsonForInlineScript(DONE_CHECK_SVG)};
+    doneBtn.addEventListener("click",function(e){e.stopPropagation();toggleDone(cm.id)});
+    trail.appendChild(doneBtn);
     if(getToken(cm.id)){
       var actions=document.createElement("div");actions.className="oa-cm-actions";
       var more=document.createElement("button");more.type="button";more.className="oa-cm-more";
@@ -1355,11 +1357,11 @@ const HOST_UI_SCRIPT = `
         if(open){menu.removeAttribute("hidden");more.setAttribute("aria-expanded","true")}
         else{menu.setAttribute("hidden","");more.setAttribute("aria-expanded","false")}
       });
-      actions.appendChild(more);actions.appendChild(menu);meta.appendChild(actions);
+      actions.appendChild(more);actions.appendChild(menu);trail.appendChild(actions);
     }
+    meta.appendChild(trail);
     var text=document.createElement("div");text.className="oa-cm-text";text.textContent=cm.body;
-    main.appendChild(meta);main.appendChild(text);
-    item.appendChild(doneBtn);item.appendChild(main);
+    item.appendChild(meta);item.appendChild(text);
     return item;
   }
   function renderList(){if(!list)return;list.textContent="";
