@@ -75,6 +75,10 @@ describe("frame document carries the text-highlight runtime", () => {
     ).text();
     expect(html).toContain("::highlight(oa-cm)");
     expect(html).toContain("CSS.highlights.set('oa-cm'");
+    // Notion-style selection chip: appear on select, open compose on click.
+    expect(html).toContain(".oa-cm-sel");
+    expect(html).toContain("Comment on selection");
+    expect(html).toContain("showBubble");
     // Orphan ids are reported to the host drawer (REQ-010).
     expect(html).toContain("type:'oa:orphans'");
     // The matcher source was injected verbatim.

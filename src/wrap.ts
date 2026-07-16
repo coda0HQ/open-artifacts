@@ -920,8 +920,15 @@ const FRAME_ANCHOR_SCRIPT = `
 
 // Text-range highlight via the CSS Custom Highlight API — no DOM mutation of
 // the untrusted author content. A restrained accent tint reads in both themes.
+// Selection bubble (.oa-cm-sel) is the Notion-style "Comment" chip that appears
+// after a text selection so the user can start a comment without arming first.
 const FRAME_TEXT_CSS = `
 ::highlight(oa-cm){background-color:color-mix(in oklab,var(--oa-accent),transparent 72%)}
+.oa-cm-sel{position:fixed;z-index:2147483647;display:inline-flex;align-items:center;gap:.35rem;padding:.28rem .55rem .28rem .45rem;border-radius:7px;border:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 8%);background:var(--oa-bg);color:var(--oa-fg);font:inherit;font-size:.78rem;font-weight:600;line-height:1;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.06),0 6px 16px -6px rgba(0,0,0,.22);transform:translate(-50%,.4rem);opacity:.98;transition:border-color .12s,background .12s,opacity .12s}
+.oa-cm-sel svg{display:block;width:14px;height:14px;flex-shrink:0}
+.oa-cm-sel:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+.oa-cm-sel:active{transform:translate(-50%,.4rem) translateY(1px)}
+@media (hover:hover) and (pointer:fine){.oa-cm-sel:hover{border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 28%)}}
 `;
 
 // Frame side, normal-page mode: capture a text selection into a quote selector
@@ -929,6 +936,10 @@ const FRAME_TEXT_CSS = `
 // the live document text. No-op on canvas documents (pins handle those). The
 // pure matcher is injected verbatim from src/anchor.ts so tests pin its
 // behaviour to the exact code that runs here.
+//
+// Notion-style selection UX: any non-empty text selection shows a floating
+// "Comment" chip at the selection. Clicking it posts oa:anchor:new so the host
+// opens compose. Armed mode still skips the chip and opens compose immediately.
 const FRAME_TEXT_SCRIPT = `
 (function(){
   if(document.querySelector('.oa-plane'))return;
@@ -938,6 +949,7 @@ const FRAME_TEXT_SCRIPT = `
   var __name=function(f){return f};
   var buildTextAnchor=${buildTextAnchor.toString()};
   var reAnchor=${reAnchor.toString()};
+  var SEL_ICON=${jsonForInlineScript(COMMENT_SVG)};
   // Walk only rendered text — skip SCRIPT/STYLE so injected code never counts
   // toward offsets. All three walkers share this filter so offsets are consistent.
   function walker(){
@@ -950,8 +962,26 @@ const FRAME_TEXT_SCRIPT = `
     var w=walker();var s="",n;while((n=w.nextNode()))s+=n.textContent;return s;
   }
   function offsetOf(node,off){
-    var w=walker();var total=0,n;while((n=w.nextNode())){if(n===node)return total+off;total+=n.textContent.length;}
-    return total;
+    // Element containers (e.g. selection starts at a <p>): map to the first/last
+    // text offset inside that subtree so multi-element ranges still work.
+    if(node.nodeType!==3){
+      var w=walker(),total=0,n,inside=false,acc=0;
+      while((n=w.nextNode())){
+        var p=n;var hit=false;
+        while(p){if(p===node){hit=true;break}p=p.parentNode}
+        if(hit){
+          if(!inside){inside=true;if(off===0)return total}
+          acc+=n.textContent.length;
+          if(off>0&&acc>=off)return total+n.textContent.length-(acc-off);
+        }else if(inside){
+          return total;
+        }
+        total+=n.textContent.length;
+      }
+      return total;
+    }
+    var w2=walker();var total2=0,n2;while((n2=w2.nextNode())){if(n2===node)return total2+off;total2+=n2.textContent.length;}
+    return total2;
   }
   function rangeOf(start,end){
     var w=walker();
@@ -964,20 +994,64 @@ const FRAME_TEXT_SCRIPT = `
     }
     return startSet?range:null;
   }
-  document.addEventListener('mouseup',function(){
-    if(!window.__oaArmed)return;
+  var bubble=null;
+  function hideBubble(){if(bubble){bubble.remove();bubble=null}}
+  function postNew(anchor,point){
+    hideBubble();
+    if(window.__oaSend)window.__oaSend({type:'oa:anchor:new',anchor:anchor,point:point});
+  }
+  function showBubble(rect,anchor,point){
+    hideBubble();
+    bubble=document.createElement('button');
+    bubble.type='button';bubble.className='oa-cm-sel';
+    bubble.setAttribute('aria-label','Comment on selection');
+    bubble.innerHTML=SEL_ICON+'<span>Comment</span>';
+    var x=rect.left+rect.width/2,y=rect.bottom;
+    // Keep the chip inside the frame viewport.
+    x=Math.max(48,Math.min(x,window.innerWidth-48));
+    y=Math.max(0,Math.min(y,window.innerHeight-40));
+    bubble.style.left=x+'px';bubble.style.top=y+'px';
+    // mousedown preventDefault keeps the selection from collapsing before click.
+    bubble.addEventListener('mousedown',function(e){e.preventDefault();e.stopPropagation()});
+    bubble.addEventListener('click',function(e){
+      e.preventDefault();e.stopPropagation();
+      postNew(anchor,point);
+      var s=window.getSelection();if(s)s.removeAllRanges();
+    });
+    document.documentElement.appendChild(bubble);
+  }
+  function captureSelection(){
     var sel=window.getSelection();
-    if(!sel||sel.isCollapsed||sel.rangeCount===0)return;
+    if(!sel||sel.isCollapsed||sel.rangeCount===0){hideBubble();return}
     var r=sel.getRangeAt(0);
-    if(r.startContainer.nodeType!==3||r.endContainer.nodeType!==3)return;
     var start=offsetOf(r.startContainer,r.startOffset);
     var end=offsetOf(r.endContainer,r.endOffset);
-    if(end<=start)return;
-    window.__oaArmed=null;
+    if(end<=start){hideBubble();return}
+    // Ignore pure-whitespace selections (accidental double-clicks on gaps).
+    if(!fullText().slice(start,end).trim()){hideBubble();return}
     var anchor=buildTextAnchor(fullText(),start,end,window.__oaViewedVersion||1);
     var rect=r.getBoundingClientRect();
-    if(window.__oaSend)window.__oaSend({type:'oa:anchor:new',anchor:anchor,point:{x:rect.left+rect.width/2,y:rect.bottom}});
+    var point={x:rect.left+rect.width/2,y:rect.bottom};
+    if(window.__oaArmed){
+      window.__oaArmed=null;
+      if(typeof window.__oaOnArm==='function')window.__oaOnArm(null);
+      postNew(anchor,point);
+      return;
+    }
+    showBubble(rect,anchor,point);
+  }
+  document.addEventListener('mouseup',function(e){
+    // Don't re-open the bubble when the user is clicking it.
+    if(bubble&&bubble.contains(e.target))return;
+    // Defer so the browser finishes updating the selection after mouseup.
+    setTimeout(captureSelection,0);
   });
+  document.addEventListener('selectionchange',function(){
+    var sel=window.getSelection();
+    if(!sel||sel.isCollapsed)hideBubble();
+  });
+  document.addEventListener('scroll',hideBubble,true);
+  document.addEventListener('keydown',function(e){if(e.key==='Escape')hideBubble()});
   window.__oaRenderMarkers=function(list){
     if(!window.CSS||!CSS.highlights||typeof Highlight==='undefined')return;
     var run=function(){
