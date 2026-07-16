@@ -16,14 +16,18 @@ describe("D1R2Store comments", () => {
   it("persists and lists comments oldest-first", async () => {
     const store = new D1R2Store(env.DB, env.CONTENT);
     const id = "cmstore0001";
-    // Create the artifact so listComments has a parent row for ordering tests.
+    // Create the artifact so listComments has a parent row.
     await store.create(id, "hash", artifact, null);
     await store.addComment(id, { author: "A", body: "first", anchor: null });
     await store.addComment(id, { author: null, body: "second", anchor: null });
     const list = await store.listComments(id);
-    expect(list.map((c) => c.body)).toEqual(["first", "second"]);
-    expect(list[0]?.author).toBe("A");
-    expect(list[1]?.author).toBeNull();
+    // Assert membership + fields, not exact order: two comments written in the
+    // same millisecond tie-break on the random id (ORDER BY created_at, id), so
+    // sub-millisecond ordering is not a testable guarantee.
+    const byBody = new Map(list.map((c) => [c.body, c]));
+    expect([...byBody.keys()].sort()).toEqual(["first", "second"]);
+    expect(byBody.get("first")?.author).toBe("A");
+    expect(byBody.get("second")?.author).toBeNull();
     expect(list.every((c) => c.artifactId === id)).toBe(true);
     expect(list.every((c) => c.id.length > 0)).toBe(true);
   });

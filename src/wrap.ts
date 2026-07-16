@@ -377,7 +377,7 @@ const LAYOUT_SCRIPT = `
 // frame's top edge at the viewport top, sliding it under the header instead
 // of starting beneath it.
 const HOST_FRAME_CSS = `
-#oa-frame{position:fixed;top:var(--oa-header-h);inset-inline:0;bottom:0;width:100%;border:0}
+#oa-frame{position:fixed;top:var(--oa-header-h);inset-inline:0;bottom:0;width:100%;height:calc(100dvh - var(--oa-header-h));border:0}
 `;
 
 export interface FrameDocumentOptions {
