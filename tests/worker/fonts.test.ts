@@ -81,11 +81,15 @@ describe("web-font surface — opt-in flag is set in wrangler.jsonc", () => {
     // deliberately withheld here (frameSandbox), unlike the general
     // contentSecurityPolicy({sandbox:true, webFonts:true}) default.
     expect(csp).not.toContain("allow-same-origin");
+    // Opaque frames: 'self' would not match the worker host, so the CSP
+    // stamps the real response origin for the same-origin /fonts proxy.
     expect(csp).toMatch(
-      /font-src 'self' data: cdn\.fontshare\.com fonts\.gstatic\.com/,
+      /font-src http:\/\/artifacts\.test data: cdn\.fontshare\.com fonts\.gstatic\.com/,
     );
     expect(csp).toMatch(
-      /style-src 'self' 'unsafe-inline' fonts\.googleapis\.com/,
+      /style-src http:\/\/artifacts\.test 'unsafe-inline' fonts\.googleapis\.com/,
     );
+    // 'self' alone must not be the only same-host source on an opaque frame.
+    expect(csp).not.toMatch(/font-src 'self'/);
   });
 });

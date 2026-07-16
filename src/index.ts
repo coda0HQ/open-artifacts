@@ -227,6 +227,9 @@ app.get("/a/:id/frame", async (c) => {
       // R1: the artifact frame must never become same-origin with the
       // privileged host page, even when webFonts is on.
       frameSandbox: true,
+      // Opaque-origin frames cannot use CSP 'self' for the /fonts proxy —
+      // pass the real response origin so same-host font CSS/bytes still load.
+      origin: new URL(c.req.url).origin,
     }),
   });
 });

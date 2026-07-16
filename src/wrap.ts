@@ -45,10 +45,12 @@ function escapeInlineScript(source: string): string {
 // localStorage/cookies, and an artifact can pull fonts from the allowlisted
 // CDNs (passive font bytes, not executable). Default (webFonts=false) keeps the
 // strict opaque-origin sandbox and font-src/script-src of a self-hosted deploy.
-const WEB_FONT_CSP = {
-  fontSrc: "'self' data: cdn.fontshare.com fonts.gstatic.com",
-  styleSrc: "'self' 'unsafe-inline' fonts.googleapis.com",
-  scriptSrc: "'self' 'unsafe-inline' cdn.jsdelivr.net",
+// Font CDN hosts always work by host match. The same-origin /fonts proxy and
+// 'self' need special handling for opaque frames (see contentSecurityPolicy).
+const WEB_FONT_CDN = {
+  fontHosts: "data: cdn.fontshare.com fonts.gstatic.com",
+  styleHosts: "'unsafe-inline' fonts.googleapis.com",
+  scriptHosts: "'unsafe-inline' cdn.jsdelivr.net",
 };
 export function contentSecurityPolicy(options: {
   sandbox: boolean;
@@ -57,18 +59,27 @@ export function contentSecurityPolicy(options: {
   // The artifact frame (GET /a/:id/frame) must never become same-origin with
   // the privileged host page (R1) — allow-same-origin on a sandboxed frame
   // grants it the response URL's origin, which would let it read the host
-  // page's localStorage/cookies across the air-gap. Web-font CSP directives
-  // (style-src/font-src/script-src) still widen so fonts load as ordinary
-  // cross-origin subresources; only the sandbox token is affected.
+  // page's localStorage/cookies across the air-gap.
   frameSandbox?: boolean;
+  // Absolute origin of the response URL (e.g. https://coda0.com). Required for
+  // frameSandbox+webFonts: an opaque-origin document's CSP 'self' does not
+  // match the worker host, so the same-origin /fonts/<slug> proxy would be
+  // blocked. Passing the real origin lets those subresources load as
+  // cross-origin-from-opaque while the sandbox token stays strict.
+  origin?: string;
 }): string {
   const webFonts = options.webFonts === true;
+  const opaqueFrame = options.sandbox && options.frameSandbox === true;
+  // Prefer an explicit origin for opaque frames; fall back to 'self' only for
+  // non-opaque sandboxes (legacy webFonts+allow-same-origin path).
+  const selfSrc =
+    opaqueFrame && options.origin ? options.origin : "'self'";
   const directives = [
     "default-src 'none'",
-    `script-src ${webFonts ? WEB_FONT_CSP.scriptSrc : "'unsafe-inline'"}`,
-    `style-src ${webFonts ? WEB_FONT_CSP.styleSrc : "'unsafe-inline'"}`,
+    `script-src ${webFonts ? `${selfSrc} ${WEB_FONT_CDN.scriptHosts}` : "'unsafe-inline'"}`,
+    `style-src ${webFonts ? `${selfSrc} ${WEB_FONT_CDN.styleHosts}` : "'unsafe-inline'"}`,
     "img-src data: blob:",
-    `font-src ${webFonts ? WEB_FONT_CSP.fontSrc : "data:"}`,
+    `font-src ${webFonts ? `${selfSrc} ${WEB_FONT_CDN.fontHosts}` : "data:"}`,
     "media-src data: blob:",
     "connect-src 'none'",
     "form-action 'none'",
@@ -88,6 +99,7 @@ export function userContentHeaders(options: {
   contentType: string;
   webFonts?: boolean;
   frameSandbox?: boolean;
+  origin?: string;
 }): Headers {
   return new Headers({
     "content-type": options.contentType,
@@ -95,6 +107,7 @@ export function userContentHeaders(options: {
       sandbox: options.sandbox,
       webFonts: options.webFonts,
       frameSandbox: options.frameSandbox,
+      origin: options.origin,
     }),
     "x-content-type-options": "nosniff",
     "referrer-policy": "no-referrer",

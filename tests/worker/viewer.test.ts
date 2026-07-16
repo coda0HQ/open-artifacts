@@ -151,9 +151,13 @@ describe("GET /a/:id (plain HTML) — host page", () => {
     const csp = res.headers.get("content-security-policy") ?? "";
     expect(csp).toContain("sandbox allow-scripts");
     expect(csp).toContain("default-src 'none'");
-    expect(csp).toContain("script-src 'self' 'unsafe-inline' cdn.jsdelivr.net");
+    // Opaque frame: CSP stamps the real response origin (not 'self') so the
+    // same-host /fonts proxy still loads under frameSandbox.
     expect(csp).toContain(
-      "style-src 'self' 'unsafe-inline' fonts.googleapis.com",
+      "script-src http://artifacts.test 'unsafe-inline' cdn.jsdelivr.net",
+    );
+    expect(csp).toContain(
+      "style-src http://artifacts.test 'unsafe-inline' fonts.googleapis.com",
     );
     expect(csp).toContain("img-src data: blob:");
     expect(csp).toContain("connect-src 'none'");
