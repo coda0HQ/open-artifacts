@@ -1,6 +1,5 @@
 import { exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
-import { bridgeRoute } from "../../src/wrap";
 
 const BASE = "http://artifacts.test";
 
@@ -23,43 +22,17 @@ async function createArtifact(
   return (await res.json()) as { id: string };
 }
 
-describe("bridgeRoute — fixed route table", () => {
-  it("maps list and create to the artifact comments path", () => {
-    expect(bridgeRoute("comments:list", "art_1")).toEqual({
-      method: "GET",
-      path: "/api/artifacts/art_1/comments",
-    });
-    expect(bridgeRoute("comments:create", "art_1")).toEqual({
-      method: "POST",
-      path: "/api/artifacts/art_1/comments",
-    });
-  });
-
-  it("maps delete only with an id-shaped commentId", () => {
-    expect(bridgeRoute("comments:delete", "art_1", "abc123")).toEqual({
-      method: "DELETE",
-      path: "/api/artifacts/art_1/comments/abc123",
-    });
-    expect(bridgeRoute("comments:delete", "art_1", "../../evil")).toBeNull();
-    expect(bridgeRoute("comments:delete", "art_1")).toBeNull();
-  });
-
-  it("returns null for unknown or empty types", () => {
-    expect(bridgeRoute("evil:exfiltrate", "art_1")).toBeNull();
-    expect(bridgeRoute("", "art_1")).toBeNull();
-  });
-
-  it("never yields a path outside the artifact's own comments", () => {
-    for (const type of [
-      "comments:list",
-      "comments:create",
-      "comments:delete",
-      "anything",
-    ]) {
-      const r = bridgeRoute(type, "art_1", "c1");
-      if (r !== null) {
-        expect(r.path.startsWith("/api/artifacts/art_1/comments")).toBe(true);
-      }
+describe("the frame cannot drive a host request", () => {
+  it("builds every request URL from the serve-time id, never from a message", async () => {
+    const { id } = await createArtifact();
+    const host = await (await exports.default.fetch(`${BASE}/a/${id}`)).text();
+    // The host's only comment endpoints are literals built from its own ID.
+    expect(host).toContain('"/api/artifacts/"+ID+"/comments"');
+    expect(host).toContain('"/api/artifacts/"+ID+"/comments/"+id');
+    // No message field ever reaches fetch — no url, method, path, or endpoint
+    // is read off msg, so the bridge cannot be turned into an open proxy.
+    for (const field of ["url", "method", "path", "endpoint", "headers"]) {
+      expect(host).not.toContain(`msg.${field}`);
     }
   });
 });
