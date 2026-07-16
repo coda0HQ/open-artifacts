@@ -18,7 +18,7 @@ import {
   sha256Hex,
   timingSafeEqual,
 } from "./tokens";
-import { userContentHeaders } from "./wrap";
+import { generateNonce, userContentHeaders } from "./wrap";
 
 export type Bindings = Env & {
   CREATE_TOKEN?: string;
@@ -334,6 +334,7 @@ api.get("/artifacts/:id/raw", async (c) => {
     const headers = userContentHeaders({
       sandbox: true,
       contentType: "application/json",
+      nonce: generateNonce(),
     });
     return new Response(
       JSON.stringify({
@@ -351,6 +352,7 @@ api.get("/artifacts/:id/raw", async (c) => {
   const headers = userContentHeaders({
     sandbox: true,
     contentType: "text/plain; charset=utf-8",
+    nonce: generateNonce(),
   });
   return new Response(content.body, { headers });
 });

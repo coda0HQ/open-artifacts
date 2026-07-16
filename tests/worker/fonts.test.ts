@@ -81,5 +81,12 @@ describe("web-font surface — opt-in flag is set in wrangler.jsonc", () => {
     expect(csp).toMatch(
       /style-src 'self' 'unsafe-inline' fonts\.googleapis\.com/,
     );
+    // Opt-in script-src: nonce-only with 'self' (same-origin /vendor/...
+    // runtime bundles), no external host, no 'unsafe-inline', no
+    // 'strict-dynamic' (issue #11 — rework to self-hosted mermaid).
+    expect(csp).toMatch(/script-src 'self' 'nonce-[^']+'/);
+    expect(csp).not.toContain("cdn.jsdelivr.net");
+    expect(csp).not.toContain("'strict-dynamic'");
+    expect(csp).not.toContain("'unsafe-inline' cdn.jsdelivr.net");
   });
 });
