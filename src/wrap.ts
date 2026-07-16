@@ -230,7 +230,7 @@ const COMMENTS_CSS = `
 .oa-cm-row:focus-within{border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 22%)}
 .oa-cm-body{flex:1;min-width:0;border:0;background:none;resize:none;color:var(--oa-fg);font:inherit;font-size:.9rem;line-height:1.45;padding:.5rem 0;max-height:8rem;overflow-y:auto}
 .oa-cm-body:focus{outline:none}
-.oa-cm-send{flex-shrink:0;width:32px;height:32px;border-radius:50%;border:0;display:grid;place-items:center;background:var(--oa-surface);color:var(--oa-muted);cursor:default;transition:background .13s,color .13s,transform .1s}
+.oa-cm-send{flex-shrink:0;width:32px;height:32px;border-radius:50%;border:0;display:grid;place-items:center;background:color-mix(in oklab,var(--oa-fg),var(--oa-bg) 80%);color:var(--oa-muted);cursor:default;transition:background .13s,color .13s,transform .1s}
 .oa-cm-send svg{width:16px;height:16px}
 .oa-cm-send[data-ready]{background:var(--oa-accent);color:var(--oa-accent-on);cursor:pointer}
 .oa-cm-send:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
