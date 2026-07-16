@@ -33,6 +33,14 @@ export interface ArtifactStore {
   findByChannel(channelHash: string): Promise<ArtifactRecord | null>;
   listVersions(id: string): Promise<VersionMeta[]>;
   getContent(id: string, version: number): Promise<StoredContent | null>;
+  // Authoritative per-version encrypted flag without reading the ≤4 MiB body.
+  // The versions-table flag can be stale on legacy mixed-encryption artifacts
+  // (the ensureSchema backfill stamps it from the artifact's current state),
+  // so the host route reads R2 object metadata instead.
+  getContentMeta(
+    id: string,
+    version: number,
+  ): Promise<{ encrypted: boolean } | null>;
   update(
     record: ArtifactRecord,
     input: UpdateInput,
@@ -382,6 +390,18 @@ export class D1R2Store implements ArtifactStore {
       };
     }
     return { body, encrypted: null };
+  }
+
+  async getContentMeta(
+    id: string,
+    version: number,
+  ): Promise<{ encrypted: boolean } | null> {
+    // head() returns the R2 object's metadata without streaming the body —
+    // the authoritative per-version encrypted flag, which the versions-table
+    // flag is not on legacy mixed-encryption artifacts.
+    const object = await this.bucket.head(contentKey(id, version));
+    if (object === null) return null;
+    return { encrypted: object.customMetadata?.encrypted === "1" };
   }
 
   async update(

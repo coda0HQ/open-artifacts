@@ -141,11 +141,21 @@ async function resolveRecord(
   if (viewed === undefined) {
     return { ok: false, status: 404, badVersion: false };
   }
+  // The encrypted flag is read from R2 object metadata, NOT the versions-table
+  // row: the ensureSchema backfill stamps legacy rows from the artifact's
+  // current state, so on a mixed-encryption artifact an older encrypted
+  // version's row can read `false` and the host would render a plain shell
+  // whose frame then 404s — un-unlockable. R2 metadata is authoritative per
+  // version (head() fetches only metadata, not the ≤4 MiB body).
+  const meta = await store.getContentMeta(record.id, version);
+  if (meta === null) {
+    return { ok: false, status: 404, badVersion: false };
+  }
   return {
     ok: true,
     record,
     version,
-    encrypted: viewed.encrypted,
+    encrypted: meta.encrypted,
     versions,
   };
 }

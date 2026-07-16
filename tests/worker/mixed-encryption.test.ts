@@ -1,4 +1,4 @@
-import { exports } from "cloudflare:workers";
+import { env, exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
 const BASE = "http://artifacts.test";
@@ -132,5 +132,40 @@ describe("mixed encryption across versions", () => {
       await exports.default.fetch(`${BASE}/api/artifacts/${created.id}/raw?v=2`)
     ).json()) as { ciphertext: string };
     expect(v2raw.ciphertext).toBe(env.content);
+  });
+
+  it("renders the unlock shell for a legacy encrypted version even when the versions-table flag is stale", async () => {
+    // Simulate a legacy mixed-encryption artifact: the artifact is currently
+    // plain, but v1's stored content is encrypted (so its R2 metadata says
+    // encrypted). The ensureSchema backfill stamps every legacy version row's
+    // `encrypted` from the artifact's CURRENT (plain) flag — so the table
+    // reads `false` while R2 truth is `true`. The host must follow R2, or it
+    // renders a plain shell whose frame 404s and the version can't be unlocked.
+    const cipher = await encrypt("<h1>Legacy secret</h1>", "pw");
+    const created = await create({
+      content: cipher.content,
+      encrypted: {
+        salt: cipher.salt,
+        iv: cipher.iv,
+        iterations: cipher.iterations,
+      },
+    });
+    // Switch the artifact's CURRENT state to plain (v2 plain), then poison the
+    // v1 version row's encrypted flag to 0 to mimic a stale backfill.
+    await put(created.id, { content: "<h1>Plain v2</h1>" }, created.writeToken);
+    await env.DB.prepare(
+      "UPDATE versions SET encrypted = 0 WHERE artifact_id = ? AND version = 1",
+    )
+      .bind(created.id)
+      .run();
+
+    const v1host = await (
+      await exports.default.fetch(`${BASE}/a/${created.id}?v=1`)
+    ).text();
+    // R2 truth wins over the stale table flag → the unlock shell, not a plain
+    // host shell pointing at a 404'ing frame.
+    expect(v1host).toContain("Password");
+    expect(v1host).toContain(cipher.salt);
+    expect(v1host).not.toContain("/frame?v=1");
   });
 });
