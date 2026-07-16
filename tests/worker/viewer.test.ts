@@ -1,6 +1,5 @@
 import { exports } from "cloudflare:workers";
-import { describe, expect, it, vi } from "vitest";
-import { D1R2Store } from "../../src/store";
+import { describe, expect, it } from "vitest";
 
 const BASE = "http://artifacts.test";
 
@@ -64,20 +63,24 @@ async function encrypt(
 }
 
 describe("GET /a/:id (plain HTML) — host page", () => {
-  it("does not read the artifact body from storage — the frame sub-route does, once", async () => {
+  it("serves the host shell without the artifact body — the frame reads it", async () => {
     const created = await create({ content: "<h1>Big payload</h1>" });
     // The host never renders the artifact body; /a/:id/frame reads it itself.
-    // Reading it here too would pull the ≤4 MiB body into worker memory only
-    // to throw it away — doubling the storage read on every plain-artifact view.
-    const spy = vi.spyOn(D1R2Store.prototype, "getContent");
-    try {
-      const res = await exports.default.fetch(`${BASE}/a/${created.id}`);
-      expect(res.status).toBe(200);
-      await res.text();
-    } finally {
-      spy.mockRestore();
-    }
-    expect(spy).not.toHaveBeenCalled();
+    // Reading it here too would pull the ≤4 MiB body into worker memory only to
+    // throw it away — doubling the storage read on every plain-artifact view.
+    // A call-count assertion is not testable in the cloudflare-workers pool: the
+    // fetch runs in a separate realm, so spies on the store prototype OR on
+    // env.CONTENT cannot observe calls made inside it. Assert the behaviour the
+    // optimization enables instead: the host page does not contain the artifact
+    // body payload, while the frame does.
+    const res = await exports.default.fetch(`${BASE}/a/${created.id}`);
+    expect(res.status).toBe(200);
+    const hostHtml = await res.text();
+    expect(hostHtml).not.toContain("<h1>Big payload</h1>");
+    const frameHtml = await (
+      await exports.default.fetch(`${BASE}/a/${created.id}/frame`)
+    ).text();
+    expect(frameHtml).toContain("<h1>Big payload</h1>");
   });
 
   it("renders the version picker from the single list resolveRecord fetched", async () => {
