@@ -224,13 +224,12 @@ const COMMENTS_CSS = `
 @media (hover:hover) and (pointer:fine){.oa-cm-drawer .oa-cm-close:hover{opacity:1;border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 25%)}}
 /* Filter — done comments are hidden under "Open" by default, so this dropdown
    is the way back to them. The trigger shares the close button's chrome and
-   sits beside it; a dot marks a filter narrower than "All". */
+   sits beside it. */
 .oa-cm-filter{position:relative;flex-shrink:0;display:flex}
 .oa-cm-filter-btn{position:relative;width:28px;height:28px;flex-shrink:0;display:grid;place-items:center;border-radius:6px;border:1px solid var(--oa-border);background:var(--oa-surface);color:var(--oa-fg);cursor:pointer;opacity:.8;transition:opacity .15s,border-color .15s,background .15s}
 .oa-cm-filter-btn svg{width:14px;height:14px;display:block}
 .oa-cm-filter-btn:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 .oa-cm-filter-btn:active{transform:translateY(1px)}
-.oa-cm-filter-btn[data-active]::after{content:"";position:absolute;top:-2px;right:-2px;width:6px;height:6px;border-radius:50%;background:var(--oa-accent);border:1px solid var(--oa-bg)}
 @media (hover:hover) and (pointer:fine){.oa-cm-filter-btn:hover{opacity:1;border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 25%)}}
 .oa-cm-filter-menu{top:calc(100% + 4px)}
 .oa-cm-filter-menu button[aria-checked="true"]{background:var(--oa-surface);color:var(--oa-fg);font-weight:600}
@@ -1477,13 +1476,8 @@ const HOST_UI_SCRIPT = `
       filter=b.getAttribute("data-filter")||"open";
       var opts=filterMenu.querySelectorAll("[data-filter]");
       for(var i=0;i<opts.length;i++)opts[i].setAttribute("aria-checked",opts[i]===b?"true":"false");
-      // Dot the trigger whenever the view is narrowed, so a filtered list is
-      // never mistaken for an empty thread.
-      if(filter==="all")filterBtn.removeAttribute("data-active");
-      else filterBtn.setAttribute("data-active","");
       closeMenus();renderList();
     });
-    filterBtn.setAttribute("data-active","");
   }
   function toFrame(){if(window.__oaToFrame)window.__oaToFrame({type:"oa:comments",list:state,viewedVersion:window.__oaViewedVersion||1})}
   function sync(){renderList();bumpCount();toFrame()}
