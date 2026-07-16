@@ -134,12 +134,18 @@ export function hostHeaders(): Headers {
   });
 }
 
+// Service chrome typeface. Host chrome and frame-injected widgets (selection
+// chip, etc.) pin to this stack so they never inherit an artifact's
+// display/serif/web font. CJK faces trail so Chinese UI copy still renders.
+const OA_FONT =
+  'system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue","PingFang SC","Hiragino Sans GB","Noto Sans CJK SC","Microsoft YaHei",sans-serif';
+
 const RESET_CSS = `
 *,*::before,*::after{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
-body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;line-height:1.5;background:var(--oa-bg);color:var(--oa-fg)}
+body{margin:0;font-family:var(--oa-font);line-height:1.5;background:var(--oa-bg);color:var(--oa-fg)}
 img,video,canvas{max-width:100%}
-:root{color-scheme:light dark;--oa-bg:#ffffff;--oa-fg:#18181b;--oa-muted:#71717a;--oa-border:#e4e4e7;--oa-surface:#f8f8f8;--oa-accent:#6457f0;--oa-accent-on:#ffffff;--oa-danger:#b42318;--oa-focus-ring:0 0 0 2px var(--oa-bg),0 0 0 4px var(--oa-accent)}
+:root{color-scheme:light dark;--oa-font:${OA_FONT};--oa-bg:#ffffff;--oa-fg:#18181b;--oa-muted:#71717a;--oa-border:#e4e4e7;--oa-surface:#f8f8f8;--oa-accent:#6457f0;--oa-accent-on:#ffffff;--oa-danger:#b42318;--oa-focus-ring:0 0 0 2px var(--oa-bg),0 0 0 4px var(--oa-accent)}
 @media (prefers-color-scheme: dark){:root{--oa-bg:#131316;--oa-fg:#e7e7ea;--oa-muted:#9a9aa2;--oa-border:#2e2e33;--oa-surface:#1c1c21;--oa-accent:#8d82f5;--oa-accent-on:#16151b;--oa-danger:#ff8f85}}
 :root[data-theme="light"]{color-scheme:light;--oa-bg:#ffffff;--oa-fg:#18181b;--oa-muted:#71717a;--oa-border:#e4e4e7;--oa-surface:#f8f8f8;--oa-accent:#6457f0;--oa-accent-on:#ffffff;--oa-danger:#b42318}
 :root[data-theme="dark"]{color-scheme:dark;--oa-bg:#131316;--oa-fg:#e7e7ea;--oa-muted:#9a9aa2;--oa-border:#2e2e33;--oa-surface:#1c1c21;--oa-accent:#8d82f5;--oa-accent-on:#16151b;--oa-danger:#ff8f85}
@@ -149,7 +155,7 @@ img,video,canvas{max-width:100%}
    need the offset. */
 :root{--oa-header-h:2.5rem}
 [id]{scroll-margin-top:calc(var(--oa-header-h) + .5rem)}
-.oa-header{position:sticky;top:0;z-index:2147483646;display:flex;align-items:center;gap:.6rem;padding:.375rem 1rem;background:color-mix(in oklab,var(--oa-bg),transparent 8%);backdrop-filter:blur(10px);border-bottom:1px solid var(--oa-border);font-size:.8rem}
+.oa-header{position:sticky;top:0;z-index:2147483646;display:flex;align-items:center;gap:.6rem;padding:.375rem 1rem;background:color-mix(in oklab,var(--oa-bg),transparent 8%);backdrop-filter:blur(10px);border-bottom:1px solid var(--oa-border);font-family:var(--oa-font);font-size:.8rem}
 .oa-header .oa-header-title{flex:1;min-width:0;font-size:.8rem;font-weight:600;line-height:1.5;letter-spacing:normal;margin:0;color:var(--oa-fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .oa-header .oa-header-title .oa-header-fav{margin-right:.4rem;font-size:1em}
 .oa-header #oa-theme-toggle{position:relative;width:28px;height:28px;border-radius:6px;border:1px solid var(--oa-border);background:var(--oa-surface);color:var(--oa-fg);font-size:13px;line-height:1;cursor:pointer;opacity:.8;transition:opacity .15s,border-color .15s,background .15s;flex-shrink:0}
@@ -192,7 +198,7 @@ const COMMENTS_CSS = `
 .oa-cm-toggle svg{display:block;width:15px;height:15px;margin:auto}
 .oa-cm-toggle .oa-cm-count{position:absolute;top:-4px;right:-4px;min-width:15px;height:15px;padding:0 3px;border-radius:8px;background:var(--oa-accent);color:#fff;font-size:9px;font-weight:600;line-height:15px;text-align:center;display:none}
 .oa-cm-toggle[data-count] .oa-cm-count{display:block}
-.oa-cm-drawer{position:fixed;top:var(--oa-header-h);right:0;height:calc(100dvh - var(--oa-header-h));width:100%;max-width:23rem;transform:translateX(100%);transition:transform .18s ease;display:flex;flex-direction:column;background:var(--oa-bg);border-left:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 6%);box-shadow:-16px 0 40px -20px rgba(0,0,0,.28);z-index:2147483645}
+.oa-cm-drawer{position:fixed;top:var(--oa-header-h);right:0;height:calc(100dvh - var(--oa-header-h));width:100%;max-width:23rem;transform:translateX(100%);transition:transform .18s ease;display:flex;flex-direction:column;background:var(--oa-bg);border-left:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 6%);box-shadow:-16px 0 40px -20px rgba(0,0,0,.28);z-index:2147483645;font-family:var(--oa-font)}
 .oa-cm-drawer[data-open]{transform:translateX(0)}
 /* Right inset matches .oa-header padding (1rem) so the close control lines up
    with the theme toggle above it, and the list card shares the same edge. */
@@ -228,15 +234,15 @@ const COMMENTS_CSS = `
 /* Compose: a single rounded pill — "Add a comment" + a circular send button
    (muted until there is text, then accent) — floating over the artifact. The
    name is a small quiet pill shown only the first time, before one is saved. */
-.oa-cm-compose{position:fixed;z-index:2147483646;width:min(22rem,calc(100vw - 1rem));display:flex;flex-direction:column;gap:.4rem}
+.oa-cm-compose{position:fixed;z-index:2147483646;width:min(22rem,calc(100vw - 1rem));display:flex;flex-direction:column;gap:.4rem;font-family:var(--oa-font)}
 .oa-cm-compose[hidden]{display:none}
 .oa-cm-compose ::placeholder{color:var(--oa-muted);opacity:1}
-.oa-cm-name{align-self:flex-start;max-width:70%;padding:.32rem .7rem;border:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 6%);border-radius:999px;background:var(--oa-bg);color:var(--oa-fg);font:inherit;font-size:.78rem;box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 2px 6px -1px rgba(0,0,0,.08),0 8px 18px -8px rgba(0,0,0,.18)}
+.oa-cm-name{align-self:flex-start;max-width:70%;padding:.32rem .7rem;border:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 6%);border-radius:999px;background:var(--oa-bg);color:var(--oa-fg);font-family:var(--oa-font);font-size:.78rem;box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 2px 6px -1px rgba(0,0,0,.08),0 8px 18px -8px rgba(0,0,0,.18)}
 .oa-cm-name[hidden]{display:none}
 .oa-cm-name:focus-visible{outline:none;border-color:var(--oa-accent);box-shadow:var(--oa-focus-ring)}
 .oa-cm-row{display:flex;align-items:center;gap:.35rem;padding:.25rem .25rem .25rem .95rem;background:var(--oa-bg);border:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 6%);border-radius:1.35rem;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 2px 6px -1px rgba(0,0,0,.08),0 14px 32px -12px rgba(0,0,0,.22)}
 .oa-cm-row:focus-within{border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 22%)}
-.oa-cm-body{flex:1;min-width:0;border:0;background:none;resize:none;color:var(--oa-fg);font:inherit;font-size:.9rem;line-height:1.45;padding:.5rem 0;max-height:8rem;overflow-y:auto}
+.oa-cm-body{flex:1;min-width:0;border:0;background:none;resize:none;color:var(--oa-fg);font-family:var(--oa-font);font-size:.9rem;line-height:1.45;padding:.5rem 0;max-height:8rem;overflow-y:auto}
 .oa-cm-body:focus{outline:none}
 .oa-cm-send{flex-shrink:0;width:32px;height:32px;border-radius:50%;border:0;display:grid;place-items:center;background:color-mix(in oklab,var(--oa-fg),var(--oa-bg) 80%);color:var(--oa-muted);cursor:default;transition:background .13s,color .13s,transform .1s}
 .oa-cm-send svg{width:16px;height:16px}
@@ -250,7 +256,7 @@ const COMMENTS_CSS = `
 .oa-cm-detached{font-style:italic}
 .oa-cm-err{display:none;margin:0 .25rem;padding:0 .2rem;color:var(--oa-danger);font-size:.75rem;font-weight:500}
 .oa-cm-err:not([hidden]){display:block}
-.oa-cm-del{display:block;width:fit-content;margin:.35rem 0 0 auto;padding:0;border:0;background:none;color:var(--oa-muted);font:inherit;font-size:.72rem;cursor:pointer;opacity:.7;transition:color .12s,opacity .12s}
+.oa-cm-del{display:block;width:fit-content;margin:.35rem 0 0 auto;padding:0;border:0;background:none;color:var(--oa-muted);font-family:var(--oa-font);font-size:.72rem;cursor:pointer;opacity:.7;transition:color .12s,opacity .12s}
 .oa-cm-del:focus-visible{outline:none;box-shadow:var(--oa-focus-ring);opacity:1;border-radius:4px}
 @media (hover:hover) and (pointer:fine){.oa-cm-del{opacity:0}.oa-cm-item:hover .oa-cm-del{opacity:.7}.oa-cm-del:hover{color:var(--oa-danger);opacity:1}}
 `;
@@ -924,7 +930,8 @@ const FRAME_ANCHOR_SCRIPT = `
 // after a text selection so the user can start a comment without arming first.
 const FRAME_TEXT_CSS = `
 ::highlight(oa-cm){background-color:color-mix(in oklab,var(--oa-accent),transparent 72%)}
-.oa-cm-sel{position:fixed;z-index:2147483647;display:inline-flex;align-items:center;gap:.35rem;padding:.28rem .55rem .28rem .45rem;border-radius:7px;border:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 8%);background:var(--oa-bg);color:var(--oa-fg);font:inherit;font-size:.78rem;font-weight:600;line-height:1;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.06),0 6px 16px -6px rgba(0,0,0,.22);transform:translate(-50%,.4rem);opacity:.98;transition:border-color .12s,background .12s,opacity .12s}
+/* font-family is pinned to --oa-font — never inherit the artifact face. */
+.oa-cm-sel{position:fixed;z-index:2147483647;display:inline-flex;align-items:center;gap:.35rem;padding:.28rem .55rem .28rem .45rem;border-radius:7px;border:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 8%);background:var(--oa-bg);color:var(--oa-fg);font-family:var(--oa-font);font-size:.78rem;font-weight:600;line-height:1;letter-spacing:-.01em;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.06),0 6px 16px -6px rgba(0,0,0,.22);transform:translate(-50%,.4rem);opacity:.98;transition:border-color .12s,background .12s,opacity .12s}
 .oa-cm-sel svg{display:block;width:14px;height:14px;flex-shrink:0}
 .oa-cm-sel:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 .oa-cm-sel:active{transform:translate(-50%,.4rem) translateY(1px)}

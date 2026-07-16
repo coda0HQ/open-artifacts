@@ -79,6 +79,9 @@ describe("frame document carries the text-highlight runtime", () => {
     expect(html).toContain(".oa-cm-sel");
     expect(html).toContain("Comment on selection");
     expect(html).toContain("showBubble");
+    // Chrome typeface — never inherit the artifact's face.
+    expect(html).toContain("font-family:var(--oa-font)");
+    expect(html).toContain("--oa-font:");
     // Orphan ids are reported to the host drawer (REQ-010).
     expect(html).toContain("type:'oa:orphans'");
     // The matcher source was injected verbatim.
