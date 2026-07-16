@@ -258,6 +258,8 @@ const COMMENTS_CSS = `
 .oa-cm-more[hidden],.oa-cm-done[hidden]{display:none}
 .oa-cm-more svg{width:14px;height:14px;display:block}
 .oa-cm-done svg{width:13px;height:13px;display:block}
+/* Shows a resolved state you are not allowed to change — readable, not clickable. */
+.oa-cm-done:disabled{cursor:default}
 .oa-cm-done[aria-pressed="true"]{color:var(--oa-accent)}
 .oa-cm-done[aria-pressed="true"] svg circle{fill:var(--oa-accent)}
 .oa-cm-done[aria-pressed="true"] svg path{stroke:var(--oa-accent-on)}
@@ -269,7 +271,7 @@ const COMMENTS_CSS = `
   .oa-cm-item:focus-within .oa-cm-more,.oa-cm-item:focus-within .oa-cm-done,
   .oa-cm-more[aria-expanded="true"],.oa-cm-more:focus-visible,.oa-cm-done:focus-visible,
   .oa-cm-done[aria-pressed="true"]{opacity:1}
-  .oa-cm-more:hover,.oa-cm-done:hover{background:color-mix(in oklab,var(--oa-fg),transparent 92%);color:var(--oa-fg)}
+  .oa-cm-more:hover,.oa-cm-done:not(:disabled):hover{background:color-mix(in oklab,var(--oa-fg),transparent 92%);color:var(--oa-fg)}
   .oa-cm-done[aria-pressed="true"]:hover{color:var(--oa-accent)}
 }
 .oa-cm-menu{position:absolute;top:100%;right:0;z-index:2;min-width:7.5rem;padding:.25rem;border:1px solid var(--oa-border);border-radius:8px;background:var(--oa-bg)}
@@ -300,7 +302,10 @@ const COMMENTS_CSS = `
 .oa-cm-name,.oa-cm-row{background:var(--oa-bg);border:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 6%);border-radius:999px}
 .oa-cm-name{align-self:flex-start;max-width:70%;padding:.32rem .7rem;color:var(--oa-fg);font-family:var(--oa-font);font-size:.78rem}
 .oa-cm-name[hidden]{display:none}
-.oa-cm-name:focus-visible{outline:none;border-color:var(--oa-accent);box-shadow:var(--oa-focus-ring)}
+/* One focus treatment for both pills: whichever holds focus takes the accent
+   border. Not the full focus ring — compose autofocuses the textarea, so a ring
+   would fire on every open; the send button keeps its ring for keyboard users. */
+.oa-cm-name:focus-within,.oa-cm-row:focus-within{outline:none;border-color:var(--oa-accent)}
 /* No :focus-within darkening: compose autofocuses the textarea, so it would
    render the row permanently darker than the name pill. The caret marks focus;
    the send button and name keep their own rings. */
@@ -1430,6 +1435,13 @@ const HOST_UI_SCRIPT = `
     doneBtn.setAttribute("aria-label",cm.done?"Mark not done":"Mark done");
     doneBtn.innerHTML=${jsonForInlineScript(DONE_CHECK_SVG)};
     doneBtn.addEventListener("click",function(e){e.stopPropagation();toggleDone(cm.id)});
+    // Only offer the control the server would honour. A done comment still
+    // shows its state to everyone, but disabled rather than silently inert;
+    // an open comment simply has no control for a viewer who cannot resolve it.
+    if(!deleteTokenFor(cm.id)){
+      if(cm.done)doneBtn.disabled=true;
+      else doneBtn.setAttribute("hidden","");
+    }
     trail.appendChild(doneBtn);
     top.appendChild(title);top.appendChild(trail);
     var byline=document.createElement("div");byline.className="oa-cm-byline";
@@ -1478,13 +1490,16 @@ const HOST_UI_SCRIPT = `
   }
   function toFrame(){if(window.__oaToFrame)window.__oaToFrame({type:"oa:comments",list:state,viewedVersion:window.__oaViewedVersion||1})}
   function sync(){renderList();bumpCount();toFrame()}
+  // Resolving hides a comment from the default view, so the server gates it like
+  // delete: the comment's own token, or the owner's write token.
   function toggleDone(id){
     var cm=null;for(var i=0;i<state.length;i++){if(state[i].id===id){cm=state[i];break}}
     if(!cm)return;
+    var tok=deleteTokenFor(id);if(!tok)return;
     var next=!cm.done;
     // Optimistic UI — roll back on failure.
     cm.done=next;renderList();bumpCount();toFrame();
-    fetch("/api/artifacts/"+ID+"/comments/"+id,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({done:next})})
+    fetch("/api/artifacts/"+ID+"/comments/"+id,{method:"PATCH",headers:{"content-type":"application/json",authorization:"Bearer "+tok},body:JSON.stringify({done:next})})
       .then(function(r){if(!r.ok)return Promise.reject(r.status)})
       .catch(function(){cm.done=!next;renderList();bumpCount();toFrame()});
   }

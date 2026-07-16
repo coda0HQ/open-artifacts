@@ -434,8 +434,32 @@ api.post("/artifacts/:id/comments", async (c) => {
   return c.json({ ...comment, deleteToken }, 201);
 });
 
-// Mark done / undone — open like create (shared artifact collaboration). Soft
-// state only; does not require the delete token.
+// Authorizes a mutation of an existing comment: the comment's own delete token
+// (the author, from this browser) or the artifact's write/channel token (owner
+// moderation). Legacy Phase-1 rows have a null delete-token hash and so are
+// owner-only. Shared by PATCH and DELETE — resolving a comment hides it from
+// the drawer's default view, so it is gated exactly like removing it.
+async function authorizeCommentMutation(
+  c: Context<{ Bindings: Env }>,
+  store: ArtifactStore,
+  artifactId: string,
+  deleteTokenHash: string | null,
+): Promise<{ ok: true } | { ok: false; status: 401 | 403; error: string }> {
+  const token = bearerToken(c);
+  if (token === null) {
+    return { ok: false, status: 401, error: "missing bearer token" };
+  }
+  const tokenHash = await sha256Hex(token);
+  const authorMatch =
+    deleteTokenHash !== null && timingSafeEqual(tokenHash, deleteTokenHash);
+  if (authorMatch) return { ok: true };
+  if ((await authorizeWrite(c, store, artifactId)).ok) return { ok: true };
+  return { ok: false, status: 403, error: "not authorized for this comment" };
+}
+
+// Mark done / undone. Not open like create: done removes a comment from the
+// drawer's default "open" view, so an unauthenticated toggle would let any
+// passer-by silently suppress a whole thread.
 api.patch("/artifacts/:id/comments/:commentId", async (c) => {
   const store = storeFrom(c);
   const id = c.req.param("id");
@@ -445,6 +469,14 @@ api.patch("/artifacts/:id/comments/:commentId", async (c) => {
   if (comment === null || comment.artifactId !== id) {
     return c.json({ error: "comment not found" }, 404);
   }
+
+  const auth = await authorizeCommentMutation(
+    c,
+    store,
+    id,
+    comment.deleteTokenHash,
+  );
+  if (!auth.ok) return c.json({ error: auth.error }, auth.status);
 
   let body: Record<string, unknown>;
   try {
@@ -471,25 +503,13 @@ api.delete("/artifacts/:id/comments/:commentId", async (c) => {
     return c.json({ error: "comment not found" }, 404);
   }
 
-  const token = bearerToken(c);
-  if (token === null) {
-    return c.json({ error: "missing bearer token" }, 401);
-  }
-
-  // Authorized either by the comment's own delete token (delete-own) or by the
-  // artifact's write/channel token (owner moderation). Legacy Phase-1 comments
-  // have a null delete-token hash and are removable only by the owner.
-  const tokenHash = await sha256Hex(token);
-  const deleteMatch =
-    comment.deleteTokenHash !== null &&
-    timingSafeEqual(tokenHash, comment.deleteTokenHash);
-  const ownerMatch = deleteMatch
-    ? false
-    : (await authorizeWrite(c, store, id)).ok;
-
-  if (!deleteMatch && !ownerMatch) {
-    return c.json({ error: "not authorized to delete this comment" }, 403);
-  }
+  const auth = await authorizeCommentMutation(
+    c,
+    store,
+    id,
+    comment.deleteTokenHash,
+  );
+  if (!auth.ok) return c.json({ error: auth.error }, auth.status);
 
   await store.deleteComment(commentId);
   return c.json({ ok: true });

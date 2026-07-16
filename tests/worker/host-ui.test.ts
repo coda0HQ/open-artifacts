@@ -162,17 +162,22 @@ describe("host page interactive UI (tasks 009/010/011)", () => {
             body: JSON.stringify({ body }),
           }),
         )
-      ).json()) as { id: string };
+      ).json()) as { id: string; deleteToken: string };
     const resolved = await post("resolve me");
     await post("still open");
-    // Resolve one of the two; the badge must render 1, not 2.
-    await exports.default.fetch(
+    // Resolve one of the two — with its own token, since done is gated — and
+    // the badge must render 1, not 2.
+    const marked = await exports.default.fetch(
       new Request(`${BASE}/api/artifacts/${id}/comments/${resolved.id}`, {
         method: "PATCH",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${resolved.deleteToken}`,
+        },
         body: JSON.stringify({ done: true }),
       }),
     );
+    expect(marked.status).toBe(200);
     const html = await (await exports.default.fetch(`${BASE}/a/${id}`)).text();
     expect(html).toContain('data-count="1"');
     expect(html).not.toContain('data-count="2"');

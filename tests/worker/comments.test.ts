@@ -341,19 +341,36 @@ describe("anchored comments", () => {
     expect(comment.anchor.anchorVersion).toBe(1);
   });
 
-  it("marks a comment done and undone via PATCH", async () => {
+  function patchDone(
+    id: string,
+    commentId: string,
+    done: boolean,
+    token?: string,
+  ): Promise<Response> {
+    return exports.default.fetch(
+      new Request(`${BASE}/api/artifacts/${id}/comments/${commentId}`, {
+        method: "PATCH",
+        headers: {
+          "content-type": "application/json",
+          ...(token ? { authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ done }),
+      }),
+    );
+  }
+
+  it("marks a comment done and undone with its delete token", async () => {
     const created = await createArtifact();
     const posted = (await (
       await postComment(created.id, { body: "resolve me" })
-    ).json()) as { id: string; done: boolean };
+    ).json()) as { id: string; done: boolean; deleteToken: string };
     expect(posted.done).toBe(false);
 
-    const mark = await exports.default.fetch(
-      new Request(`${BASE}/api/artifacts/${created.id}/comments/${posted.id}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ done: true }),
-      }),
+    const mark = await patchDone(
+      created.id,
+      posted.id,
+      true,
+      posted.deleteToken,
     );
     expect(mark.status).toBe(200);
     expect(await mark.json()).toMatchObject({ ok: true, done: true });
@@ -369,18 +386,50 @@ describe("anchored comments", () => {
     expect(html).toContain('aria-pressed="true"');
     expect(html).toContain("Mark not done");
 
-    const unmark = await exports.default.fetch(
-      new Request(`${BASE}/api/artifacts/${created.id}/comments/${posted.id}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ done: false }),
-      }),
+    const unmark = await patchDone(
+      created.id,
+      posted.id,
+      false,
+      posted.deleteToken,
     );
     expect(unmark.status).toBe(200);
     const list2 = (await (await getComments(created.id)).json()) as {
       comments: { id: string; done: boolean }[];
     };
     expect(list2.comments.find((c) => c.id === posted.id)?.done).toBe(false);
+  });
+
+  it("lets the artifact owner resolve any comment with the write token", async () => {
+    const created = await createArtifact();
+    const posted = (await (
+      await postComment(created.id, { body: "someone else's" })
+    ).json()) as { id: string };
+    const res = await patchDone(
+      created.id,
+      posted.id,
+      true,
+      created.writeToken,
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it("refuses to resolve a comment without a token (401) or with a wrong one (403)", async () => {
+    const created = await createArtifact();
+    const posted = (await (
+      await postComment(created.id, { body: "not yours to hide" })
+    ).json()) as { id: string };
+
+    // Done hides a comment from the default drawer view, so an anonymous caller
+    // must not be able to suppress a thread it does not own.
+    expect((await patchDone(created.id, posted.id, true)).status).toBe(401);
+    expect(
+      (await patchDone(created.id, posted.id, true, "wt_bogustoken")).status,
+    ).toBe(403);
+
+    const list = (await (await getComments(created.id)).json()) as {
+      comments: { id: string; done: boolean }[];
+    };
+    expect(list.comments.find((c) => c.id === posted.id)?.done).toBe(false);
   });
 
   it("accepts unanchored but rejects a text anchor on an encrypted artifact", async () => {

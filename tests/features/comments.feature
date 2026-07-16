@@ -40,12 +40,29 @@ Feature: Multi-user interaction on a shared artifact
     # the host without widening the iframe CSP.
     # Phase 3 (voice) is out of scope.
 
-  Scenario: A viewer can mark any comment done
-    Given an artifact has a persisted comment
-    When a client PATCHes the comment with done true
+  # Done hides a comment from the drawer's default view, so resolving one is as
+  # consequential as deleting it and carries the same authorization.
+
+  Scenario: The comment author can mark their own comment done
+    Given a viewer posted a comment and holds its delete token
+    When the viewer PATCHes that comment with done true using the delete token
     Then the response status is 200
     And listing the thread returns the comment with done true
     And the inlined drawer shows the done control as pressed
+
+  Scenario: The artifact owner can mark any comment done
+    Given an artifact has a comment posted by someone else
+    When the owner PATCHes it with done true using the artifact write token
+    Then the response status is 200
+
+  Scenario: A passer-by cannot resolve someone else's comment
+    Given an artifact has a comment this viewer did not post
+    When the viewer PATCHes it with done true and no bearer token
+    Then the response status is 401
+    And the comment is still not done
+    When the viewer PATCHes it with done true and a wrong token
+    Then the response status is 403
+    And the comment is still not done
 
   Scenario: Delete lives in the more menu for the comment author
     Given a viewer posted a comment and holds its delete token
