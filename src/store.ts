@@ -47,6 +47,7 @@ export interface ArtifactStore {
   getComment(
     commentId: string,
   ): Promise<{ artifactId: string; deleteTokenHash: string | null } | null>;
+  setCommentDone(commentId: string, done: boolean): Promise<boolean>;
   deleteComment(commentId: string): Promise<void>;
 }
 
@@ -105,6 +106,8 @@ const MIGRATIONS = [
   // Legacy rows read NULL for both — unanchored and owner-removable only.
   `ALTER TABLE comments ADD COLUMN anchor TEXT`,
   `ALTER TABLE comments ADD COLUMN delete_token_hash TEXT`,
+  // Soft "done" / resolved flag — open toggle for all viewers (not delete).
+  `ALTER TABLE comments ADD COLUMN done INTEGER NOT NULL DEFAULT 0`,
 ];
 
 // After the ALTERs above add columns to existing rows with empty defaults,
@@ -478,7 +481,7 @@ export class D1R2Store implements ArtifactStore {
     // would freeze on the first 100 and hide every subsequent post.
     const { results } = await this.db
       .prepare(
-        `SELECT id, artifact_id, author, body, anchor, created_at
+        `SELECT id, artifact_id, author, body, anchor, done, created_at
          FROM comments WHERE artifact_id = ?
          ORDER BY created_at DESC, id DESC LIMIT 100`,
       )
@@ -498,8 +501,8 @@ export class D1R2Store implements ArtifactStore {
     const anchorJson = input.anchor ? JSON.stringify(input.anchor) : null;
     await this.db
       .prepare(
-        `INSERT INTO comments (id, artifact_id, author, body, anchor, delete_token_hash, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO comments (id, artifact_id, author, body, anchor, delete_token_hash, done, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, 0, ?)`,
       )
       .bind(
         id,
@@ -517,6 +520,7 @@ export class D1R2Store implements ArtifactStore {
       author: input.author,
       body: input.body,
       anchor: input.anchor,
+      done: false,
       createdAt: now,
     };
   }
@@ -538,6 +542,16 @@ export class D1R2Store implements ArtifactStore {
       : null;
   }
 
+  /** Returns false if the comment row does not exist. */
+  async setCommentDone(commentId: string, done: boolean): Promise<boolean> {
+    await ensureSchema(this.db);
+    const result = await this.db
+      .prepare("UPDATE comments SET done = ? WHERE id = ?")
+      .bind(done ? 1 : 0, commentId)
+      .run();
+    return (result.meta.changes ?? 0) > 0;
+  }
+
   async deleteComment(commentId: string): Promise<void> {
     await ensureSchema(this.db);
     await this.db
@@ -553,6 +567,7 @@ interface CommentRow {
   author: string | null;
   body: string;
   anchor: string | null;
+  done: number | null;
   created_at: string;
 }
 
@@ -563,6 +578,7 @@ function toComment(row: CommentRow): CommentMeta {
     author: row.author,
     body: row.body,
     anchor: row.anchor ? (JSON.parse(row.anchor) as Anchor) : null,
+    done: row.done === 1,
     createdAt: row.created_at,
   };
 }

@@ -85,4 +85,17 @@ describe("host page interactive UI (tasks 009/010/011)", () => {
     expect(html).toContain("oa-cm-detached");
     expect(html).toContain("type:\"oa:theme\"");
   });
+
+  it("exposes done (circle-check) and three-dot more menu with delete", async () => {
+    const html = await hostHtml();
+    expect(html).toContain("oa-cm-done");
+    expect(html).toContain("Mark done");
+    expect(html).toContain("oa-cm-more");
+    expect(html).toContain("More actions");
+    expect(html).toContain("function toggleDone");
+    expect(html).toContain('method:"PATCH"');
+    // Delete is nested under the more menu, not a bare control.
+    expect(html).toContain("oa-cm-menu");
+    expect(html).toContain('textContent="Delete"');
+  });
 });

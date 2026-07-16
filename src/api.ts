@@ -430,6 +430,33 @@ api.post("/artifacts/:id/comments", async (c) => {
   return c.json({ ...comment, deleteToken }, 201);
 });
 
+// Mark done / undone — open like create (shared artifact collaboration). Soft
+// state only; does not require the delete token.
+api.patch("/artifacts/:id/comments/:commentId", async (c) => {
+  const store = storeFrom(c);
+  const id = c.req.param("id");
+  const commentId = c.req.param("commentId");
+
+  const comment = await store.getComment(commentId);
+  if (comment === null || comment.artifactId !== id) {
+    return c.json({ error: "comment not found" }, 404);
+  }
+
+  let body: Record<string, unknown>;
+  try {
+    body = await c.req.json<Record<string, unknown>>();
+  } catch {
+    return c.json({ error: "request body must be JSON" }, 400);
+  }
+  if (typeof body.done !== "boolean") {
+    return c.json({ error: "done must be a boolean" }, 400);
+  }
+
+  const ok = await store.setCommentDone(commentId, body.done);
+  if (!ok) return c.json({ error: "comment not found" }, 404);
+  return c.json({ ok: true, done: body.done });
+});
+
 api.delete("/artifacts/:id/comments/:commentId", async (c) => {
   const store = storeFrom(c);
   const id = c.req.param("id");

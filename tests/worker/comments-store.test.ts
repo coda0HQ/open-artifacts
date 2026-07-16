@@ -93,6 +93,24 @@ describe("D1R2Store comments", () => {
     expect(await store.getComment(created.id)).toBeNull();
   });
 
+  it("round-trips the done flag", async () => {
+    const store = new D1R2Store(env.DB, env.CONTENT);
+    const id = "cmstore0008";
+    await store.create(id, "hash", artifact, null);
+    const created = await store.addComment(id, {
+      author: null,
+      body: "todo",
+      anchor: null,
+    });
+    expect(created.done).toBe(false);
+    expect((await store.listComments(id))[0]?.done).toBe(false);
+    expect(await store.setCommentDone(created.id, true)).toBe(true);
+    expect((await store.listComments(id))[0]?.done).toBe(true);
+    expect(await store.setCommentDone(created.id, false)).toBe(true);
+    expect((await store.listComments(id))[0]?.done).toBe(false);
+    expect(await store.setCommentDone("missing-id", true)).toBe(false);
+  });
+
   it("keeps the newest 100 comments, still ordered oldest-first", async () => {
     const store = new D1R2Store(env.DB, env.CONTENT);
     const id = "cmstore0007";

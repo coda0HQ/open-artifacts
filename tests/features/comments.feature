@@ -39,3 +39,15 @@ Feature: Multi-user interaction on a shared artifact
     # Object). The host/frame split already landed; a WebSocket can later live on
     # the host without widening the iframe CSP.
     # Phase 3 (voice) is out of scope.
+
+  Scenario: A viewer can mark any comment done
+    Given an artifact has a persisted comment
+    When a client PATCHes the comment with done true
+    Then the response status is 200
+    And listing the thread returns the comment with done true
+    And the inlined drawer shows the done control as pressed
+
+  Scenario: Delete lives in the more menu for the comment author
+    Given a viewer posted a comment and holds its delete token
+    Then the drawer item exposes a three-dot more menu containing Delete
+    And Delete requires the delete-token bearer auth

@@ -322,6 +322,48 @@ describe("anchored comments", () => {
     expect(comment.anchor.anchorVersion).toBe(1);
   });
 
+  it("marks a comment done and undone via PATCH", async () => {
+    const created = await createArtifact();
+    const posted = (await (
+      await postComment(created.id, { body: "resolve me" })
+    ).json()) as { id: string; done: boolean };
+    expect(posted.done).toBe(false);
+
+    const mark = await exports.default.fetch(
+      new Request(`${BASE}/api/artifacts/${created.id}/comments/${posted.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ done: true }),
+      }),
+    );
+    expect(mark.status).toBe(200);
+    expect(await mark.json()).toMatchObject({ ok: true, done: true });
+
+    const list = (await (await getComments(created.id)).json()) as {
+      comments: { id: string; done: boolean }[];
+    };
+    expect(list.comments.find((c) => c.id === posted.id)?.done).toBe(true);
+
+    const html = await (
+      await exports.default.fetch(`${BASE}/a/${created.id}`)
+    ).text();
+    expect(html).toContain('aria-pressed="true"');
+    expect(html).toContain("Mark not done");
+
+    const unmark = await exports.default.fetch(
+      new Request(`${BASE}/api/artifacts/${created.id}/comments/${posted.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ done: false }),
+      }),
+    );
+    expect(unmark.status).toBe(200);
+    const list2 = (await (await getComments(created.id)).json()) as {
+      comments: { id: string; done: boolean }[];
+    };
+    expect(list2.comments.find((c) => c.id === posted.id)?.done).toBe(false);
+  });
+
   it("accepts unanchored but rejects a text anchor on an encrypted artifact", async () => {
     const envelope = await encrypt("secret revenue $5M", "pw");
     const created = await createEncrypted(envelope);

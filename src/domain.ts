@@ -92,6 +92,8 @@ export interface CommentMeta {
   author: string | null;
   body: string;
   anchor: Anchor | null;
+  /** Resolved / acknowledged — soft state, not deletion. */
+  done: boolean;
   createdAt: string;
 }
 
