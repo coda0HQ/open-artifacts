@@ -194,7 +194,9 @@ const COMMENTS_CSS = `
 .oa-cm-toggle[data-count] .oa-cm-count{display:block}
 .oa-cm-drawer{position:fixed;top:var(--oa-header-h);right:0;height:calc(100dvh - var(--oa-header-h));width:100%;max-width:23rem;transform:translateX(100%);transition:transform .18s ease;display:flex;flex-direction:column;background:var(--oa-bg);border-left:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 6%);box-shadow:-16px 0 40px -20px rgba(0,0,0,.28);z-index:2147483645}
 .oa-cm-drawer[data-open]{transform:translateX(0)}
-.oa-cm-drawer .oa-cm-head{display:flex;align-items:center;gap:.5rem;min-height:2.75rem;padding:.5rem .6rem .5rem 1rem;border-bottom:1px solid var(--oa-border);flex-shrink:0}
+/* Right inset matches .oa-header padding (1rem) so the close control lines up
+   with the theme toggle above it, and the list card shares the same edge. */
+.oa-cm-drawer .oa-cm-head{display:flex;align-items:center;gap:.6rem;min-height:2.75rem;padding:.375rem 1rem;border-bottom:1px solid var(--oa-border);flex-shrink:0}
 .oa-cm-drawer .oa-cm-head h2{flex:1;display:flex;align-items:baseline;gap:.4rem;margin:0;font-size:.8rem;font-weight:600;letter-spacing:-.01em;color:var(--oa-fg)}
 .oa-cm-drawer .oa-cm-head-count{display:none;padding:.05rem .35rem;border-radius:4px;background:var(--oa-surface);color:var(--oa-fg);font-size:.72rem;font-weight:600;font-variant-numeric:tabular-nums}
 .oa-cm-drawer .oa-cm-head-count[data-count]{display:inline-block}
@@ -202,7 +204,7 @@ const COMMENTS_CSS = `
 .oa-cm-drawer .oa-cm-close:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 .oa-cm-drawer .oa-cm-close:active{transform:translateY(1px)}
 @media (hover:hover) and (pointer:fine){.oa-cm-drawer .oa-cm-close:hover{opacity:1;border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 25%)}}
-.oa-cm-list{flex:1;min-height:0;overflow-y:auto;margin:.5rem .6rem .7rem;padding:.2rem;border:1px solid var(--oa-border);border-radius:10px;background:var(--oa-surface);display:flex;flex-direction:column}
+.oa-cm-list{flex:1;min-height:0;overflow-y:auto;margin:.5rem 1rem .75rem;padding:.2rem;border:1px solid var(--oa-border);border-radius:10px;background:var(--oa-surface);display:flex;flex-direction:column}
 .oa-cm-empty{color:var(--oa-muted);font-size:.85rem;text-align:center;margin:2rem 1rem}
 .oa-cm-item{position:relative;padding:.55rem .65rem;border-radius:6px;transition:background .1s}
 .oa-cm-item+.oa-cm-item{border-top:1px solid color-mix(in oklab,var(--oa-border),transparent 45%)}
