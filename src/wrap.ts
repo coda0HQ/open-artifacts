@@ -210,7 +210,7 @@ const COMMENTS_CSS = `
 .oa-cm-toggle svg{display:block;width:15px;height:15px;margin:auto}
 .oa-cm-toggle .oa-cm-count{position:absolute;top:-4px;right:-4px;min-width:15px;height:15px;padding:0 3px;border-radius:8px;background:var(--oa-accent);color:#fff;font-size:9px;font-weight:600;line-height:15px;text-align:center;display:none}
 .oa-cm-toggle[data-count] .oa-cm-count{display:block}
-.oa-cm-drawer{position:fixed;top:var(--oa-header-h);right:0;height:calc(100dvh - var(--oa-header-h));width:100%;max-width:23rem;transform:translateX(100%);transition:transform .18s ease;display:flex;flex-direction:column;background:var(--oa-bg);border-left:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 6%);box-shadow:-16px 0 40px -20px rgba(0,0,0,.28);z-index:2147483645;font-family:var(--oa-font)}
+.oa-cm-drawer{position:fixed;top:var(--oa-header-h);right:0;height:calc(100dvh - var(--oa-header-h));width:100%;max-width:23rem;transform:translateX(100%);transition:transform .18s ease;display:flex;flex-direction:column;background:var(--oa-bg);border-left:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 6%);z-index:2147483645;font-family:var(--oa-font)}
 .oa-cm-drawer[data-open]{transform:translateX(0)}
 /* Right inset matches .oa-header padding (1rem) so the close control lines up
    with the theme toggle above it, and the list card shares the same edge. */
