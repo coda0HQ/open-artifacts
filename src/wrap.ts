@@ -134,10 +134,10 @@ const RESET_CSS = `
 html{-webkit-text-size-adjust:100%}
 body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;line-height:1.5;background:var(--oa-bg);color:var(--oa-fg)}
 img,video,canvas{max-width:100%}
-:root{color-scheme:light dark;--oa-bg:#ffffff;--oa-fg:#18181b;--oa-muted:#71717a;--oa-border:#e4e4e7;--oa-surface:#f8f8f8;--oa-accent:#6457f0;--oa-danger:#b42318;--oa-focus-ring:0 0 0 2px var(--oa-bg),0 0 0 4px var(--oa-accent)}
-@media (prefers-color-scheme: dark){:root{--oa-bg:#131316;--oa-fg:#e7e7ea;--oa-muted:#9a9aa2;--oa-border:#2e2e33;--oa-surface:#1c1c21;--oa-accent:#8d82f5;--oa-danger:#ff8f85}}
-:root[data-theme="light"]{color-scheme:light;--oa-bg:#ffffff;--oa-fg:#18181b;--oa-muted:#71717a;--oa-border:#e4e4e7;--oa-surface:#f8f8f8;--oa-accent:#6457f0;--oa-danger:#b42318}
-:root[data-theme="dark"]{color-scheme:dark;--oa-bg:#131316;--oa-fg:#e7e7ea;--oa-muted:#9a9aa2;--oa-border:#2e2e33;--oa-surface:#1c1c21;--oa-accent:#8d82f5;--oa-danger:#ff8f85}
+:root{color-scheme:light dark;--oa-bg:#ffffff;--oa-fg:#18181b;--oa-muted:#71717a;--oa-border:#e4e4e7;--oa-surface:#f8f8f8;--oa-accent:#6457f0;--oa-accent-on:#ffffff;--oa-danger:#b42318;--oa-focus-ring:0 0 0 2px var(--oa-bg),0 0 0 4px var(--oa-accent)}
+@media (prefers-color-scheme: dark){:root{--oa-bg:#131316;--oa-fg:#e7e7ea;--oa-muted:#9a9aa2;--oa-border:#2e2e33;--oa-surface:#1c1c21;--oa-accent:#8d82f5;--oa-accent-on:#16151b;--oa-danger:#ff8f85}}
+:root[data-theme="light"]{color-scheme:light;--oa-bg:#ffffff;--oa-fg:#18181b;--oa-muted:#71717a;--oa-border:#e4e4e7;--oa-surface:#f8f8f8;--oa-accent:#6457f0;--oa-accent-on:#ffffff;--oa-danger:#b42318}
+:root[data-theme="dark"]{color-scheme:dark;--oa-bg:#131316;--oa-fg:#e7e7ea;--oa-muted:#9a9aa2;--oa-border:#2e2e33;--oa-surface:#1c1c21;--oa-accent:#8d82f5;--oa-accent-on:#16151b;--oa-danger:#ff8f85}
 /* Header height is measured at runtime and exposed as --oa-header-h so
    anchor scroll-offset stays correct without author effort. The header is
    sticky (in-flow), so body content is never obscured — only anchor jumps
@@ -206,15 +206,20 @@ const COMMENTS_CSS = `
 .oa-cm-tool[aria-pressed="true"]{opacity:1;border-color:var(--oa-accent);color:var(--oa-accent)}
 .oa-cm-tool:active{transform:translateY(1px)}
 @media (hover:hover) and (pointer:fine){.oa-cm-tool:hover{opacity:1}}
-.oa-cm-compose{position:fixed;z-index:2147483646;width:min(19rem,calc(100vw - 1rem));display:flex;flex-direction:column;gap:.4rem;padding:.6rem;background:var(--oa-bg);border:1px solid var(--oa-border);border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.18)}
+.oa-cm-compose{position:fixed;z-index:2147483646;width:min(20rem,calc(100vw - 1rem));display:flex;flex-direction:column;gap:.5rem;padding:.7rem;background:var(--oa-bg);border:1px solid var(--oa-border);border-radius:12px;box-shadow:0 1px 1px rgba(0,0,0,.04),0 10px 30px -8px rgba(0,0,0,.28)}
 .oa-cm-compose[hidden]{display:none}
-.oa-cm-compose input,.oa-cm-compose textarea{width:100%;padding:.4rem .5rem;border:1px solid var(--oa-border);border-radius:6px;background:var(--oa-surface);color:var(--oa-fg);font:inherit;font-size:.85rem}
-.oa-cm-compose textarea{resize:vertical;min-height:3.5rem}
+.oa-cm-compose input,.oa-cm-compose textarea{width:100%;padding:.45rem .55rem;border:1px solid var(--oa-border);border-radius:7px;background:var(--oa-surface);color:var(--oa-fg);font:inherit;font-size:.85rem}
+.oa-cm-compose input{font-size:.8rem}
+.oa-cm-compose ::placeholder{color:var(--oa-muted);opacity:1}
+.oa-cm-compose textarea{resize:vertical;min-height:3.75rem;line-height:1.45}
 .oa-cm-compose input:focus-visible,.oa-cm-compose textarea:focus-visible{outline:none;border-color:var(--oa-accent);box-shadow:var(--oa-focus-ring)}
-.oa-cm-actions{display:flex;justify-content:flex-end;gap:.4rem}
-.oa-cm-actions button{padding:.35rem .7rem;border-radius:6px;border:1px solid var(--oa-border);background:var(--oa-surface);color:var(--oa-fg);font:inherit;font-size:.8rem;font-weight:600;cursor:pointer}
-.oa-cm-actions .oa-cm-post{background:var(--oa-accent);border-color:var(--oa-accent);color:#fff}
+.oa-cm-actions{display:flex;justify-content:flex-end;align-items:center;gap:.25rem}
+.oa-cm-actions button{padding:.4rem .75rem;border-radius:7px;border:1px solid transparent;background:none;color:var(--oa-muted);font:inherit;font-size:.8rem;font-weight:500;cursor:pointer;transition:background .12s,color .12s,border-color .12s}
 .oa-cm-actions button:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+.oa-cm-actions button:active{transform:translateY(1px)}
+.oa-cm-actions .oa-cm-post{background:var(--oa-accent);border-color:var(--oa-accent);color:var(--oa-accent-on);font-weight:600}
+@media (hover:hover) and (pointer:fine){.oa-cm-actions .oa-cm-cancel:hover{color:var(--oa-fg);background:var(--oa-surface)}.oa-cm-actions .oa-cm-post:hover{background:color-mix(in oklab,var(--oa-accent),var(--oa-fg) 12%);border-color:color-mix(in oklab,var(--oa-accent),var(--oa-fg) 12%)}}
+@media (prefers-reduced-motion:no-preference){.oa-cm-compose{transition:opacity .13s ease-out,transform .13s ease-out,display .13s allow-discrete}.oa-cm-compose[hidden]{opacity:0;transform:translateY(-4px) scale(.985)}@starting-style{.oa-cm-compose:not([hidden]){opacity:0;transform:translateY(-4px) scale(.985)}}}
 .oa-cm-item{position:relative}
 .oa-cm-item[data-focus]{border-radius:8px;box-shadow:0 0 0 2px var(--oa-accent)}
 .oa-cm-del{margin-top:.35rem;padding:.1rem .4rem;border:none;background:none;color:var(--oa-danger);font:inherit;font-size:.72rem;cursor:pointer;border-radius:4px}
