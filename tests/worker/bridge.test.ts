@@ -70,8 +70,23 @@ describe("bridge scripts are injected with identity guards", () => {
     const html = await (
       await exports.default.fetch(`${BASE}/a/${id}/frame`)
     ).text();
-    expect(html).toContain('send({type:"oa:ready"})');
+    // The ready message carries the detected mode (canvas vs document) so the
+    // host can hide the drawer toggle on a canvas.
+    expect(html).toContain('send({type:"oa:ready",mode:window.__oaMode})');
     expect(html).toContain("e.source!==window.parent");
+  });
+
+  it("detects canvas mode in the frame and hides the drawer toggle host-side", async () => {
+    const { id } = await createArtifact();
+    const host = await (await exports.default.fetch(`${BASE}/a/${id}`)).text();
+    const frame = await (
+      await exports.default.fetch(`${BASE}/a/${id}/frame`)
+    ).text();
+    // Frame derives its mode from the transformed plane of a canvas artifact.
+    expect(frame).toContain("querySelector('.oa-plane')");
+    // Host hides the drawer toggle only when the frame reports canvas mode.
+    expect(host).toContain('msg.mode==="canvas"');
+    expect(host).toContain('querySelector(".oa-cm-toggle")');
   });
 
   it("the host page guards on the frame window and inlines only public comment fields", async () => {

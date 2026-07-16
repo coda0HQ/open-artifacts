@@ -203,6 +203,7 @@ const COMMENTS_CSS = `
    themes, visible focus rings, no decorative motion. */
 .oa-cm-tool{position:relative;width:28px;height:28px;border-radius:6px;border:1px solid var(--oa-border);background:var(--oa-surface);color:var(--oa-fg);font-size:17px;line-height:1;cursor:pointer;opacity:.8;transition:opacity .15s,border-color .15s,background .15s;flex-shrink:0}
 .oa-cm-tool:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+.oa-cm-tool svg{display:block;width:15px;height:15px;margin:auto}
 .oa-cm-tool[aria-pressed="true"]{opacity:1;border-color:var(--oa-accent);color:var(--oa-accent)}
 .oa-cm-tool:active{transform:translateY(1px)}
 @media (hover:hover) and (pointer:fine){.oa-cm-tool:hover{opacity:1}}
@@ -233,6 +234,10 @@ const MOON_SVG =
 
 const COMMENT_SVG =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
+// The "add a comment" tool icon: a speech bubble with a plus, distinct from the
+// plain bubble of the drawer toggle so the two header controls never read alike.
+const COMMENT_ADD_SVG =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M12 8v4M10 10h4"/></svg>';
 const BRAND_SVG =
   '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M20.0833 15.1999L21.2854 15.9212C21.5221 16.0633 21.5989 16.3704 21.4569 16.6072C21.4146 16.6776 21.3557 16.7365 21.2854 16.7787L12.5144 22.0412C12.1977 22.2313 11.8021 22.2313 11.4854 22.0412L2.71451 16.7787C2.47772 16.6366 2.40093 16.3295 2.54301 16.0927C2.58523 16.0223 2.64413 15.9634 2.71451 15.9212L3.9166 15.1999L11.9999 20.0499L20.0833 15.1999ZM20.0833 10.4999L21.2854 11.2212C21.5221 11.3633 21.5989 11.6704 21.4569 11.9072C21.4146 11.9776 21.3557 12.0365 21.2854 12.0787L11.9999 17.6499L2.71451 12.0787C2.47772 11.9366 2.40093 11.6295 2.54301 11.3927C2.58523 11.3223 2.64413 11.2634 2.71451 11.2212L3.9166 10.4999L11.9999 15.3499L20.0833 10.4999ZM12.5144 1.30864L21.2854 6.5712C21.5221 6.71327 21.5989 7.0204 21.4569 7.25719C21.4146 7.32757 21.3557 7.38647 21.2854 7.42869L11.9999 12.9999L2.71451 7.42869C2.47772 7.28662 2.40093 6.97949 2.54301 6.7427C2.58523 6.67232 2.64413 6.61343 2.71451 6.5712L11.4854 1.30864C11.8021 1.11864 12.1977 1.11864 12.5144 1.30864ZM11.9999 3.33233L5.88723 6.99995L11.9999 10.6676L18.1126 6.99995L11.9999 3.33233Z"/></svg>';
 
@@ -753,7 +758,16 @@ const FRAME_BRIDGE_SCRIPT = `
       if(typeof window.__oaRenderMarkers==="function")window.__oaRenderMarkers(window.__oaComments);
     }
   });
-  send({type:"oa:ready"});
+  // Mode is a runtime property of the artifact content (a canvas has a
+  // transformed .oa-plane), so the frame detects it and reports it: the host
+  // hides the drawer toggle on a canvas (comments live as pins at their point,
+  // Figma-style) and keeps it on a document (comments list in the drawer,
+  // Notion-style). The armed comment cursor is canvas-only — on a document the
+  // native text caret must stay so a selection can be made.
+  var pl=document.querySelector('.oa-plane');
+  window.__oaMode=(pl&&getComputedStyle(pl).transform!=='none')?'canvas':'text';
+  window.__oaOnArm=function(armed){root.classList.toggle('oa-cm-arming',!!armed&&window.__oaMode==='canvas')};
+  send({type:"oa:ready",mode:window.__oaMode});
 })();
 `;
 
@@ -765,6 +779,9 @@ const FRAME_BRIDGE_SCRIPT = `
 const FRAME_ANCHOR_CSS = `
 .oa-cm-pin{position:absolute;left:calc(var(--x,0)*1px);top:calc(var(--y,0)*1px);transform:scale(calc(1/var(--k,1))) translate(-50%,-50%);transform-origin:0 0;z-index:2;width:22px;height:22px;padding:0;border:1px solid var(--oa-bg);border-radius:50% 50% 50% 2px;background:var(--oa-accent);cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.25)}
 .oa-cm-pin:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+/* Comment tool armed (canvas): a Figma-style comment marker replaces the pan
+   cursor, its tail as the hotspot so the pin lands where the tip points. */
+html.oa-cm-arming,html.oa-cm-arming *{cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'%3E%3Cpath d='M6.5 3.5h15A3.5 3.5 0 0 1 25 7v8a3.5 3.5 0 0 1-3.5 3.5H13l-6.5 5.5v-5.5A3.5 3.5 0 0 1 3 15V7a3.5 3.5 0 0 1 3.5-3.5z' fill='%236457f0' stroke='%23fff' stroke-width='1.6'/%3E%3C/svg%3E") 6 23,crosshair !important}
 `;
 
 // Frame side, canvas mode: capture a click to drop a pin (world coords, read
@@ -915,6 +932,10 @@ function hostBridgeScript(artifactId: string): string {
     var msg=e.data;
     if(!msg||typeof msg!=="object")return;
     if(msg.type==="oa:ready"){
+      // On a canvas the thread lives at the pins, so the header drawer toggle
+      // is redundant — hide it. A document keeps it (the drawer is the thread).
+      window.__oaMode=msg.mode==="canvas"?"canvas":"text";
+      if(window.__oaMode==="canvas"){var tg=document.querySelector(".oa-cm-toggle");if(tg)tg.style.display="none"}
       post({type:"oa:theme",theme:theme()});
       post({type:"oa:comments",list:inlined(),viewedVersion:window.__oaViewedVersion||1});
     }else if(msg.type==="oa:anchor:new"){
@@ -967,7 +988,7 @@ const HOST_UI_SCRIPT = `
   var state=(window.__oaInlinedComments?window.__oaInlinedComments():[])||[];
 
   var arm=document.createElement("button");
-  arm.type="button";arm.className="oa-cm-tool";arm.textContent="+";
+  arm.type="button";arm.className="oa-cm-tool";arm.innerHTML=${jsonForInlineScript(COMMENT_ADD_SVG)};
   arm.setAttribute("aria-pressed","false");arm.title="Add a comment";arm.setAttribute("aria-label","Add a comment");
   if(header&&toggle)header.insertBefore(arm,toggle);else if(header)header.appendChild(arm);
   function setArmed(on){
