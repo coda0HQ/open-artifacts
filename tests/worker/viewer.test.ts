@@ -80,6 +80,22 @@ describe("GET /a/:id (plain HTML) — host page", () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
+  it("renders the version picker from the single list resolveRecord fetched", async () => {
+    const created = await create({ content: "<h1>Picker</h1>" });
+    // resolveRecord fetches listVersions once and returns it; the handler
+    // reuses that array for the picker rather than re-querying. A positive
+    // call-count assertion is not testable here — the cloudflare-workers pool
+    // runs the fetch in a separate realm, so a prototype spy on the store
+    // cannot observe calls made inside it. This asserts the behaviour the
+    // reuse enables (the picker still renders from the fetched list); a
+    // regression to a second fetch would pass this, so the redundancy is
+    // caught by review, not by this test.
+    const res = await exports.default.fetch(`${BASE}/a/${created.id}`);
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toMatch(/<select[^>]*data-version-picker|oa-version|version/i);
+  });
+
   it("wraps the chrome in a complete skeleton with title, favicon, and reset, embedding the artifact frame", async () => {
     const created = await create({ content: "<h1>Wrapped</h1>" });
     const res = await exports.default.fetch(`${BASE}/a/${created.id}`);

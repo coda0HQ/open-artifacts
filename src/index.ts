@@ -7,6 +7,7 @@ import {
   parseVersionParam,
   storeFrom,
 } from "./api";
+import type { VersionMeta } from "./domain";
 import { fontFaceCss, materializeFont, parseSlug } from "./fonts";
 import { brandHomepageForCoda0, isCoda0Host } from "./home";
 import { renderOgCardPng } from "./og";
@@ -109,6 +110,7 @@ type ResolvedRecord =
       record: ArtifactRecord;
       version: number;
       encrypted: boolean;
+      versions: VersionMeta[];
     }
   | { ok: false; status: 400 | 404; badVersion: boolean };
 
@@ -129,6 +131,8 @@ async function resolveRecord(
     };
   }
 
+  // Fetched once and returned, so the host handler does not re-query the
+  // versions table for the picker on the same request.
   const versions = await store.listVersions(record.id);
   const viewed = versions.find((v) => v.version === version);
   // A version row is created at publish time; if it is somehow absent, the
@@ -137,7 +141,13 @@ async function resolveRecord(
   if (viewed === undefined) {
     return { ok: false, status: 404, badVersion: false };
   }
-  return { ok: true, record, version, encrypted: viewed.encrypted };
+  return {
+    ok: true,
+    record,
+    version,
+    encrypted: viewed.encrypted,
+    versions,
+  };
 }
 
 async function resolveArtifact(
@@ -184,7 +194,7 @@ app.get("/a/:id", async (c) => {
     });
   }
 
-  const { record, version, encrypted } = resolved;
+  const { record, version, encrypted, versions } = resolved;
   const url = artifactUrl(c, record.id);
   const ogImage = ogImageUrl(c, record.id);
   const brandUrl = c.env.BRAND_URL ?? null;
@@ -196,9 +206,9 @@ app.get("/a/:id", async (c) => {
   // the drawer (only the body stays hidden until unlock).
   const comments = await store.listComments(record.id);
   const frameSrc = `/a/${record.id}/frame${rawVersion !== undefined ? `?v=${encodeURIComponent(rawVersion)}` : ""}`;
-  // Inline the full version list into the host chrome so the picker is
-  // populated at serve time — the sandboxed frame cannot fetch later.
-  const versions = await store.listVersions(record.id);
+  // versions was already fetched by resolveRecord (it derives the encrypted
+  // flag from the matching version row); the picker reuses it rather than
+  // issuing a second listVersions query on the same request.
 
   if (encrypted) {
     // Only the encrypted path needs the body — the ciphertext — and it must
