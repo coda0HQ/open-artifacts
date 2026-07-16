@@ -194,15 +194,19 @@ const COMMENTS_CSS = `
 .oa-cm-toggle[data-count] .oa-cm-count{display:block}
 .oa-cm-drawer{position:fixed;top:var(--oa-header-h);right:0;height:calc(100dvh - var(--oa-header-h));width:100%;max-width:23rem;transform:translateX(100%);transition:transform .18s ease;display:flex;flex-direction:column;background:var(--oa-bg);border-left:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 6%);box-shadow:-16px 0 40px -20px rgba(0,0,0,.28);z-index:2147483645}
 .oa-cm-drawer[data-open]{transform:translateX(0)}
-.oa-cm-drawer .oa-cm-head{display:flex;align-items:center;gap:.5rem;padding:.8rem 1rem .7rem 1.1rem;border-bottom:1px solid var(--oa-border);flex-shrink:0}
-.oa-cm-drawer .oa-cm-head h2{flex:1;margin:0;font-size:.9rem;font-weight:600;letter-spacing:-.01em;color:var(--oa-fg)}
-.oa-cm-drawer .oa-cm-close{width:30px;height:30px;border-radius:7px;border:0;background:none;color:var(--oa-muted);font-size:19px;line-height:1;cursor:pointer;flex-shrink:0;display:grid;place-items:center;transition:background .12s,color .12s}
+.oa-cm-drawer .oa-cm-head{display:flex;align-items:center;gap:.5rem;min-height:2.75rem;padding:.5rem .6rem .5rem 1rem;border-bottom:1px solid var(--oa-border);flex-shrink:0}
+.oa-cm-drawer .oa-cm-head h2{flex:1;display:flex;align-items:baseline;gap:.4rem;margin:0;font-size:.8rem;font-weight:600;letter-spacing:-.01em;color:var(--oa-fg)}
+.oa-cm-drawer .oa-cm-head-count{display:none;padding:.05rem .35rem;border-radius:4px;background:var(--oa-surface);color:var(--oa-fg);font-size:.72rem;font-weight:600;font-variant-numeric:tabular-nums}
+.oa-cm-drawer .oa-cm-head-count[data-count]{display:inline-block}
+.oa-cm-drawer .oa-cm-close{position:relative;width:28px;height:28px;flex-shrink:0;display:grid;place-items:center;border-radius:6px;border:1px solid var(--oa-border);background:var(--oa-surface);color:var(--oa-fg);font-size:15px;line-height:1;cursor:pointer;opacity:.8;transition:opacity .15s,border-color .15s,background .15s}
 .oa-cm-drawer .oa-cm-close:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
-@media (hover:hover) and (pointer:fine){.oa-cm-drawer .oa-cm-close:hover{background:var(--oa-surface);color:var(--oa-fg)}}
-.oa-cm-list{flex:1;min-height:0;overflow-y:auto;padding:.25rem .4rem 1rem;display:flex;flex-direction:column}
-.oa-cm-empty{color:var(--oa-muted);font-size:.85rem;text-align:center;margin-top:2rem}
-.oa-cm-item{position:relative;padding:.65rem .7rem;border-radius:9px}
+.oa-cm-drawer .oa-cm-close:active{transform:translateY(1px)}
+@media (hover:hover) and (pointer:fine){.oa-cm-drawer .oa-cm-close:hover{opacity:1;border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 25%)}}
+.oa-cm-list{flex:1;min-height:0;overflow-y:auto;margin:.5rem .6rem .7rem;padding:.2rem;border:1px solid var(--oa-border);border-radius:10px;background:var(--oa-surface);display:flex;flex-direction:column}
+.oa-cm-empty{color:var(--oa-muted);font-size:.85rem;text-align:center;margin:2rem 1rem}
+.oa-cm-item{position:relative;padding:.55rem .65rem;border-radius:6px;transition:background .1s}
 .oa-cm-item+.oa-cm-item{border-top:1px solid color-mix(in oklab,var(--oa-border),transparent 45%)}
+@media (hover:hover) and (pointer:fine){.oa-cm-item:hover{background:color-mix(in oklab,var(--oa-fg),transparent 94%)}}
 .oa-cm-item .oa-cm-meta{display:flex;gap:.5rem;align-items:baseline;margin-bottom:.15rem}
 .oa-cm-item .oa-cm-author{font-size:.8rem;font-weight:600;color:var(--oa-fg)}
 .oa-cm-item .oa-cm-anon{font-size:.8rem;font-weight:500;color:var(--oa-muted)}
@@ -240,7 +244,7 @@ const COMMENTS_CSS = `
 @media (hover:hover) and (pointer:fine){.oa-cm-send[data-ready]:hover{background:color-mix(in oklab,var(--oa-accent),var(--oa-fg) 12%)}}
 @media (prefers-reduced-motion:no-preference){.oa-cm-compose{transition:opacity .13s ease-out,transform .13s ease-out,display .13s allow-discrete}.oa-cm-compose[hidden]{opacity:0;transform:translateY(-4px) scale(.985)}@starting-style{.oa-cm-compose:not([hidden]){opacity:0;transform:translateY(-4px) scale(.985)}}}
 .oa-cm-item[data-focus]{background:color-mix(in oklab,var(--oa-accent),transparent 90%)}
-.oa-cm-del{margin-top:.3rem;padding:0;border:0;background:none;color:var(--oa-muted);font:inherit;font-size:.72rem;cursor:pointer;opacity:.7;transition:color .12s,opacity .12s}
+.oa-cm-del{display:block;width:fit-content;margin:.35rem 0 0 auto;padding:0;border:0;background:none;color:var(--oa-muted);font:inherit;font-size:.72rem;cursor:pointer;opacity:.7;transition:color .12s,opacity .12s}
 .oa-cm-del:focus-visible{outline:none;box-shadow:var(--oa-focus-ring);opacity:1;border-radius:4px}
 @media (hover:hover) and (pointer:fine){.oa-cm-del{opacity:0}.oa-cm-item:hover .oa-cm-del{opacity:.7}.oa-cm-del:hover{color:var(--oa-danger);opacity:1}}
 `;
@@ -353,9 +357,10 @@ function commentsDrawerHtml(
         )
         .join("")
     : '<p class="oa-cm-empty">No comments yet.</p>';
+  const count = comments.length;
   return `<aside class="oa-cm-drawer" id="oa-cm-drawer" aria-label="Comments" aria-hidden="true" data-artifact-id="${escapeHtml(artifactId)}">
   <div class="oa-cm-head">
-    <h2>Comments</h2>
+    <h2>Comments<span class="oa-cm-head-count" id="oa-cm-head-count"${count > 0 ? ` data-count="${count}"` : ""}>${count}</span></h2>
     <button class="oa-cm-close" type="button" aria-label="Close comments" aria-controls="oa-cm-drawer">&times;</button>
   </div>
   <div class="oa-cm-list" id="oa-cm-list">${items}</div>
@@ -1116,9 +1121,13 @@ const HOST_UI_SCRIPT = `
       }).catch(function(){}).then(function(){posting=false});
   }
 
-  function bumpCount(){if(!toggle)return;
-    if(state.length>0){toggle.setAttribute("data-count",String(state.length));var c=toggle.querySelector(".oa-cm-count");if(c)c.textContent=String(state.length)}
-    else{toggle.removeAttribute("data-count");var c2=toggle.querySelector(".oa-cm-count");if(c2)c2.textContent="0"}
+  function bumpCount(){
+    if(toggle){
+      if(state.length>0){toggle.setAttribute("data-count",String(state.length));var c=toggle.querySelector(".oa-cm-count");if(c)c.textContent=String(state.length)}
+      else{toggle.removeAttribute("data-count");var c2=toggle.querySelector(".oa-cm-count");if(c2)c2.textContent="0"}
+    }
+    var hc=document.getElementById("oa-cm-head-count");
+    if(hc){if(state.length>0){hc.setAttribute("data-count",String(state.length));hc.textContent=String(state.length)}else{hc.removeAttribute("data-count");hc.textContent="0"}}
   }
   function relTime(iso){var t=Date.parse(iso);if(isNaN(t))return"";var s=Math.max(0,(Date.now()-t)/1e3);if(s<45)return"just now";var m=Math.round(s/60);if(m<60)return m+"m";var h=Math.round(m/60);if(h<24)return h+"h";var d=Math.round(h/24);if(d<7)return d+"d";return new Date(t).toLocaleDateString(undefined,{month:"short",day:"numeric"})}
   function itemEl(cm){
