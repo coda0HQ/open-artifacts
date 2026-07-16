@@ -141,7 +141,7 @@ app.get("/a/:id", async (c) => {
     });
   }
 
-  const { record, content } = resolved;
+  const { record, content, version } = resolved;
   const url = artifactUrl(c, record.id);
   const ogImage = ogImageUrl(c, record.id);
   const brandUrl = c.env.BRAND_URL ?? null;
@@ -153,6 +153,9 @@ app.get("/a/:id", async (c) => {
   // the drawer (only the body stays hidden until unlock).
   const comments = await store.listComments(record.id);
   const frameSrc = `/a/${record.id}/frame${rawVersion !== undefined ? `?v=${encodeURIComponent(rawVersion)}` : ""}`;
+  // Inline the full version list into the host chrome so the picker is
+  // populated at serve time — the sandboxed frame cannot fetch later.
+  const versions = await store.listVersions(record.id);
 
   if (content.encrypted !== null) {
     const page = unlockShell({
@@ -167,6 +170,8 @@ app.get("/a/:id", async (c) => {
       artifactId: record.id,
       comments,
       envelope: { ...content.encrypted, ciphertext: content.body },
+      versions,
+      currentVersion: version,
     });
     return new Response(page, { headers: hostHeaders() });
   }
@@ -182,6 +187,8 @@ app.get("/a/:id", async (c) => {
     artifactId: record.id,
     comments,
     frameSrc,
+    versions,
+    currentVersion: version,
   });
   return new Response(page, { headers: hostHeaders() });
 });

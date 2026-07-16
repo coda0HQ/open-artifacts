@@ -1,5 +1,10 @@
 import { buildTextAnchor, reAnchor } from "./anchor";
-import type { ArtifactFormat, CommentMeta, EncryptionParams } from "./domain";
+import type {
+  ArtifactFormat,
+  CommentMeta,
+  EncryptionParams,
+  VersionMeta,
+} from "./domain";
 import { MARKED_SOURCE } from "./generated/marked-source";
 import { type Brand, brandFor, isCoda0Host } from "./home";
 
@@ -159,6 +164,11 @@ img,video,canvas{max-width:100%}
 .oa-brand svg{display:block;width:14px;height:14px}
 @media (hover:hover) and (pointer:fine){.oa-header #oa-theme-toggle:hover{opacity:1;border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 25%)}.oa-brand:hover{color:var(--oa-fg);background:var(--oa-surface)}}
 @media (max-width:30rem){.oa-brand .oa-brand-text{display:none}}
+.oa-version{display:inline-flex;align-items:center;flex-shrink:0}
+.oa-version .oa-version-select{min-height:28px;padding:.2rem 1.6rem .2rem .5rem;border:1px solid var(--oa-border);border-radius:6px;background:var(--oa-surface);color:var(--oa-fg);font-size:.75rem;font-family:inherit;line-height:1.4;cursor:pointer;transition:border-color .15s,background .15s;-webkit-appearance:none;appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--oa-muted) 50%),linear-gradient(135deg,var(--oa-muted) 50%,transparent 50%);background-position:calc(100% - .7rem) 55%,calc(100% - .4rem) 55%;background-size:.3rem .3rem;background-repeat:no-repeat}
+.oa-version .oa-version-select:focus-visible{outline:none;border-color:var(--oa-accent);box-shadow:var(--oa-focus-ring)}
+.oa-version .oa-version-select:active{transform:translateY(1px)}
+@media (hover:hover) and (pointer:fine){.oa-version .oa-version-select:hover{border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 25%)}}
 `;
 
 const MARKDOWN_CSS = `
@@ -234,18 +244,52 @@ const MOON_SVG =
 
 const COMMENT_SVG =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
-// The "add a comment" tool icon: a speech bubble with a plus, distinct from the
-// plain bubble of the drawer toggle so the two header controls never read alike.
+// The "add a comment" tool icon: Figma's comment-marker silhouette — a rounded
+// bubble whose tail points to the bottom-left, the same shape as the pins it
+// drops on the canvas, so the tool visibly IS the marker it places. Outline in
+// the toolbar, filled once placed (cursor + pin) — Figma's own convention. Its
+// teardrop reads distinctly from the drawer toggle's rectangular chat bubble.
 const COMMENT_ADD_SVG =
-  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M12 8v4M10 10h4"/></svg>';
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M4 18V10a8 8 0 0 1 8-8 8 8 0 0 1 8 8 8 8 0 0 1-8 8H4z"/></svg>';
 const BRAND_SVG =
   '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M20.0833 15.1999L21.2854 15.9212C21.5221 16.0633 21.5989 16.3704 21.4569 16.6072C21.4146 16.6776 21.3557 16.7365 21.2854 16.7787L12.5144 22.0412C12.1977 22.2313 11.8021 22.2313 11.4854 22.0412L2.71451 16.7787C2.47772 16.6366 2.40093 16.3295 2.54301 16.0927C2.58523 16.0223 2.64413 15.9634 2.71451 15.9212L3.9166 15.1999L11.9999 20.0499L20.0833 15.1999ZM20.0833 10.4999L21.2854 11.2212C21.5221 11.3633 21.5989 11.6704 21.4569 11.9072C21.4146 11.9776 21.3557 12.0365 21.2854 12.0787L11.9999 17.6499L2.71451 12.0787C2.47772 11.9366 2.40093 11.6295 2.54301 11.3927C2.58523 11.3223 2.64413 11.2634 2.71451 11.2212L3.9166 10.4999L11.9999 15.3499L20.0833 10.4999ZM12.5144 1.30864L21.2854 6.5712C21.5221 6.71327 21.5989 7.0204 21.4569 7.25719C21.4146 7.32757 21.3557 7.38647 21.2854 7.42869L11.9999 12.9999L2.71451 7.42869C2.47772 7.28662 2.40093 6.97949 2.54301 6.7427C2.58523 6.67232 2.64413 6.61343 2.71451 6.5712L11.4854 1.30864C11.8021 1.11864 12.1977 1.11864 12.5144 1.30864ZM11.9999 3.33233L5.88723 6.99995L11.9999 10.6676L18.1126 6.99995L11.9999 3.33233Z"/></svg>';
+
+function versionPickerHtml(
+  versions: VersionMeta[],
+  currentVersion: number,
+  url: string,
+): string {
+  // Single-version artifacts have nothing to switch between; render no
+  // picker so the chrome stays quiet for the common one-shot case.
+  if (versions.length <= 1) return "";
+  // The version list is inlined at serve time as <option>s. Selecting an
+  // option sets location.search to ?v=<n>, driving a full re-serve with the
+  // version-N snapshot inlined. No runtime fetch: the sandboxed opaque-origin
+  // iframe cannot make one anyway, and the picker lives in the host chrome.
+  const base = new URL(url, "https://placeholder.local");
+  const options = versions
+    .map((v) => {
+      const q = new URL(base);
+      q.searchParams.set("v", String(v.version));
+      const target = `${q.pathname}?${q.searchParams.toString()}`;
+      const label = v.label
+        ? `${escapeHtml(v.label)} (v${v.version})`
+        : `v${v.version}`;
+      const selected = v.version === currentVersion ? " selected" : "";
+      return `<option value="${escapeHtml(target)}"${selected}>${label}</option>`;
+    })
+    .join("");
+  return `<label class="oa-version" for="oa-version-select"><span class="oa-version-sr" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0">Version</span><select id="oa-version-select" class="oa-version-select" aria-label="Artifact version">${options}</select></label>`;
+}
 
 function headerHtml(
   favicon: string,
   title: string,
   hostname: string,
   brandUrl?: string | null,
+  versions?: VersionMeta[],
+  currentVersion?: number,
+  url?: string,
   artifactId?: string,
   commentsCount = 0,
 ): string {
@@ -264,8 +308,13 @@ function headerHtml(
   const comments = artifactId
     ? `<button class="oa-cm-toggle" type="button" aria-label="Open comments" aria-expanded="false" aria-controls="oa-cm-drawer"${commentsCount > 0 ? ` data-count="${commentsCount}"` : ""}><span aria-hidden="true">${COMMENT_SVG}</span><span class="oa-cm-count" aria-hidden="true">${commentsCount}</span></button>`
     : "";
+  const picker =
+    versions && currentVersion && url
+      ? versionPickerHtml(versions, currentVersion, url)
+      : "";
   return `<header class="oa-header">
   <span class="oa-header-title"><span class="oa-header-fav">${escapeHtml(favicon)}</span>${escapeHtml(title)}</span>
+  ${picker}
   ${chip}
   ${comments}
   <button id="oa-theme-toggle" type="button" aria-label="Toggle theme"></button>
@@ -301,6 +350,16 @@ function commentsDrawerHtml(
   <div class="oa-cm-list" id="oa-cm-list">${items}</div>
 </aside>`;
 }
+
+const VERSION_SCRIPT = `
+(function(){
+  var sel=document.getElementById('oa-version-select');
+  if(!sel)return;
+  sel.addEventListener('change',function(){
+    if(sel.value)location.search='?'+sel.value.split('?')[1];
+  });
+})();
+`;
 
 const THEME_SCRIPT = `
 (function(){
@@ -463,6 +522,10 @@ export interface HostShellOptions {
   /** Path (+ query) to the artifact frame sub-route, e.g. "/a/:id/frame" or
    *  "/a/:id/frame?v=2" to mirror a pinned version. */
   frameSrc: string;
+  /** All published versions, inlined into the chrome picker at serve time. */
+  versions?: VersionMeta[];
+  /** Version currently being served; marked selected in the picker. */
+  currentVersion?: number;
 }
 
 const OG_CARD_W = 1200;
@@ -648,6 +711,8 @@ export function hostShell(options: HostShellOptions): string {
     brandUrl,
     artifactId,
     frameSrc,
+    versions,
+    currentVersion,
   } = options;
 
   const brand = brandFor(hostname);
@@ -678,10 +743,11 @@ export function hostShell(options: HostShellOptions): string {
 <style>${RESET_CSS}${COMMENTS_CSS}${HOST_FRAME_CSS}</style>
 </head>
 <body>
-${headerHtml(favicon, title, hostname, brandUrl, artifactId, commentsList.length)}
+${headerHtml(favicon, title, hostname, brandUrl, versions, currentVersion, url, artifactId, commentsList.length)}
 <iframe id="oa-frame" src="${escapeHtml(frameSrc)}" sandbox="allow-scripts allow-modals allow-forms allow-popups" title="${escapeHtml(title)}"></iframe>
 ${drawer}
 ${commentsDataScript(commentsList)}
+<script>${VERSION_SCRIPT}</script>
 <script>${THEME_SCRIPT}</script>
 <script>${LAYOUT_SCRIPT}</script>
 <script>${escapeInlineScript(COMMENTS_SCRIPT)}</script>
@@ -781,7 +847,7 @@ const FRAME_ANCHOR_CSS = `
 .oa-cm-pin:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 /* Comment tool armed (canvas): a Figma-style comment marker replaces the pan
    cursor, its tail as the hotspot so the pin lands where the tip points. */
-html.oa-cm-arming,html.oa-cm-arming *{cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'%3E%3Cpath d='M6.5 3.5h15A3.5 3.5 0 0 1 25 7v8a3.5 3.5 0 0 1-3.5 3.5H13l-6.5 5.5v-5.5A3.5 3.5 0 0 1 3 15V7a3.5 3.5 0 0 1 3.5-3.5z' fill='%236457f0' stroke='%23fff' stroke-width='1.6'/%3E%3C/svg%3E") 6 23,crosshair !important}
+html.oa-cm-arming,html.oa-cm-arming *{cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 24 24'%3E%3Cpath d='M4 18V10a8 8 0 0 1 8-8 8 8 0 0 1 8 8 8 8 0 0 1-8 8H4z' fill='%236457f0' stroke='%23fff' stroke-width='1.5' stroke-linejoin='round'/%3E%3C/svg%3E") 5 21,crosshair !important}
 `;
 
 // Frame side, canvas mode: capture a click to drop a pin (world coords, read
@@ -1106,6 +1172,10 @@ export interface UnlockShellOptions {
   artifactId: string;
   comments?: CommentMeta[];
   envelope: EncryptionParams & { ciphertext: string };
+  /** All published versions, inlined into the chrome picker at serve time. */
+  versions?: VersionMeta[];
+  /** Version currently being served; marked selected in the picker. */
+  currentVersion?: number;
 }
 
 // The unlock page is itself a HOST PAGE (chrome + password form); the server
@@ -1127,7 +1197,13 @@ export function unlockShell(options: UnlockShellOptions): string {
     artifactId,
     comments,
     envelope,
+    versions,
+    currentVersion,
   } = options;
+  // The decrypted document renders inside a sandboxed iframe. The version
+  // picker would have no parent origin to navigate, so the inner template is
+  // built WITHOUT versions; the picker lives only in the unlock shell's own
+  // chrome (the parent page), which can navigate ?v= normally.
   // stampCsp: true — a srcdoc'd document has no HTTP response of its own, so
   // the CSP meta tag is the only thing re-asserting connect-src 'none' (R2)
   // once the plaintext lands inside it.
@@ -1210,7 +1286,7 @@ input.focus();
 <style>${RESET_CSS}${UNLOCK_CSS}${COMMENTS_CSS}</style>
 </head>
 <body>
-${headerHtml(favicon, title, hostname, brandUrl, artifactId, commentsList.length)}
+${headerHtml(favicon, title, hostname, brandUrl, versions, currentVersion, url, artifactId, commentsList.length)}
 <div class="oa-unlock">
   <form class="oa-card" id="oa-form">
     <div class="oa-emoji">${escapeHtml(favicon)}</div>
@@ -1226,6 +1302,7 @@ ${headerHtml(favicon, title, hostname, brandUrl, artifactId, commentsList.length
 ${drawer}
 ${commentsDataScript(commentsList)}
 <script>${unlockScript}</script>
+<script>${VERSION_SCRIPT}</script>
 <script>${THEME_SCRIPT}</script>
 <script>${LAYOUT_SCRIPT}</script>
 <script>${escapeInlineScript(COMMENTS_SCRIPT)}</script>
