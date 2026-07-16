@@ -92,4 +92,27 @@ describe("D1R2Store comments", () => {
     expect((await store.listComments(id)).length).toBe(0);
     expect(await store.getComment(created.id)).toBeNull();
   });
+
+  it("keeps the newest 100 comments, still ordered oldest-first", async () => {
+    const store = new D1R2Store(env.DB, env.CONTENT);
+    const id = "cmstore0007";
+    await store.create(id, "hash", artifact, null);
+    // Stagger created_at so LIMIT semantics are deterministic (same-ms ties
+    // would only order by id).
+    for (let i = 0; i < 105; i++) {
+      const ts = new Date(Date.UTC(2020, 0, 1, 0, 0, i)).toISOString();
+      await env.DB.prepare(
+        `INSERT INTO comments (id, artifact_id, author, body, anchor, delete_token_hash, created_at)
+         VALUES (?, ?, null, ?, null, null, ?)`,
+      )
+        .bind(`c${String(i).padStart(3, "0")}`, id, `body-${i}`, ts)
+        .run();
+    }
+    const list = await store.listComments(id);
+    expect(list.length).toBe(100);
+    // Newest window is body-5 … body-104; display order is chronological.
+    expect(list[0]?.body).toBe("body-5");
+    expect(list[99]?.body).toBe("body-104");
+    expect(list.map((c) => c.body)).not.toContain("body-0");
+  });
 });

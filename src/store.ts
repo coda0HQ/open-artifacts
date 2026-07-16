@@ -473,15 +473,18 @@ export class D1R2Store implements ArtifactStore {
 
   async listComments(artifactId: string): Promise<CommentMeta[]> {
     await ensureSchema(this.db);
+    // Cap at 100 to bound inlined HTML. Keep the *newest* window (DESC LIMIT),
+    // then reverse so callers still see chronological oldest-first. ASC LIMIT
+    // would freeze on the first 100 and hide every subsequent post.
     const { results } = await this.db
       .prepare(
         `SELECT id, artifact_id, author, body, anchor, created_at
          FROM comments WHERE artifact_id = ?
-         ORDER BY created_at ASC, id ASC LIMIT 100`,
+         ORDER BY created_at DESC, id DESC LIMIT 100`,
       )
       .bind(artifactId)
       .all<CommentRow>();
-    return results.map(toComment);
+    return results.map(toComment).reverse();
   }
 
   async addComment(
