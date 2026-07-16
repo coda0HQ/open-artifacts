@@ -1,5 +1,6 @@
 import { exports } from "cloudflare:workers";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { D1R2Store } from "../../src/store";
 
 const BASE = "http://artifacts.test";
 
@@ -63,6 +64,22 @@ async function encrypt(
 }
 
 describe("GET /a/:id (plain HTML) — host page", () => {
+  it("does not read the artifact body from storage — the frame sub-route does, once", async () => {
+    const created = await create({ content: "<h1>Big payload</h1>" });
+    // The host never renders the artifact body; /a/:id/frame reads it itself.
+    // Reading it here too would pull the ≤4 MiB body into worker memory only
+    // to throw it away — doubling the storage read on every plain-artifact view.
+    const spy = vi.spyOn(D1R2Store.prototype, "getContent");
+    try {
+      const res = await exports.default.fetch(`${BASE}/a/${created.id}`);
+      expect(res.status).toBe(200);
+      await res.text();
+    } finally {
+      spy.mockRestore();
+    }
+    expect(spy).not.toHaveBeenCalled();
+  });
+
   it("wraps the chrome in a complete skeleton with title, favicon, and reset, embedding the artifact frame", async () => {
     const created = await create({ content: "<h1>Wrapped</h1>" });
     const res = await exports.default.fetch(`${BASE}/a/${created.id}`);

@@ -97,6 +97,49 @@ type ResolvedArtifact =
     }
   | { ok: false; status: 400 | 404; badVersion: boolean };
 
+// A content-less resolve for the host page: the host never renders the
+// artifact body (the frame sub-route does, and reads it once itself), so
+// pulling the ≤4 MiB body into worker memory here only to drop it would
+// double the storage read on every plain-artifact view. The host needs only
+// the per-version encrypted flag — which listVersions already carries — to
+// pick the unlock shell vs the frame shell.
+type ResolvedRecord =
+  | {
+      ok: true;
+      record: ArtifactRecord;
+      version: number;
+      encrypted: boolean;
+    }
+  | { ok: false; status: 400 | 404; badVersion: boolean };
+
+async function resolveRecord(
+  store: ArtifactStore,
+  id: string,
+  rawVersion: string | undefined,
+): Promise<ResolvedRecord> {
+  const record = await store.get(id);
+  if (record === null) return { ok: false, status: 404, badVersion: false };
+
+  const version = parseVersionParam(rawVersion, record.currentVersion);
+  if (typeof version !== "number") {
+    return {
+      ok: false,
+      status: version.status,
+      badVersion: version.status === 400,
+    };
+  }
+
+  const versions = await store.listVersions(record.id);
+  const viewed = versions.find((v) => v.version === version);
+  // A version row is created at publish time; if it is somehow absent, the
+  // content lookup below would 404 anyway — treat that as not-found rather
+  // than guessing the encryption state.
+  if (viewed === undefined) {
+    return { ok: false, status: 404, badVersion: false };
+  }
+  return { ok: true, record, version, encrypted: viewed.encrypted };
+}
+
 async function resolveArtifact(
   store: ArtifactStore,
   id: string,
@@ -129,7 +172,7 @@ app.get("/a/:id", async (c) => {
   const store = storeFrom(c);
   const hostname = new URL(c.req.url).hostname;
   const rawVersion = c.req.query("v");
-  const resolved = await resolveArtifact(store, c.req.param("id"), rawVersion);
+  const resolved = await resolveRecord(store, c.req.param("id"), rawVersion);
 
   if (!resolved.ok) {
     const page = resolved.badVersion
@@ -141,7 +184,7 @@ app.get("/a/:id", async (c) => {
     });
   }
 
-  const { record, content, version } = resolved;
+  const { record, version, encrypted } = resolved;
   const url = artifactUrl(c, record.id);
   const ogImage = ogImageUrl(c, record.id);
   const brandUrl = c.env.BRAND_URL ?? null;
@@ -157,7 +200,17 @@ app.get("/a/:id", async (c) => {
   // populated at serve time — the sandboxed frame cannot fetch later.
   const versions = await store.listVersions(record.id);
 
-  if (content.encrypted !== null) {
+  if (encrypted) {
+    // Only the encrypted path needs the body — the ciphertext — and it must
+    // not be served by /a/:id/frame (the server never holds plaintext). Read
+    // it here, once, for the unlock shell.
+    const content = await store.getContent(record.id, version);
+    if (content === null) {
+      return new Response(notFoundPage(hostname), {
+        status: 404,
+        headers: hostHeaders(),
+      });
+    }
     const page = unlockShell({
       title: record.title,
       description: record.description,
@@ -169,7 +222,7 @@ app.get("/a/:id", async (c) => {
       brandUrl,
       artifactId: record.id,
       comments,
-      envelope: { ...content.encrypted, ciphertext: content.body },
+      envelope: { ...content.encrypted!, ciphertext: content.body },
       versions,
       currentVersion: version,
     });
