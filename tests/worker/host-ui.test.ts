@@ -41,7 +41,7 @@ describe("host page interactive UI (tasks 009/010/011)", () => {
   it("renders comment text with textContent, never innerHTML", async () => {
     const html = await hostHtml();
     // The client-side item builder uses textContent for author/body.
-    expect(html).toContain("text.textContent=cm.body");
+    expect(html).toContain("title.textContent=cm.body");
     expect(html).toContain(".textContent=cm.author");
     expect(html).not.toContain("innerHTML=cm.body");
   });
@@ -86,8 +86,11 @@ describe("host page interactive UI (tasks 009/010/011)", () => {
     expect(html).toContain("type:\"oa:theme\"");
   });
 
-  it("exposes done (circle-check) and three-dot more menu with delete", async () => {
+  it("exposes card layout: avatar, title, byline, done, and more menu", async () => {
     const html = await hostHtml();
+    expect(html).toContain("oa-cm-avatar");
+    expect(html).toContain("oa-cm-title");
+    expect(html).toContain("oa-cm-byline");
     expect(html).toContain("oa-cm-done");
     expect(html).toContain("Mark done");
     expect(html).toContain("oa-cm-more");

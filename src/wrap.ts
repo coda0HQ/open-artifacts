@@ -223,32 +223,34 @@ const COMMENTS_CSS = `
 .oa-cm-drawer .oa-cm-close:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 .oa-cm-drawer .oa-cm-close:active{transform:translateY(1px)}
 @media (hover:hover) and (pointer:fine){.oa-cm-drawer .oa-cm-close:hover{opacity:1;border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 25%)}}
-.oa-cm-list{flex:1;min-height:0;overflow-y:auto;margin:.5rem 1rem .75rem;padding:.2rem;border:1px solid var(--oa-border);border-radius:10px;background:var(--oa-surface);display:flex;flex-direction:column}
+/* Card list — each comment is a rounded surface card (reference UI). */
+.oa-cm-list{flex:1;min-height:0;overflow-y:auto;margin:.55rem .75rem .75rem;padding:0;border:0;background:transparent;display:flex;flex-direction:column;gap:.5rem}
 .oa-cm-empty{color:var(--oa-muted);font-size:.85rem;text-align:center;margin:2rem 1rem}
-.oa-cm-item{position:relative;padding:.55rem .65rem;border-radius:6px;transition:background .1s}
-.oa-cm-item+.oa-cm-item{border-top:1px solid color-mix(in oklab,var(--oa-border),transparent 45%)}
-@media (hover:hover) and (pointer:fine){.oa-cm-item:hover{background:color-mix(in oklab,var(--oa-fg),transparent 94%)}}
-.oa-cm-item .oa-cm-meta{display:flex;gap:.4rem;align-items:center;margin-bottom:.15rem;min-height:1.25rem}
-.oa-cm-item .oa-cm-author{font-size:.8rem;font-weight:600;color:var(--oa-fg)}
-.oa-cm-item .oa-cm-anon{font-size:.8rem;font-weight:500;color:var(--oa-muted)}
-/* Trailing cluster: time + done + more, pushed right as a group. */
-.oa-cm-item .oa-cm-trail{display:inline-flex;align-items:center;gap:.25rem;margin-left:auto;flex-shrink:0}
-.oa-cm-item .oa-cm-time{font-size:.72rem;color:var(--oa-muted);flex-shrink:0}
-.oa-cm-item .oa-cm-text{font-size:.875rem;line-height:1.5;color:var(--oa-fg);white-space:pre-wrap;word-break:break-word}
-.oa-cm-item[data-done] .oa-cm-text{color:var(--oa-muted);text-decoration:line-through;text-decoration-thickness:1px}
-.oa-cm-item[data-done] .oa-cm-author,.oa-cm-item[data-done] .oa-cm-anon{color:var(--oa-muted)}
-/* Circle + check next to time. Empty: muted ring + faint check; done: filled accent. */
-.oa-cm-done{flex-shrink:0;width:18px;height:18px;padding:0;border-radius:50%;border:1.5px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 28%);background:transparent;color:color-mix(in oklab,var(--oa-muted),transparent 35%);display:grid;place-items:center;cursor:pointer;transition:border-color .12s,background .12s,color .12s,box-shadow .12s}
-.oa-cm-done svg{width:10px;height:10px;display:block}
+.oa-cm-item{position:relative;display:flex;gap:.65rem;align-items:flex-start;padding:.7rem .75rem;border-radius:10px;border:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 4%);background:var(--oa-surface);transition:border-color .12s,background .12s}
+@media (hover:hover) and (pointer:fine){.oa-cm-item:hover{border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 14%)}}
+.oa-cm-avatar{flex-shrink:0;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:color-mix(in oklab,var(--oa-fg),transparent 90%);color:var(--oa-fg);font-size:.75rem;font-weight:600;line-height:1;text-transform:uppercase;user-select:none}
+.oa-cm-stack{flex:1;min-width:0;display:flex;flex-direction:column;gap:.2rem}
+.oa-cm-top{display:flex;gap:.4rem;align-items:flex-start}
+.oa-cm-title{flex:1;min-width:0;font-size:.875rem;font-weight:600;line-height:1.35;letter-spacing:-.01em;color:var(--oa-fg);white-space:pre-wrap;word-break:break-word}
+.oa-cm-byline{font-size:.72rem;line-height:1.4;color:var(--oa-muted)}
+.oa-cm-byline .oa-cm-author{font-weight:500;color:var(--oa-muted)}
+.oa-cm-byline .oa-cm-anon{font-weight:500;color:var(--oa-muted)}
+.oa-cm-tag,.oa-cm-detached{font-size:.72rem;font-weight:500;color:var(--oa-muted)}
+.oa-cm-detached{font-style:italic}
+.oa-cm-item[data-done] .oa-cm-title{color:var(--oa-muted);text-decoration:line-through;text-decoration-thickness:1px}
+.oa-cm-item[data-done] .oa-cm-avatar{opacity:.65}
+/* Trail: more ··· then done ○✓ — always visible top-right. */
+.oa-cm-trail{display:inline-flex;align-items:center;gap:.1rem;flex-shrink:0;margin-top:-.1rem}
+.oa-cm-done{flex-shrink:0;width:20px;height:20px;padding:0;border-radius:50%;border:1.5px solid color-mix(in oklab,var(--oa-muted),transparent 25%);background:transparent;color:color-mix(in oklab,var(--oa-muted),transparent 15%);display:grid;place-items:center;cursor:pointer;transition:border-color .12s,background .12s,color .12s,box-shadow .12s}
+.oa-cm-done svg{width:11px;height:11px;display:block}
 .oa-cm-done[aria-pressed="true"]{background:var(--oa-accent);border-color:var(--oa-accent);color:var(--oa-accent-on)}
 .oa-cm-done:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
-@media (hover:hover) and (pointer:fine){.oa-cm-done:hover{border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 50%);color:var(--oa-muted)}.oa-cm-done[aria-pressed="true"]:hover{background:color-mix(in oklab,var(--oa-accent),var(--oa-fg) 10%);color:var(--oa-accent-on)}}
-/* Three-dot menu — holds Delete (when the browser holds a delete token). */
+@media (hover:hover) and (pointer:fine){.oa-cm-done:hover{border-color:var(--oa-muted);color:var(--oa-muted)}.oa-cm-done[aria-pressed="true"]:hover{background:color-mix(in oklab,var(--oa-accent),var(--oa-fg) 10%);color:var(--oa-accent-on)}}
 .oa-cm-actions{position:relative;flex-shrink:0}
-.oa-cm-more{width:22px;height:22px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--oa-muted);display:grid;place-items:center;cursor:pointer;opacity:.7;transition:opacity .12s,background .12s,color .12s}
-.oa-cm-more svg{width:13px;height:13px;display:block}
-.oa-cm-more:focus-visible{outline:none;box-shadow:var(--oa-focus-ring);opacity:1}
-@media (hover:hover) and (pointer:fine){.oa-cm-more{opacity:0}.oa-cm-item:hover .oa-cm-more,.oa-cm-more[aria-expanded="true"]{opacity:1}.oa-cm-more:hover{background:color-mix(in oklab,var(--oa-fg),transparent 92%);color:var(--oa-fg)}}
+.oa-cm-more{width:22px;height:22px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--oa-muted);display:grid;place-items:center;cursor:pointer;transition:background .12s,color .12s}
+.oa-cm-more svg{width:14px;height:14px;display:block}
+.oa-cm-more:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+@media (hover:hover) and (pointer:fine){.oa-cm-more:hover{background:color-mix(in oklab,var(--oa-fg),transparent 92%);color:var(--oa-fg)}}
 .oa-cm-menu{position:absolute;top:100%;right:0;z-index:2;min-width:7.5rem;padding:.25rem;border:1px solid var(--oa-border);border-radius:8px;background:var(--oa-bg);box-shadow:0 4px 16px -4px rgba(0,0,0,.18),0 12px 28px -12px rgba(0,0,0,.22)}
 .oa-cm-menu[hidden]{display:none}
 .oa-cm-menu button{display:block;width:100%;text-align:left;padding:.4rem .55rem;border:0;border-radius:6px;background:none;color:var(--oa-fg);font:inherit;font-size:.8rem;cursor:pointer}
@@ -286,9 +288,7 @@ const COMMENTS_CSS = `
 .oa-cm-send[data-ready]:active{transform:scale(.93)}
 @media (hover:hover) and (pointer:fine){.oa-cm-send[data-ready]:hover{background:color-mix(in oklab,var(--oa-accent),var(--oa-fg) 12%)}}
 @media (prefers-reduced-motion:no-preference){.oa-cm-compose{transition:opacity .13s ease-out,transform .13s ease-out,display .13s allow-discrete}.oa-cm-compose[hidden]{opacity:0;transform:translateY(-4px) scale(.985)}@starting-style{.oa-cm-compose:not([hidden]){opacity:0;transform:translateY(-4px) scale(.985)}}}
-.oa-cm-item[data-focus]{background:color-mix(in oklab,var(--oa-accent),transparent 90%)}
-.oa-cm-tag,.oa-cm-detached{font-size:.72rem;font-weight:500;color:var(--oa-muted);flex-shrink:0}
-.oa-cm-detached{font-style:italic}
+.oa-cm-item[data-focus]{border-color:color-mix(in oklab,var(--oa-accent),transparent 55%);box-shadow:0 0 0 1px color-mix(in oklab,var(--oa-accent),transparent 70%)}
 .oa-cm-err{display:none;margin:0 .25rem;padding:0 .2rem;color:var(--oa-danger);font-size:.75rem;font-weight:500}
 .oa-cm-err:not([hidden]){display:block}
 `;
@@ -310,9 +310,9 @@ const COMMENT_ADD_SVG =
 // Done toggle: checkmark inside the circle (visible when aria-pressed).
 const DONE_CHECK_SVG =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M5 13l4 4L19 7"/></svg>';
-// Vertical three-dot "more" control for the per-item menu.
+// Horizontal three-dot "more" control (reference card UI).
 const MORE_DOTS_SVG =
-  '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="5" r="1.75"/><circle cx="12" cy="12" r="1.75"/><circle cx="12" cy="19" r="1.75"/></svg>';
+  '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><circle cx="5" cy="12" r="1.75"/><circle cx="12" cy="12" r="1.75"/><circle cx="19" cy="12" r="1.75"/></svg>';
 // The compose send button's up-arrow (post the comment).
 const SEND_ARROW_SVG =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M12 19V6M6 12l6-6 6 6"/></svg>';
@@ -404,10 +404,13 @@ function commentsDrawerHtml(
         .map((c) => {
           const done = c.done ? ' data-done=""' : "";
           const pressed = c.done ? "true" : "false";
+          const initial = c.author
+            ? escapeHtml([...c.author][0] ?? "?")
+            : "?";
           const who = c.author
             ? `<span class="oa-cm-author">${escapeHtml(c.author)}</span>`
             : '<span class="oa-cm-anon">anonymous</span>';
-          return `<div class="oa-cm-item"${done} data-id="${escapeHtml(c.id)}"><div class="oa-cm-meta">${who}<span class="oa-cm-trail"><span class="oa-cm-time">${escapeHtml(c.createdAt)}</span><button class="oa-cm-done" type="button" aria-pressed="${pressed}" aria-label="${c.done ? "Mark not done" : "Mark done"}">${DONE_CHECK_SVG}</button></span></div><div class="oa-cm-text">${escapeHtml(c.body)}</div></div>`;
+          return `<div class="oa-cm-item"${done} data-id="${escapeHtml(c.id)}"><div class="oa-cm-avatar" aria-hidden="true">${initial}</div><div class="oa-cm-stack"><div class="oa-cm-top"><div class="oa-cm-title">${escapeHtml(c.body)}</div><span class="oa-cm-trail"><button class="oa-cm-more" type="button" aria-label="More actions" aria-expanded="false" aria-haspopup="menu" hidden>${MORE_DOTS_SVG}</button><button class="oa-cm-done" type="button" aria-pressed="${pressed}" aria-label="${c.done ? "Mark not done" : "Mark done"}">${DONE_CHECK_SVG}</button></span></div><div class="oa-cm-byline">${who} · <span class="oa-cm-time">${escapeHtml(c.createdAt)}</span></div></div></div>`;
         })
         .join("")
     : '<p class="oa-cm-empty">No comments yet.</p>';
@@ -1313,27 +1316,60 @@ const HOST_UI_SCRIPT = `
     var hc=document.getElementById("oa-cm-head-count");
     if(hc){if(state.length>0){hc.setAttribute("data-count",String(state.length));hc.textContent=String(state.length)}else{hc.removeAttribute("data-count");hc.textContent="0"}}
   }
-  function relTime(iso){var t=Date.parse(iso);if(isNaN(t))return"";var s=Math.max(0,(Date.now()-t)/1e3);if(s<45)return"just now";var m=Math.round(s/60);if(m<60)return m+"m";var h=Math.round(m/60);if(h<24)return h+"h";var d=Math.round(h/24);if(d<7)return d+"d";return new Date(t).toLocaleDateString(undefined,{month:"short",day:"numeric"})}
+  function relTime(iso){
+    var t=Date.parse(iso);if(isNaN(t))return"";
+    var s=Math.max(0,(Date.now()-t)/1e3);
+    if(s<45)return"just now";
+    var m=Math.round(s/60);if(m<60)return m===1?"1 minute ago":m+" minutes ago";
+    var h=Math.round(m/60);if(h<24)return h===1?"1 hour ago":h+" hours ago";
+    var d=Math.round(h/24);if(d<7)return d===1?"1 day ago":d+" days ago";
+    return new Date(t).toLocaleDateString(undefined,{month:"short",day:"numeric"});
+  }
+  function initialOf(name){
+    if(!name)return"?";
+    var ch=[...name.trim()][0];
+    return ch?ch.toUpperCase():"?";
+  }
   function closeMenus(except){
     if(!list)return;
     var menus=list.querySelectorAll(".oa-cm-menu");
-    for(var i=0;i<menus.length;i++){if(menus[i]!==except){menus[i].setAttribute("hidden","");var m=menus[i].previousElementSibling;if(m)m.setAttribute("aria-expanded","false")}}
+    for(var i=0;i<menus.length;i++){
+      if(menus[i]!==except){
+        menus[i].setAttribute("hidden","");
+        var btn=menus[i].parentElement&&menus[i].parentElement.querySelector(".oa-cm-more");
+        if(btn)btn.setAttribute("aria-expanded","false");
+      }
+    }
   }
   function itemEl(cm){
     var item=document.createElement("div");item.className="oa-cm-item";item.setAttribute("data-id",cm.id);
     if(cm.done)item.setAttribute("data-done","");
-    var meta=document.createElement("div");meta.className="oa-cm-meta";
-    var who=document.createElement("span");
-    if(cm.author){who.className="oa-cm-author";who.textContent=cm.author}else{who.className="oa-cm-anon";who.textContent="anonymous"}
-    meta.appendChild(who);
-    if(cm.anchor){
-      var vv=window.__oaViewedVersion||1,av=cm.anchor.anchorVersion||1;
-      if(av!==vv){var tag=document.createElement("span");tag.className="oa-cm-tag";tag.textContent="\\u00b7 v"+av;meta.appendChild(tag);}
-      if(orphans[cm.id]){var det=document.createElement("span");det.className="oa-cm-detached";det.textContent="detached";meta.appendChild(det)}
-    }
+    var avatar=document.createElement("div");avatar.className="oa-cm-avatar";avatar.setAttribute("aria-hidden","true");
+    avatar.textContent=initialOf(cm.author);
+    var stack=document.createElement("div");stack.className="oa-cm-stack";
+    var top=document.createElement("div");top.className="oa-cm-top";
+    var title=document.createElement("div");title.className="oa-cm-title";title.textContent=cm.body;
     var trail=document.createElement("span");trail.className="oa-cm-trail";
-    var time=document.createElement("span");time.className="oa-cm-time";time.textContent=relTime(cm.createdAt);time.title=cm.createdAt||"";
-    trail.appendChild(time);
+    var actions=document.createElement("div");actions.className="oa-cm-actions";
+    var more=document.createElement("button");more.type="button";more.className="oa-cm-more";
+    more.setAttribute("aria-label","More actions");more.setAttribute("aria-expanded","false");more.setAttribute("aria-haspopup","menu");
+    more.innerHTML=${jsonForInlineScript(MORE_DOTS_SVG)};
+    var menu=document.createElement("div");menu.className="oa-cm-menu";menu.setAttribute("role","menu");menu.setAttribute("hidden","");
+    if(getToken(cm.id)){
+      var del=document.createElement("button");del.type="button";del.className="oa-cm-del";del.setAttribute("role","menuitem");del.textContent="Delete";
+      del.addEventListener("click",function(e){e.stopPropagation();closeMenus();remove(cm.id)});
+      menu.appendChild(del);
+    }
+    more.addEventListener("click",function(e){
+      e.stopPropagation();
+      if(!menu.childNodes.length)return;
+      var open=menu.hasAttribute("hidden");
+      closeMenus(menu);
+      if(open){menu.removeAttribute("hidden");more.setAttribute("aria-expanded","true")}
+      else{menu.setAttribute("hidden","");more.setAttribute("aria-expanded","false")}
+    });
+    if(!getToken(cm.id))more.setAttribute("hidden","");
+    actions.appendChild(more);actions.appendChild(menu);trail.appendChild(actions);
     var doneBtn=document.createElement("button");
     doneBtn.type="button";doneBtn.className="oa-cm-done";
     doneBtn.setAttribute("aria-pressed",cm.done?"true":"false");
@@ -1341,27 +1377,21 @@ const HOST_UI_SCRIPT = `
     doneBtn.innerHTML=${jsonForInlineScript(DONE_CHECK_SVG)};
     doneBtn.addEventListener("click",function(e){e.stopPropagation();toggleDone(cm.id)});
     trail.appendChild(doneBtn);
-    if(getToken(cm.id)){
-      var actions=document.createElement("div");actions.className="oa-cm-actions";
-      var more=document.createElement("button");more.type="button";more.className="oa-cm-more";
-      more.setAttribute("aria-label","More actions");more.setAttribute("aria-expanded","false");more.setAttribute("aria-haspopup","menu");
-      more.innerHTML=${jsonForInlineScript(MORE_DOTS_SVG)};
-      var menu=document.createElement("div");menu.className="oa-cm-menu";menu.setAttribute("role","menu");menu.setAttribute("hidden","");
-      var del=document.createElement("button");del.type="button";del.className="oa-cm-del";del.setAttribute("role","menuitem");del.textContent="Delete";
-      del.addEventListener("click",function(e){e.stopPropagation();closeMenus();remove(cm.id)});
-      menu.appendChild(del);
-      more.addEventListener("click",function(e){
-        e.stopPropagation();
-        var open=menu.hasAttribute("hidden");
-        closeMenus(menu);
-        if(open){menu.removeAttribute("hidden");more.setAttribute("aria-expanded","true")}
-        else{menu.setAttribute("hidden","");more.setAttribute("aria-expanded","false")}
-      });
-      actions.appendChild(more);actions.appendChild(menu);trail.appendChild(actions);
+    top.appendChild(title);top.appendChild(trail);
+    var byline=document.createElement("div");byline.className="oa-cm-byline";
+    var who=document.createElement("span");
+    if(cm.author){who.className="oa-cm-author";who.textContent=cm.author}else{who.className="oa-cm-anon";who.textContent="anonymous"}
+    byline.appendChild(who);
+    byline.appendChild(document.createTextNode(" \\u00b7 "));
+    var time=document.createElement("span");time.className="oa-cm-time";time.textContent=relTime(cm.createdAt);time.title=cm.createdAt||"";
+    byline.appendChild(time);
+    if(cm.anchor){
+      var vv=window.__oaViewedVersion||1,av=cm.anchor.anchorVersion||1;
+      if(av!==vv){byline.appendChild(document.createTextNode(" "));var tag=document.createElement("span");tag.className="oa-cm-tag";tag.textContent="v"+av;byline.appendChild(tag)}
+      if(orphans[cm.id]){byline.appendChild(document.createTextNode(" "));var det=document.createElement("span");det.className="oa-cm-detached";det.textContent="detached";byline.appendChild(det)}
     }
-    meta.appendChild(trail);
-    var text=document.createElement("div");text.className="oa-cm-text";text.textContent=cm.body;
-    item.appendChild(meta);item.appendChild(text);
+    stack.appendChild(top);stack.appendChild(byline);
+    item.appendChild(avatar);item.appendChild(stack);
     return item;
   }
   function renderList(){if(!list)return;list.textContent="";
