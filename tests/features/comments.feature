@@ -51,3 +51,24 @@ Feature: Multi-user interaction on a shared artifact
     Given a viewer posted a comment and holds its delete token
     Then the drawer item exposes a three-dot more menu containing Delete
     And Delete requires the delete-token bearer auth
+
+  Scenario: An owner opening /a/:id?wt=<write token> can delete any comment
+    Given an artifact has comments posted by other viewers
+    When the owner opens /a/:id with the artifact write token in the query
+    Then the write token is stored for this artifact and stripped from the URL
+    And every drawer item exposes the more menu with Delete
+    And Delete authorises with the artifact write token
+
+  Scenario: A viewer without a token sees no more menu
+    Given an artifact has a comment this viewer did not post
+    And this viewer holds no artifact write token
+    Then the drawer item renders no three-dot more menu
+
+  Scenario: Done comments are filtered out of the default drawer view
+    Given an artifact has one open comment and one done comment
+    When a viewer opens the comments drawer
+    Then the Open filter is selected and only the open comment is listed
+    When the viewer selects the Done filter
+    Then only the done comment is listed
+    When the viewer selects the All filter
+    Then both comments are listed

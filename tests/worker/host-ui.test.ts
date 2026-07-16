@@ -107,4 +107,30 @@ describe("host page interactive UI (tasks 009/010/011)", () => {
     expect(html).toContain("oa-cm-menu");
     expect(html).toContain('textContent="Delete"');
   });
+
+  it("renders the open/done/all filter tablist with open selected", async () => {
+    const html = await hostHtml();
+    expect(html).toContain('id="oa-cm-filter"');
+    expect(html).toContain('role="tablist"');
+    expect(html).toContain('data-filter="open" aria-selected="true"');
+    expect(html).toContain('data-filter="done" aria-selected="false"');
+    expect(html).toContain('data-filter="all" aria-selected="false"');
+    // Done comments drop out of the default view; the filter brings them back.
+    expect(html).toContain('var filter="open"');
+    expect(html).toContain("function visible()");
+    expect(html).toContain("No done comments.");
+  });
+
+  it("grants owner moderation from ?wt= and strips the token from the URL", async () => {
+    const html = await hostHtml();
+    expect(html).toContain("function ownerToken()");
+    expect(html).toContain('searchParams.get("wt")');
+    // The token must not linger in history once captured.
+    expect(html).toContain('u.searchParams.delete("wt")');
+    expect(html).toContain("history.replaceState");
+    // Delete authorises with the comment's own token or the owner write token.
+    expect(html).toContain(
+      "function deleteTokenFor(id){return getToken(id)||ownerToken()}",
+    );
+  });
 });
