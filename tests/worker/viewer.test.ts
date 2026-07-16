@@ -524,3 +524,112 @@ describe("GET /a/:id (encrypted)", () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe("GET /a/:id version picker", () => {
+  async function putVersion(id: string, writeToken: string, content: string) {
+    const res = await exports.default.fetch(
+      new Request(`${BASE}/api/artifacts/${id}`, {
+        method: "PUT",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${writeToken}`,
+        },
+        body: JSON.stringify({ content }),
+      }),
+    );
+    expect(res.status).toBe(200);
+  }
+
+  it("renders a picker listing all versions with the current marked selected", async () => {
+    const created = await create({ content: "<p>v1</p>" });
+    await putVersion(created.id, created.writeToken, "<p>v2</p>");
+    await putVersion(created.id, created.writeToken, "<p>v3</p>");
+
+    const html = await (
+      await exports.default.fetch(`${BASE}/a/${created.id}`)
+    ).text();
+    expect(html).toContain('id="oa-version-select"');
+    expect(html).toContain(">v1</option>");
+    expect(html).toContain(">v2</option>");
+    expect(html).toContain(">v3</option>");
+    // Current (latest = 3) is selected.
+    expect(html).toMatch(/value="[^"]*v=3"[^>]* selected/);
+    // No runtime fetch for versions: the list is inlined as options, and the
+    // CSP forbids any connect.
+    expect(html).toContain('aria-label="Artifact version"');
+  });
+
+  it("selecting an older version via ?v= serves that snapshot and keeps the picker", async () => {
+    const created = await create({ content: "<p>v1</p>" });
+    await putVersion(created.id, created.writeToken, "<p>v2</p>");
+    await putVersion(created.id, created.writeToken, "<p>v3</p>");
+
+    const v1 = await (
+      await exports.default.fetch(`${BASE}/a/${created.id}?v=1`)
+    ).text();
+    expect(v1).toContain("<p>v1</p>");
+    expect(v1).not.toContain("<p>v3</p>");
+    // Picker still present, and v1 is now the selected option.
+    expect(v1).toContain('id="oa-version-select"');
+    expect(v1).toMatch(/value="[^"]*v=1"[^>]* selected/);
+  });
+
+  it("renders no picker for a single-version artifact", async () => {
+    const created = await create({ content: "<p>only</p>" });
+    const html = await (
+      await exports.default.fetch(`${BASE}/a/${created.id}`)
+    ).text();
+    expect(html).not.toContain('id="oa-version-select"');
+    expect(html).not.toContain('<select id="oa-version-select"');
+    // No <label class="oa-version"> control is emitted for a single version.
+    expect(html).not.toContain('<label class="oa-version"');
+  });
+
+  it("ships keyboard + both-theme support for the picker", async () => {
+    const created = await create({ content: "<p>v1</p>" });
+    await putVersion(created.id, created.writeToken, "<p>v2</p>");
+    const html = await (
+      await exports.default.fetch(`${BASE}/a/${created.id}`)
+    ).text();
+    expect(html).toContain(".oa-version-select:focus-visible");
+    expect(html).toContain("var(--oa-focus-ring)");
+    expect(html).toContain('[data-theme="light"]');
+    expect(html).toContain('[data-theme="dark"]');
+  });
+
+  it("inlines the picker into the encrypted unlock shell chrome", async () => {
+    const envelope = await encrypt("<h1>Secret v1</h1>", "hunter2");
+    const created = await create({
+      content: envelope.content,
+      encrypted: {
+        salt: envelope.salt,
+        iv: envelope.iv,
+        iterations: envelope.iterations,
+      },
+    });
+    const env2 = await encrypt("<h1>Secret v2</h1>", "hunter2");
+    await exports.default.fetch(
+      new Request(`${BASE}/api/artifacts/${created.id}`, {
+        method: "PUT",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${created.writeToken}`,
+        },
+        body: JSON.stringify({
+          content: env2.content,
+          encrypted: {
+            salt: env2.salt,
+            iv: env2.iv,
+            iterations: env2.iterations,
+          },
+        }),
+      }),
+    );
+    const html = await (
+      await exports.default.fetch(`${BASE}/a/${created.id}`)
+    ).text();
+    expect(html).toContain('id="oa-version-select"');
+    expect(html).toContain(">v2</option>");
+    expect(html).toMatch(/value="[^"]*v=2"[^>]* selected/);
+  });
+});

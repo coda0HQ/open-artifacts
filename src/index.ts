@@ -158,6 +158,9 @@ app.get("/a/:id", async (c) => {
   const url = artifactUrl(c, record.id);
   const ogImage = ogImageUrl(c, record.id);
   const brandUrl = c.env.BRAND_URL ?? null;
+  // Inline the full version list into the chrome so the picker is populated
+  // at serve time — the sandboxed opaque-origin iframe cannot fetch later.
+  const versions = await store.listVersions(record.id);
 
   if (content.encrypted !== null) {
     const page = unlockShell({
@@ -172,6 +175,8 @@ app.get("/a/:id", async (c) => {
       envelope: { ...content.encrypted, ciphertext: content.body },
       webFonts,
       nonce,
+      versions,
+      currentVersion: version,
     });
     return new Response(page, { headers: htmlHeaders(false) });
   }
@@ -187,6 +192,8 @@ app.get("/a/:id", async (c) => {
     hostname,
     brandUrl,
     nonce,
+    versions,
+    currentVersion: version,
   });
   return new Response(page, { headers: htmlHeaders(true) });
 });

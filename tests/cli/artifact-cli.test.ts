@@ -1,18 +1,22 @@
 import { execFile } from "node:child_process";
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  statSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
 import type { Server } from "node:http";
 import { createServer } from "node:http";
-import { tmpdir } from "node:os";
+import { platform, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+
+const itUnix = platform() === "win32" ? it.skip : it;
 
 const execFileAsync = promisify(execFile);
 const SCRIPT = resolve(
@@ -2046,4 +2050,42 @@ const authored = 1;
     expect(manifest().artifacts[0].autoUpdate).toBe(true);
     expect(existsSync(join(projectDir, ".claude/settings.json"))).toBe(true);
   });
+
+  itUnix(
+    "writes credentials.json with mode 0600 after create --password",
+    async () => {
+      const { recipePath } = writeRecipe("secret-locked", {
+        local: true,
+        encrypted: true,
+      });
+
+      await run(["create", recipePath], {
+        env: { OPEN_ARTIFACTS_PASSWORD_REPORT_PASSWORD: "correct horse" },
+      });
+
+      const credentialsPath = join(projectDir, ".artifacts/credentials.json");
+      expect(existsSync(credentialsPath)).toBe(true);
+      expect(statSync(credentialsPath).mode & 0o777).toBe(0o600);
+    },
+  );
+
+  itUnix(
+    "migrates a pre-existing 0644 credentials.json to 0600 on load",
+    async () => {
+      const credentialsPath = join(projectDir, ".artifacts/credentials.json");
+      mkdirSync(dirname(credentialsPath), { recursive: true });
+      writeFileSync(
+        credentialsPath,
+        `${JSON.stringify({ tokens: {} }, null, 2)}\n`,
+      );
+      chmodSync(credentialsPath, 0o644);
+      expect(statSync(credentialsPath).mode & 0o777).toBe(0o644);
+
+      // `show` calls loadCredentials at the top, before the network round-trip,
+      // so the one-time migration runs even though the lookup otherwise no-ops.
+      await run(["show", "testid123456"]);
+
+      expect(statSync(credentialsPath).mode & 0o777).toBe(0o600);
+    },
+  );
 });
