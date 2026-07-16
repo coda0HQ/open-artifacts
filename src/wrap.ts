@@ -222,6 +222,13 @@ const COMMENTS_CSS = `
 .oa-cm-drawer .oa-cm-close:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 .oa-cm-drawer .oa-cm-close:active{transform:translateY(1px)}
 @media (hover:hover) and (pointer:fine){.oa-cm-drawer .oa-cm-close:hover{opacity:1;border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 25%)}}
+/* Filter tablist — done comments are hidden under "Open" by default, so the
+   filter is the way back to them. Shares the header's control language. */
+.oa-cm-filter{display:flex;align-items:center;gap:2px;padding:.4rem 1rem;border-bottom:1px solid var(--oa-border);flex-shrink:0}
+.oa-cm-filter button{height:26px;padding:0 .5rem;border:0;border-radius:6px;background:none;color:var(--oa-muted);font:inherit;font-size:.75rem;font-weight:500;cursor:pointer;transition:background .12s,color .12s}
+.oa-cm-filter button[aria-selected="true"]{background:var(--oa-surface);color:var(--oa-fg)}
+.oa-cm-filter button:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+@media (hover:hover) and (pointer:fine){.oa-cm-filter button:hover{background:color-mix(in oklab,var(--oa-fg),transparent 94%);color:var(--oa-fg)}}
 /* Card list — each comment is a rounded surface card (reference UI). */
 .oa-cm-list{flex:1;min-height:0;overflow-y:auto;margin:.55rem .75rem .75rem;padding:0;border:0;background:transparent;display:flex;flex-direction:column;gap:.5rem}
 .oa-cm-empty{color:var(--oa-muted);font-size:.85rem;text-align:center;margin:2rem 1rem}
@@ -429,6 +436,11 @@ function commentsDrawerHtml(
   <div class="oa-cm-head">
     <h2>Comments<span class="oa-cm-head-count" id="oa-cm-head-count"${count > 0 ? ` data-count="${count}"` : ""}>${count}</span></h2>
     <button class="oa-cm-close" type="button" aria-label="Close comments" aria-controls="oa-cm-drawer">&times;</button>
+  </div>
+  <div class="oa-cm-filter" id="oa-cm-filter" role="tablist" aria-label="Filter comments">
+    <button type="button" role="tab" data-filter="open" aria-selected="true">Open</button>
+    <button type="button" role="tab" data-filter="done" aria-selected="false">Done</button>
+    <button type="button" role="tab" data-filter="all" aria-selected="false">All</button>
   </div>
   <div class="oa-cm-list" id="oa-cm-list">${items}</div>
 </aside>`;
@@ -1233,6 +1245,7 @@ const HOST_UI_SCRIPT = `
   var drawer=document.getElementById("oa-cm-drawer");
   var list=document.getElementById("oa-cm-list");
   var toggle=document.querySelector(".oa-cm-toggle");
+  var filterBar=document.getElementById("oa-cm-filter");
   var ID=window.__oaBridgeId;
   if(!frame||!ID)return;
   function headerH(){return header?Math.round(header.getBoundingClientRect().height):40}
@@ -1241,9 +1254,26 @@ const HOST_UI_SCRIPT = `
   function saveToken(id,t){try{localStorage.setItem("oa-cm-dt-"+id,t)}catch(e){}}
   function getToken(id){try{return localStorage.getItem("oa-cm-dt-"+id)}catch(e){return null}}
   function dropToken(id){try{localStorage.removeItem("oa-cm-dt-"+id)}catch(e){}}
+  // Owner moderation: /a/:id?wt=<artifact write token> grants delete on every
+  // comment (the server already accepts the write token on DELETE). The token is
+  // moved straight into storage and stripped from the URL so it stays out of
+  // history, and it never crosses into the frame.
+  function ownerToken(){try{return localStorage.getItem("oa-cm-wt-"+ID)}catch(e){return null}}
+  (function(){try{
+    var u=new URL(location.href),wt=u.searchParams.get("wt");
+    if(!wt)return;
+    try{localStorage.setItem("oa-cm-wt-"+ID,wt)}catch(e){}
+    u.searchParams.delete("wt");
+    history.replaceState(null,"",u.pathname+(u.search||"")+u.hash);
+  }catch(e){}})();
+  function deleteTokenFor(id){return getToken(id)||ownerToken()}
 
   var state=(window.__oaInlinedComments?window.__oaInlinedComments():[])||[];
   var orphans={};
+  // Done comments drop out of the default "Open" view; the filter is how they
+  // come back. Markers in the frame follow the same rule (a done thread is
+  // resolved, so its pin/highlight goes quiet).
+  var filter="open";
   // Unlock shells keep .oa-unlock in the DOM (hidden after decrypt). Encrypted
   // artifacts only allow unanchored interactive comments (text anchors rejected).
   var encrypted=!!document.querySelector(".oa-unlock");
@@ -1365,7 +1395,7 @@ const HOST_UI_SCRIPT = `
     more.setAttribute("aria-label","More actions");more.setAttribute("aria-expanded","false");more.setAttribute("aria-haspopup","menu");
     more.innerHTML=${jsonForInlineScript(MORE_DOTS_SVG)};
     var menu=document.createElement("div");menu.className="oa-cm-menu";menu.setAttribute("role","menu");menu.setAttribute("hidden","");
-    if(getToken(cm.id)){
+    if(deleteTokenFor(cm.id)){
       var del=document.createElement("button");del.type="button";del.className="oa-cm-del";del.setAttribute("role","menuitem");del.textContent="Delete";
       del.addEventListener("click",function(e){e.stopPropagation();closeMenus();remove(cm.id)});
       menu.appendChild(del);
@@ -1378,7 +1408,7 @@ const HOST_UI_SCRIPT = `
       if(open){menu.removeAttribute("hidden");more.setAttribute("aria-expanded","true")}
       else{menu.setAttribute("hidden","");more.setAttribute("aria-expanded","false")}
     });
-    if(!getToken(cm.id))more.setAttribute("hidden","");
+    if(!deleteTokenFor(cm.id))more.setAttribute("hidden","");
     actions.appendChild(more);actions.appendChild(menu);trail.appendChild(actions);
     var doneBtn=document.createElement("button");
     doneBtn.type="button";doneBtn.className="oa-cm-done";
@@ -1404,9 +1434,29 @@ const HOST_UI_SCRIPT = `
     item.appendChild(avatar);item.appendChild(stack);
     return item;
   }
+  function visible(){
+    if(filter==="done")return state.filter(function(c){return !!c.done});
+    if(filter==="all")return state.slice();
+    return state.filter(function(c){return !c.done});
+  }
   function renderList(){if(!list)return;list.textContent="";
-    if(!state.length){var p=document.createElement("p");p.className="oa-cm-empty";p.textContent="No comments yet.";list.appendChild(p);return}
-    state.forEach(function(cm){list.appendChild(itemEl(cm))});
+    var rows=visible();
+    if(!rows.length){
+      var p=document.createElement("p");p.className="oa-cm-empty";
+      p.textContent=!state.length?"No comments yet.":(filter==="done"?"No done comments.":"No open comments.");
+      list.appendChild(p);return;
+    }
+    rows.forEach(function(cm){list.appendChild(itemEl(cm))});
+  }
+  if(filterBar){
+    filterBar.addEventListener("click",function(e){
+      var b=e.target&&e.target.closest?e.target.closest("[data-filter]"):null;
+      if(!b||!filterBar.contains(b))return;
+      filter=b.getAttribute("data-filter")||"open";
+      var tabs=filterBar.querySelectorAll("[data-filter]");
+      for(var i=0;i<tabs.length;i++)tabs[i].setAttribute("aria-selected",tabs[i]===b?"true":"false");
+      closeMenus();renderList();
+    });
   }
   function toFrame(){if(window.__oaToFrame)window.__oaToFrame({type:"oa:comments",list:state,viewedVersion:window.__oaViewedVersion||1})}
   function sync(){renderList();bumpCount();toFrame()}
@@ -1420,7 +1470,7 @@ const HOST_UI_SCRIPT = `
       .then(function(r){if(!r.ok)return Promise.reject(r.status)})
       .catch(function(){cm.done=!next;renderList();toFrame()});
   }
-  function remove(id){var tok=getToken(id);if(!tok)return;
+  function remove(id){var tok=deleteTokenFor(id);if(!tok)return;
     fetch("/api/artifacts/"+ID+"/comments/"+id,{method:"DELETE",headers:{authorization:"Bearer "+tok}})
       .then(function(r){if(!r.ok)return;state=state.filter(function(c){return c.id!==id});dropToken(id);sync()});
   }
