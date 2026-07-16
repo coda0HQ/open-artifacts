@@ -110,7 +110,13 @@ app.get("/vendor/mermaid.runtime.js", async (c) => {
   return new Response(asset.body, {
     headers: {
       "content-type": "text/javascript; charset=utf-8",
-      "cache-control": "public, max-age=31536000, immutable",
+      // The bundle bytes change across deploys but the URL is fixed, so an
+      // immutable one-year cache would pin returning visitors to a stale
+      // (possibly security-patched) bundle until it expired. Cache but
+      // revalidate: the assets runtime serves an ETag, so a revalidate is a
+      // 304 when the bundle is unchanged and a fresh fetch when it is not.
+      "cache-control":
+        "public, max-age=3600, must-revalidate, stale-while-revalidate=86400",
       "x-content-type-options": "nosniff",
     },
   });
