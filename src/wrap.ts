@@ -242,6 +242,9 @@ const COMMENTS_CSS = `
 .oa-cm-trail{display:inline-flex;align-items:center;gap:.15rem;flex-shrink:0;margin-top:-.15rem}
 .oa-cm-actions{position:relative;flex-shrink:0}
 .oa-cm-more,.oa-cm-done{box-sizing:border-box;width:24px;height:24px;padding:0;flex-shrink:0;display:grid;place-items:center;border:0;border-radius:6px;cursor:pointer;color:var(--oa-muted);background:transparent;transition:opacity .12s,background .12s,color .12s,box-shadow .12s}
+/* display:grid above outranks the UA [hidden] rule, so restate it: without a
+   delete token the more control has an empty menu and must not render. */
+.oa-cm-more[hidden],.oa-cm-done[hidden]{display:none}
 .oa-cm-more svg{width:14px;height:14px;display:block}
 .oa-cm-done svg{width:13px;height:13px;display:block}
 .oa-cm-done[aria-pressed="true"]{color:var(--oa-accent)}

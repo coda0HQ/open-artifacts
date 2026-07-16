@@ -97,6 +97,12 @@ describe("host page interactive UI (tasks 009/010/011)", () => {
     expect(html).toContain("More actions");
     expect(html).toContain("function toggleDone");
     expect(html).toContain('method:"PATCH"');
+    // The shared control rule sets display:grid, which outranks the UA [hidden]
+    // rule — the override must be restated or a token-less more control renders
+    // an empty menu.
+    expect(html).toContain(
+      ".oa-cm-more[hidden],.oa-cm-done[hidden]{display:none}",
+    );
     // Delete is nested under the more menu, not a bare control.
     expect(html).toContain("oa-cm-menu");
     expect(html).toContain('textContent="Delete"');
