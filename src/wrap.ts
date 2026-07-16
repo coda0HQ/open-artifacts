@@ -1,4 +1,4 @@
-import type { ArtifactFormat, EncryptionParams } from "./domain";
+import type { ArtifactFormat, EncryptionParams, VersionMeta } from "./domain";
 import { MARKED_SOURCE } from "./generated/marked-source";
 import { type Brand, brandFor, isCoda0Host } from "./home";
 
@@ -117,6 +117,11 @@ img,video,canvas{max-width:100%}
 .oa-brand svg{display:block;width:14px;height:14px}
 @media (hover:hover) and (pointer:fine){.oa-header #oa-theme-toggle:hover,.oa-header #oa-feedback-toggle:hover{opacity:1;border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 25%)}.oa-brand:hover{color:var(--oa-fg);background:var(--oa-surface)}}
 @media (max-width:30rem){.oa-brand .oa-brand-text{display:none}}
+.oa-version{display:inline-flex;align-items:center;flex-shrink:0}
+.oa-version .oa-version-select{min-height:28px;padding:.2rem 1.6rem .2rem .5rem;border:1px solid var(--oa-border);border-radius:6px;background:var(--oa-surface);color:var(--oa-fg);font-size:.75rem;font-family:inherit;line-height:1.4;cursor:pointer;transition:border-color .15s,background .15s;-webkit-appearance:none;appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--oa-muted) 50%),linear-gradient(135deg,var(--oa-muted) 50%,transparent 50%);background-position:calc(100% - .7rem) 55%,calc(100% - .4rem) 55%;background-size:.3rem .3rem;background-repeat:no-repeat}
+.oa-version .oa-version-select:focus-visible{outline:none;border-color:var(--oa-accent);box-shadow:var(--oa-focus-ring)}
+.oa-version .oa-version-select:active{transform:translateY(1px)}
+@media (hover:hover) and (pointer:fine){.oa-version .oa-version-select:hover{border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 25%)}}
 `;
 
 // Project-change (type 2) feedback control. Lives in the host chrome (same
@@ -171,11 +176,42 @@ const BRAND_SVG =
 const FEEDBACK_SVG =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>';
 
+function versionPickerHtml(
+  versions: VersionMeta[],
+  currentVersion: number,
+  url: string,
+): string {
+  // Single-version artifacts have nothing to switch between; render no
+  // picker so the chrome stays quiet for the common one-shot case.
+  if (versions.length <= 1) return "";
+  // The version list is inlined at serve time as <option>s. Selecting an
+  // option sets location.search to ?v=<n>, driving a full re-serve with the
+  // version-N snapshot inlined. No runtime fetch: the sandboxed opaque-origin
+  // iframe cannot make one anyway, and the picker lives in the host chrome.
+  const base = new URL(url, "https://placeholder.local");
+  const options = versions
+    .map((v) => {
+      const q = new URL(base);
+      q.searchParams.set("v", String(v.version));
+      const target = `${q.pathname}?${q.searchParams.toString()}`;
+      const label = v.label
+        ? `${escapeHtml(v.label)} (v${v.version})`
+        : `v${v.version}`;
+      const selected = v.version === currentVersion ? " selected" : "";
+      return `<option value="${escapeHtml(target)}"${selected}>${label}</option>`;
+    })
+    .join("");
+  return `<label class="oa-version" for="oa-version-select"><span class="oa-version-sr" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0">Version</span><select id="oa-version-select" class="oa-version-select" aria-label="Artifact version">${options}</select></label>`;
+}
+
 function headerHtml(
   favicon: string,
   title: string,
   hostname: string,
   brandUrl?: string | null,
+  versions?: VersionMeta[],
+  currentVersion?: number,
+  url?: string,
   showFeedback = true,
 ): string {
   // The hosted host always names itself "coda0" and links its own root,
@@ -193,13 +229,28 @@ function headerHtml(
   const feedbackButton = showFeedback
     ? `<button id="oa-feedback-toggle" type="button" aria-label="Open project-change feedback" aria-haspopup="dialog" aria-expanded="false">${FEEDBACK_SVG}</button>`
     : "";
+  const picker =
+    versions && currentVersion && url
+      ? versionPickerHtml(versions, currentVersion, url)
+      : "";
   return `<header class="oa-header">
   <span class="oa-header-title"><span class="oa-header-fav">${escapeHtml(favicon)}</span>${escapeHtml(title)}</span>
+  ${picker}
   ${chip}
   ${feedbackButton}
   <button id="oa-theme-toggle" type="button" aria-label="Toggle theme"></button>
 </header>`;
 }
+
+const VERSION_SCRIPT = `
+(function(){
+  var sel=document.getElementById('oa-version-select');
+  if(!sel)return;
+  sel.addEventListener('change',function(){
+    if(sel.value)location.search='?'+sel.value.split('?')[1];
+  });
+})();
+`;
 
 const THEME_SCRIPT = `
 (function(){
@@ -387,6 +438,10 @@ export interface WrapOptions {
    * unlock page renders its own functioning panel instead.
    */
   feedback?: boolean;
+  /** All published versions, inlined into the chrome picker at serve time. */
+  versions?: VersionMeta[];
+  /** Version currently being served; marked selected in the picker. */
+  currentVersion?: number;
 }
 
 const FEEDBACK_ARTIFACT_ID_SLOT = "__OA_ARTIFACT_ID__";
@@ -599,6 +654,8 @@ export function wrapDocument(options: WrapOptions): string {
     hostname,
     brandUrl,
     projectRef,
+    versions,
+    currentVersion,
   } = options;
   const artifactId = url.split("/a/").pop() ?? "";
   const body =
@@ -641,9 +698,10 @@ document.getElementById("oa-content").innerHTML=marked.parse(${jsonForInlineScri
 <style>${RESET_CSS}${FEEDBACK_CSS}${format === "markdown" ? MARKDOWN_CSS : ""}</style>
 </head>
 <body>
-${headerHtml(favicon, title, hostname, brandUrl, showFeedback)}
+${headerHtml(favicon, title, hostname, brandUrl, versions, currentVersion, url, showFeedback)}
 ${body}
 ${feedbackPanel}
+<script>${VERSION_SCRIPT}</script>
 <script>${THEME_SCRIPT}</script>
 <script>${LAYOUT_SCRIPT}</script>
 <script>${escapeInlineScript(feedbackScriptBody)}</script>
@@ -684,6 +742,10 @@ export interface UnlockShellOptions {
   projectRef?: string | null;
   envelope: EncryptionParams & { ciphertext: string };
   webFonts?: boolean;
+  /** All published versions, inlined into the chrome picker at serve time. */
+  versions?: VersionMeta[];
+  /** Version currently being served; marked selected in the picker. */
+  currentVersion?: number;
 }
 
 export function unlockShell(options: UnlockShellOptions): string {
@@ -699,8 +761,14 @@ export function unlockShell(options: UnlockShellOptions): string {
     projectRef,
     envelope,
     webFonts,
+    versions,
+    currentVersion,
   } = options;
   const artifactId = url.split("/a/").pop() ?? "";
+  // The decrypted document renders inside a sandboxed iframe. The version
+  // picker would have no parent origin to navigate, so the inner template is
+  // built WITHOUT versions; the picker lives only in the unlock shell's own
+  // chrome (the parent page), which can navigate ?v= normally.
   const template = wrapDocument({
     title,
     description,
@@ -789,7 +857,7 @@ input.focus();
 <style>${RESET_CSS}${FEEDBACK_CSS}${UNLOCK_CSS}</style>
 </head>
 <body>
-${headerHtml(favicon, title, hostname, brandUrl)}
+${headerHtml(favicon, title, hostname, brandUrl, versions, currentVersion, url)}
 <div class="oa-unlock">
   <form class="oa-card" id="oa-form">
     <div class="oa-emoji">${escapeHtml(favicon)}</div>
@@ -805,6 +873,7 @@ ${feedbackPanelHtml()}
 <iframe id="oa-frame" sandbox="allow-scripts allow-modals${webFonts ? " allow-same-origin" : ""}" title="${escapeHtml(title)}"></iframe>
 <script>${unlockScript}</script>
 <script>${feedbackScript(artifactId, projectRef ?? null)}</script>
+<script>${VERSION_SCRIPT}</script>
 <script>${THEME_SCRIPT}</script>
 <script>${LAYOUT_SCRIPT}</script>
 </body>
