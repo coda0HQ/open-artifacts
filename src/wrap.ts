@@ -192,7 +192,7 @@ const COMMENTS_CSS = `
 .oa-cm-toggle svg{display:block;width:15px;height:15px;margin:auto}
 .oa-cm-toggle .oa-cm-count{position:absolute;top:-4px;right:-4px;min-width:15px;height:15px;padding:0 3px;border-radius:8px;background:var(--oa-accent);color:#fff;font-size:9px;font-weight:600;line-height:15px;text-align:center;display:none}
 .oa-cm-toggle[data-count] .oa-cm-count{display:block}
-.oa-cm-drawer{position:fixed;top:0;right:0;height:100dvh;width:100%;max-width:24rem;transform:translateX(100%);transition:transform .18s ease;display:flex;flex-direction:column;background:var(--oa-bg);border-left:1px solid var(--oa-border);z-index:2147483645}
+.oa-cm-drawer{position:fixed;top:0;right:0;height:100dvh;width:100%;max-width:24rem;transform:translateX(100%);transition:transform .18s ease;display:flex;flex-direction:column;background:var(--oa-bg);border-left:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 6%);box-shadow:-16px 0 40px -20px rgba(0,0,0,.28);z-index:2147483645}
 .oa-cm-drawer[data-open]{transform:translateX(0)}
 .oa-cm-drawer .oa-cm-head{display:flex;align-items:center;gap:.5rem;padding:.5rem .75rem;border-bottom:1px solid var(--oa-border);font-size:.8rem;flex-shrink:0}
 .oa-cm-drawer .oa-cm-head h2{flex:1;margin:0;font-size:.8rem;font-weight:600;color:var(--oa-fg)}
@@ -223,10 +223,10 @@ const COMMENTS_CSS = `
 .oa-cm-compose{position:fixed;z-index:2147483646;width:min(22rem,calc(100vw - 1rem));display:flex;flex-direction:column;gap:.4rem}
 .oa-cm-compose[hidden]{display:none}
 .oa-cm-compose ::placeholder{color:var(--oa-muted);opacity:1}
-.oa-cm-name{align-self:flex-start;max-width:70%;padding:.32rem .7rem;border:1px solid var(--oa-border);border-radius:999px;background:var(--oa-bg);color:var(--oa-fg);font:inherit;font-size:.78rem;box-shadow:0 6px 20px -8px rgba(0,0,0,.35)}
+.oa-cm-name{align-self:flex-start;max-width:70%;padding:.32rem .7rem;border:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 6%);border-radius:999px;background:var(--oa-bg);color:var(--oa-fg);font:inherit;font-size:.78rem;box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 2px 6px -1px rgba(0,0,0,.08),0 8px 18px -8px rgba(0,0,0,.18)}
 .oa-cm-name[hidden]{display:none}
 .oa-cm-name:focus-visible{outline:none;border-color:var(--oa-accent);box-shadow:var(--oa-focus-ring)}
-.oa-cm-row{display:flex;align-items:center;gap:.35rem;padding:.25rem .25rem .25rem .95rem;background:var(--oa-bg);border:1px solid var(--oa-border);border-radius:1.35rem;box-shadow:0 2px 6px rgba(0,0,0,.06),0 14px 34px -12px rgba(0,0,0,.4)}
+.oa-cm-row{display:flex;align-items:center;gap:.35rem;padding:.25rem .25rem .25rem .95rem;background:var(--oa-bg);border:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 6%);border-radius:1.35rem;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 2px 6px -1px rgba(0,0,0,.08),0 14px 32px -12px rgba(0,0,0,.22)}
 .oa-cm-row:focus-within{border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 22%)}
 .oa-cm-body{flex:1;min-width:0;border:0;background:none;resize:none;color:var(--oa-fg);font:inherit;font-size:.9rem;line-height:1.45;padding:.5rem 0;max-height:8rem;overflow-y:auto}
 .oa-cm-body:focus{outline:none}
@@ -852,7 +852,7 @@ const FRAME_BRIDGE_SCRIPT = `
 // collapsed-note-chip idiom), and translate(-50%,-50%) centres it. Unlike a
 // note it counter-scales unconditionally at every zoom (no CHIP_K threshold).
 const FRAME_ANCHOR_CSS = `
-.oa-cm-pin{position:absolute;left:calc(var(--x,0)*1px);top:calc(var(--y,0)*1px);transform:scale(calc(1/var(--k,1))) translate(-50%,-50%);transform-origin:0 0;z-index:2;width:18px;height:18px;padding:0;border:1px solid var(--oa-bg);border-radius:50% 50% 50% 2px;background:var(--oa-accent);cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.22)}
+.oa-cm-pin{position:absolute;left:calc(var(--x,0)*1px);top:calc(var(--y,0)*1px);transform:scale(calc(1/var(--k,1))) translate(-50%,-50%);transform-origin:0 0;z-index:2;width:18px;height:18px;padding:0;border:1.5px solid var(--oa-bg);border-radius:50% 50% 50% 2px;background:var(--oa-accent);cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.14),0 3px 8px -2px rgba(0,0,0,.2)}
 .oa-cm-pin:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 /* Comment tool armed (canvas): a Figma-style comment marker replaces the pan
    cursor, its tail as the hotspot so the pin lands where the tip points. */
