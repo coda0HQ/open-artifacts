@@ -491,7 +491,7 @@ describe("GET /a/:id version picker", () => {
     expect(v1).toContain('id="oa-version-select"');
     expect(v1).toMatch(/value="[^"]*v=1"[^>]* selected/);
     // The host page mirrors the pinned version into the frame src.
-    expect(v1).toContain("/a/" + created.id + "/frame?v=1");
+    expect(v1).toContain(`/a/${created.id}/frame?v=1`);
     // The version-1 snapshot is served by the frame route, not the host page.
     const frameV1 = await (
       await exports.default.fetch(`${BASE}/a/${created.id}/frame?v=1`)

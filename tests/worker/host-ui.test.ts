@@ -83,7 +83,7 @@ describe("host page interactive UI (tasks 009/010/011)", () => {
     const html = await hostHtml();
     expect(html).toContain("oa-cm-tag");
     expect(html).toContain("oa-cm-detached");
-    expect(html).toContain("type:\"oa:theme\"");
+    expect(html).toContain('type:"oa:theme"');
   });
 
   it("exposes card layout: avatar, title, byline, done, and more menu", async () => {
