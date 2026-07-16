@@ -72,8 +72,7 @@ export function contentSecurityPolicy(options: {
   const opaqueFrame = options.sandbox && options.frameSandbox === true;
   // Prefer an explicit origin for opaque frames; fall back to 'self' only for
   // non-opaque sandboxes (legacy webFonts+allow-same-origin path).
-  const selfSrc =
-    opaqueFrame && options.origin ? options.origin : "'self'";
+  const selfSrc = opaqueFrame && options.origin ? options.origin : "'self'";
   const directives = [
     "default-src 'none'",
     `script-src ${webFonts ? `${selfSrc} ${WEB_FONT_CDN.scriptHosts}` : "'unsafe-inline'"}`,
@@ -242,22 +241,22 @@ const COMMENTS_CSS = `
 /* Trail: more ··· then done ○✓. Same 24px hit target; appear on card hover. */
 .oa-cm-trail{display:inline-flex;align-items:center;gap:.15rem;flex-shrink:0;margin-top:-.15rem}
 .oa-cm-actions{position:relative;flex-shrink:0}
-.oa-cm-more,.oa-cm-done{box-sizing:border-box;width:24px;height:24px;padding:0;flex-shrink:0;display:grid;place-items:center;cursor:pointer;color:var(--oa-muted);background:transparent;transition:opacity .12s,background .12s,color .12s,border-color .12s,box-shadow .12s}
-.oa-cm-more{border:0;border-radius:6px}
+.oa-cm-more,.oa-cm-done{box-sizing:border-box;width:24px;height:24px;padding:0;flex-shrink:0;display:grid;place-items:center;border:0;border-radius:6px;cursor:pointer;color:var(--oa-muted);background:transparent;transition:opacity .12s,background .12s,color .12s,box-shadow .12s}
 .oa-cm-more svg{width:14px;height:14px;display:block}
-.oa-cm-done{border-radius:50%;border:1.5px solid color-mix(in oklab,var(--oa-muted),transparent 30%);color:color-mix(in oklab,var(--oa-muted),transparent 20%)}
-.oa-cm-done svg{width:11px;height:11px;display:block}
-.oa-cm-done[aria-pressed="true"]{background:var(--oa-accent);border-color:var(--oa-accent);color:var(--oa-accent-on)}
+.oa-cm-done svg{width:13px;height:13px;display:block}
+.oa-cm-done[aria-pressed="true"]{color:var(--oa-accent)}
+.oa-cm-done[aria-pressed="true"] svg circle{fill:var(--oa-accent)}
+.oa-cm-done[aria-pressed="true"] svg path{stroke:var(--oa-accent-on)}
 .oa-cm-more:focus-visible,.oa-cm-done:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 /* Fine pointer: hide until card hover / focus / open menu; shared hover wash. */
 @media (hover:hover) and (pointer:fine){
   .oa-cm-more,.oa-cm-done{opacity:0}
   .oa-cm-item:hover .oa-cm-more,.oa-cm-item:hover .oa-cm-done,
   .oa-cm-item:focus-within .oa-cm-more,.oa-cm-item:focus-within .oa-cm-done,
-  .oa-cm-more[aria-expanded="true"],.oa-cm-more:focus-visible,.oa-cm-done:focus-visible{opacity:1}
+  .oa-cm-more[aria-expanded="true"],.oa-cm-more:focus-visible,.oa-cm-done:focus-visible,
+  .oa-cm-done[aria-pressed="true"]{opacity:1}
   .oa-cm-more:hover,.oa-cm-done:hover{background:color-mix(in oklab,var(--oa-fg),transparent 92%);color:var(--oa-fg)}
-  .oa-cm-done:hover{border-color:color-mix(in oklab,var(--oa-muted),var(--oa-fg) 20%)}
-  .oa-cm-done[aria-pressed="true"]:hover{background:color-mix(in oklab,var(--oa-accent),var(--oa-fg) 10%);border-color:color-mix(in oklab,var(--oa-accent),var(--oa-fg) 10%);color:var(--oa-accent-on)}
+  .oa-cm-done[aria-pressed="true"]:hover{color:var(--oa-accent)}
 }
 .oa-cm-menu{position:absolute;top:100%;right:0;z-index:2;min-width:7.5rem;padding:.25rem;border:1px solid var(--oa-border);border-radius:8px;background:var(--oa-bg);box-shadow:0 4px 16px -4px rgba(0,0,0,.18),0 12px 28px -12px rgba(0,0,0,.22)}
 .oa-cm-menu[hidden]{display:none}
@@ -316,8 +315,10 @@ const COMMENT_SVG =
 const COMMENT_ADD_SVG =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M4 18V10a8 8 0 0 1 8-8 8 8 0 0 1 8 8 8 8 0 0 1-8 8H4z"/></svg>';
 // Done toggle: checkmark inside the circle (visible when aria-pressed).
+// Circle-check "done" control. The circle lives in the icon, not on the button,
+// so the button chrome stays identical to the three-dot control beside it.
 const DONE_CHECK_SVG =
-  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M5 13l4 4L19 7"/></svg>';
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="9"/><path d="M8.4 12.3l2.4 2.4 4.8-5.1"/></svg>';
 // Horizontal three-dot "more" control (reference card UI).
 const MORE_DOTS_SVG =
   '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><circle cx="5" cy="12" r="1.75"/><circle cx="12" cy="12" r="1.75"/><circle cx="19" cy="12" r="1.75"/></svg>';
@@ -412,9 +413,7 @@ function commentsDrawerHtml(
         .map((c) => {
           const done = c.done ? ' data-done=""' : "";
           const pressed = c.done ? "true" : "false";
-          const initial = c.author
-            ? escapeHtml([...c.author][0] ?? "?")
-            : "?";
+          const initial = c.author ? escapeHtml([...c.author][0] ?? "?") : "?";
           const who = c.author
             ? `<span class="oa-cm-author">${escapeHtml(c.author)}</span>`
             : '<span class="oa-cm-anon">anonymous</span>';
