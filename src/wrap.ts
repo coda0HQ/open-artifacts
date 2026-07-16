@@ -846,6 +846,10 @@ const FRAME_BRIDGE_SCRIPT = `
     if(!msg||typeof msg!=="object")return;
     if(msg.type==="oa:theme"){
       if(msg.theme==="light"||msg.theme==="dark")root.setAttribute("data-theme",msg.theme);
+    }else if(msg.type==="oa:config"){
+      // Encrypted artifacts reject text anchors server-side (REQ-017); the
+      // frame must not offer the selection→Comment chip for them.
+      window.__oaEncrypted=!!msg.encrypted;
     }else if(msg.type==="oa:arm"){
       window.__oaArmed=msg.mode||null;
       if(typeof window.__oaOnArm==="function")window.__oaOnArm(window.__oaArmed);
@@ -888,10 +892,15 @@ const FRAME_ANCHOR_SCRIPT = `
 (function(){
   var plane=document.querySelector('.oa-plane');
   if(!plane||getComputedStyle(plane).transform==='none')return;
+  // Origin must be the UNtransformed container (.oa-canvas). The plane's own
+  // getBoundingClientRect already includes translate(tx,ty), so using it and
+  // then subtracting m.e/m.f double-counts pan and drops pins off-click.
   function screenToWorld(cx,cy){
-    var r=plane.getBoundingClientRect();
+    var origin=plane.parentElement||plane;
+    var r=origin.getBoundingClientRect();
     var m=new DOMMatrixReadOnly(getComputedStyle(plane).transform);
-    return {x:Math.round((cx-r.left-m.e)/m.a),y:Math.round((cy-r.top-m.f)/m.a)};
+    var k=m.a||1;
+    return {x:Math.round((cx-r.left-m.e)/k),y:Math.round((cy-r.top-m.f)/k)};
   }
   document.addEventListener('click',function(e){
     if(!window.__oaArmed)return;
@@ -1028,6 +1037,8 @@ const FRAME_TEXT_SCRIPT = `
     document.documentElement.appendChild(bubble);
   }
   function captureSelection(){
+    // Encrypted frames: text anchors are rejected server-side — no chip, no post.
+    if(window.__oaEncrypted){hideBubble();return}
     var sel=window.getSelection();
     if(!sel||sel.isCollapsed||sel.rangeCount===0){hideBubble();return}
     var r=sel.getRangeAt(0);
@@ -1109,6 +1120,9 @@ function hostBridgeScript(artifactId: string): string {
       // is redundant — hide it. A document keeps it (the drawer is the thread).
       window.__oaMode=msg.mode==="canvas"?"canvas":"text";
       if(window.__oaMode==="canvas"){var tg=document.querySelector(".oa-cm-toggle");if(tg)tg.style.display="none"}
+      // Unlock shells keep .oa-unlock in the DOM; tell the frame so text-anchor
+      // capture stays off (REQ-017 — encrypted interactive comments are unanchored).
+      post({type:"oa:config",encrypted:!!document.querySelector(".oa-unlock")});
       post({type:"oa:theme",theme:theme()});
       post({type:"oa:comments",list:inlined(),viewedVersion:window.__oaViewedVersion||1});
     }else if(msg.type==="oa:anchor:new"){
@@ -1210,7 +1224,12 @@ const HOST_UI_SCRIPT = `
   bodyEl.addEventListener("keydown",function(e){if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();submit()}});
   document.addEventListener("keydown",function(e){if(e.key==="Escape"&&!pop.hasAttribute("hidden"))closePop()});
   document.addEventListener("mousedown",function(e){if(pop.hasAttribute("hidden"))return;if(pop.contains(e.target)||arm===e.target||arm.contains(e.target))return;closePop()});
-  window.__oaOnAnchorNew=function(msg){openCompose(msg.anchor||null,msg.point)};
+  window.__oaOnAnchorNew=function(msg){
+    var a=msg&&msg.anchor||null;
+    // Defense in depth: never open compose with a text anchor on encrypted.
+    if(encrypted&&a&&a.mode==="text")a=null;
+    openCompose(a,msg&&msg.point);
+  };
   sendBtn.addEventListener("click",submit);
   function submit(){
     var body=bodyEl.value.trim();if(!body||posting)return;

@@ -108,4 +108,16 @@ describe("bridge scripts are injected with identity guards", () => {
     expect(html).not.toContain("fetch(msg.url");
     expect(html).not.toContain("fetch(e.data.url");
   });
+
+  it("tells the frame whether the artifact is encrypted (REQ-017)", async () => {
+    const { id } = await createArtifact();
+    const host = await (await exports.default.fetch(`${BASE}/a/${id}`)).text();
+    const frame = await (
+      await exports.default.fetch(`${BASE}/a/${id}/frame`)
+    ).text();
+    expect(host).toContain('type:"oa:config"');
+    expect(host).toContain("encrypted:");
+    expect(frame).toContain('msg.type==="oa:config"');
+    expect(frame).toContain("__oaEncrypted");
+  });
 });

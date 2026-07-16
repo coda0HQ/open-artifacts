@@ -46,5 +46,9 @@ describe("frame document carries the canvas pin runtime", () => {
     expect(html).toContain(".oa-cm-pin");
     expect(html).toContain("scale(calc(1/var(--k,1))) translate(-50%,-50%)");
     expect(html).toContain("__oaRenderMarkers");
+    // Pan origin is the untransformed parent — not the plane's own rect
+    // (which already includes translate and would double-subtract tx/ty).
+    expect(html).toContain("plane.parentElement||plane");
+    expect(html).toContain("origin.getBoundingClientRect()");
   });
 });

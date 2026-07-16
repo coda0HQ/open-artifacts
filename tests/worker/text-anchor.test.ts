@@ -82,6 +82,8 @@ describe("frame document carries the text-highlight runtime", () => {
     // Chrome typeface — never inherit the artifact's face.
     expect(html).toContain("font-family:var(--oa-font)");
     expect(html).toContain("--oa-font:");
+    // Encrypted frames suppress the selection chip (server rejects text anchors).
+    expect(html).toContain("window.__oaEncrypted");
     // Orphan ids are reported to the host drawer (REQ-010).
     expect(html).toContain("type:'oa:orphans'");
     // The matcher source was injected verbatim.
