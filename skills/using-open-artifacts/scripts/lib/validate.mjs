@@ -18,12 +18,11 @@ const MERMAID_BUNDLE = join(VENDOR_DIR, "mermaid.bundle.mjs");
 const LINKEDOM_BUNDLE = join(VENDOR_DIR, "linkedom.bundle.mjs");
 
 const externalChecks = [
-  // External <script src> is blocked unless it points at jsdelivr — the
-  // validateScriptSrcs gate then restricts WHICH jsdelivr pkg@ver/path loads.
-  [
-    /<script\b[^>]*\bsrc\s*=\s*["']https?:\/\/(?!cdn\.jsdelivr\.net)/i,
-    "external script src",
-  ],
+  // Any external (http/https) <script src> is blocked — runtime libraries load
+  // same-origin from /vendor/* (e.g. /vendor/mermaid.runtime.js), so no external
+  // script host ever appears in the CSP and the jsdelivr bypass is closed. The
+  // validateScriptSrcs gate restricts WHICH same-origin /vendor/... path loads.
+  [/<script\b[^>]*\bsrc\s*=\s*["']https?:\/\//i, "external script src"],
   [/<link\b[^>]*\brel\s*=\s*["']?stylesheet/i, "external stylesheet"],
   [
     /<(?:img|video|audio|source|iframe)\b[^>]*\bsrc\s*=\s*["'](?:https?:)?\/\//i,
@@ -848,20 +847,27 @@ function validateFonts(authoredStyles) {
 }
 
 // Runtime-library <script src> tags (mermaid, etc.) are allowed in the body
-// ONLY via jsdelivr, and only for a package + sub-path on the allowlist below.
-// The opt-in CSP adds cdn.jsdelivr.net to script-src; this gate restricts
-// WHICH jsdelivr URLs an artifact may load so a malicious artifact can't pull
-// arbitrary npm JS. The body fragment gate permits a <script src> with the
-// jsdelivr allowlist path specifically; this gate rejects any <script> that is
-// inline (no src), points at a non-jsdelivr host, or names a package/version/path
-// off the allowlist. Scripts execute, so the allowlist is deliberate code change,
-// not a runtime decision. See references/scripts.md.
-const ALLOWED_SCRIPT_PACKAGES = ["mermaid"];
+// ONLY via a same-origin /vendor/... path on the allowlist below. The bundle is
+// vendored into public/vendor/ and served same-origin (script-src 'self'), so
+// no external script host appears in the CSP — the jsdelivr bypass (an inline
+// JS createElement("script", {src: <external>}) loading an arbitrary package)
+// is closed without breaking user JS. This gate rejects any <script src> that
+// is inline (no src), points at an external host, or names a /vendor/... path
+// off the allowlist. Scripts execute, so the allowlist is deliberate code
+// change, not a runtime decision. See references/scripts.md.
+//
+// The mermaid bundle is a REGULAR (non-module) IIFE script: the load-order bug
+// (issue #11) is that a module `<script src>` is deferred and runs AFTER the
+// scripts-slot inline init, so `window.mermaid` was undefined at init time. A
+// regular same-origin `<script src>` executes synchronously when the parser
+// hits it (blocking), and compose emits the body (with the `<script src>`)
+// BEFORE the scripts-slot inline init, so `window.mermaid` is defined first.
+// `type="module"` is therefore NOT permitted on a runtime-library <script>:
+// it reintroduces the deferred-execution load-order bug.
+const ALLOWED_SCRIPT_BUNDLES = ["/vendor/mermaid.runtime.js"];
 const SCRIPT_SRC_RE = /<script\b[^>]*\bsrc\s*=\s*["']([^"']+)["'][^>]*>/gi;
-// https://cdn.jsdelivr.net/npm/<pkg>@<ver>/<path> — pkg must be allowlisted,
-// ver a major pin or exact semver, path anything under the package.
-const ALLOWED_SCRIPT_SRC_RE =
-  /^https:\/\/cdn\.jsdelivr\.net\/npm\/([a-z][a-z0-9-]*)@(\d+(?:\.\d+){0,2})\/\S+$/i;
+// A same-origin /vendor/<bundle> path — bundle must be on the allowlist.
+const ALLOWED_SCRIPT_SRC_RE = /^\/vendor\/([a-z0-9][a-z0-9.-]*\.(?:mjs|js))$/i;
 
 function validateScriptSrcs(authoredBody) {
   SCRIPT_SRC_RE.lastIndex = 0;
@@ -871,16 +877,28 @@ function validateScriptSrcs(authoredBody) {
     match !== null;
     match = SCRIPT_SRC_RE.exec(authoredBody)
   ) {
+    const tag = match[0];
     const url = match[1];
+    // A module <script src> is deferred: it executes AFTER document parse, so
+    // the scripts-slot inline init runs first and `window.mermaid` is
+    // undefined at init time — the load-order bug (issue #11). A regular
+    // (non-module) <script src> executes synchronously when the parser hits
+    // it, and compose emits the body before the scripts slot, so the global is
+    // set first. Reject `type="module"` on a runtime-library script.
+    if (/\btype\s*=\s*["']module["']/i.test(tag)) {
+      fail(
+        `a runtime-library <script src> must NOT use type="module" — module scripts are deferred and run AFTER the scripts-slot init, so window.mermaid is undefined at init time (the load-order bug). Use a regular <script src="${url}"> (no type). See references/scripts.md.`,
+      );
+    }
     const m = url.match(ALLOWED_SCRIPT_SRC_RE);
     if (m === null) {
       fail(
-        `<script src> must be https://cdn.jsdelivr.net/npm/<pkg>@<ver>/<path> for an allowlisted package (${ALLOWED_SCRIPT_PACKAGES.join(", ")}) — found "${url.slice(0, 80)}". Inline JS still goes in document.fragments.scripts. See references/scripts.md.`,
+        `<script src> must be a same-origin allowlisted bundle (${ALLOWED_SCRIPT_BUNDLES.join(", ")}) — found "${url.slice(0, 80)}". Inline JS still goes in document.fragments.scripts. See references/scripts.md.`,
       );
     }
-    if (!ALLOWED_SCRIPT_PACKAGES.includes(m[1])) {
+    if (!ALLOWED_SCRIPT_BUNDLES.includes(url)) {
       fail(
-        `script package "${m[1]}" is not on the allowlist (${ALLOWED_SCRIPT_PACKAGES.join(", ")}). Add it to ALLOWED_SCRIPT_PACKAGES in validate.mjs. See references/scripts.md.`,
+        `script bundle "${url}" is not on the allowlist (${ALLOWED_SCRIPT_BUNDLES.join(", ")}). Add it to ALLOWED_SCRIPT_BUNDLES in validate.mjs. See references/scripts.md.`,
       );
     }
   }
@@ -1036,20 +1054,21 @@ export function validateBuild(loaded, composed) {
       fail("style fragments cannot contain a closing style tag");
     }
     // Body fragments forbid document wrappers, <style>, and inline/external
-    // <script> — but a <script src="https://cdn.jsdelivr.net/npm/<pkg>@<ver>/...">
-    // for an allowlisted runtime library (mermaid, ...) is permitted on an
-    // opt-in deploy. The script-src gate below rejects any <script src> that is
-    // not an allowlisted jsdelivr pkg@ver/path, so we exclude those from this
-    // structural gate and let the script-src gate catch the rest.
+    // <script> — but a <script src="/vendor/mermaid.runtime.js"> (a REGULAR,
+    // non-module script) for an allowlisted runtime library is permitted. The
+    // script-src gate below rejects any <script src> that is not an allowlisted
+    // same-origin /vendor/... path (and rejects type="module" on it), so we
+    // exclude those from this structural gate and let the script-src gate
+    // catch the rest.
     const bodyViolation = composed.authoredBody
       .replace(
-        /<script\b[^>]*\bsrc\s*=\s*["']https:\/\/cdn\.jsdelivr\.net\/npm\/[a-z][a-z0-9-]*@\d+(?:\.\d+){0,2}\/[^"']*["'][^>]*>\s*<\/script>/gi,
+        /<script\b[^>]*\bsrc\s*=\s*["']\/vendor\/[a-z0-9][a-z0-9.-]*\.(?:mjs|js)["'][^>]*>\s*<\/script>/gi,
         "",
       )
       .match(/<!doctype\b|<\/?(?:html|head|body)\b|<(?:style|script)\b/i);
     if (bodyViolation) {
       fail(
-        'HTML body fragments cannot contain document wrappers, <style>, or inline/external <script> elements — put CSS in document.fragments.styles and JS in document.fragments.scripts. The only <script> allowed in the body is <script src="https://cdn.jsdelivr.net/npm/<pkg>@<ver>/<path>"> for an allowlisted library.',
+        'HTML body fragments cannot contain document wrappers, <style>, or inline/external <script> elements — put CSS in document.fragments.styles and JS in document.fragments.scripts. The only <script> allowed in the body is <script src="/vendor/mermaid.runtime.js"> (a regular, non-module script) for an allowlisted library.',
       );
     }
     // A repeated attribute on one start tag is silent data loss: HTML parsers
@@ -1095,8 +1114,8 @@ export function validateBuild(loaded, composed) {
     // scan so a remote font URL surfaces as a font error, not as a generic
     // "remote CSS url()" hit.
     validateFonts(composed.authoredStyles);
-    // Script-src gate: the only sanctioned external script is an allowlisted
-    // cdn.jsdelivr.net/npm/<pkg>@<ver>/<path> for a library on the allowlist.
+    // Script-src gate: the only sanctioned <script src> is an allowlisted
+    // same-origin /vendor/<bundle>.mjs path for a vendored library.
     validateScriptSrcs(composed.authoredBody);
     for (const [pattern, label] of externalChecks) {
       if (pattern.test(scanned)) fail(`${label} is incompatible with the CSP`);
