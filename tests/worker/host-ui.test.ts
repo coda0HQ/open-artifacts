@@ -108,17 +108,31 @@ describe("host page interactive UI (tasks 009/010/011)", () => {
     expect(html).toContain('textContent="Delete"');
   });
 
-  it("renders the open/done/all filter tablist with open selected", async () => {
+  it("renders the filter as a dropdown beside the close button", async () => {
     const html = await hostHtml();
     expect(html).toContain('id="oa-cm-filter"');
-    expect(html).toContain('role="tablist"');
-    expect(html).toContain('data-filter="open" aria-selected="true"');
-    expect(html).toContain('data-filter="done" aria-selected="false"');
-    expect(html).toContain('data-filter="all" aria-selected="false"');
+    expect(html).toContain("oa-cm-filter-btn");
+    expect(html).toContain('aria-haspopup="menu"');
+    expect(html).toContain("oa-cm-filter-menu");
+    expect(html).toContain('data-filter="open" aria-checked="true"');
+    expect(html).toContain('data-filter="done" aria-checked="false"');
+    expect(html).toContain('data-filter="all" aria-checked="false"');
+    // The trigger sits left of the close control in the drawer head.
+    const filterAt = html.indexOf('id="oa-cm-filter"');
+    const closeAt = html.indexOf('<button class="oa-cm-close"');
+    expect(filterAt).toBeGreaterThan(-1);
+    expect(filterAt).toBeLessThan(closeAt);
     // Done comments drop out of the default view; the filter brings them back.
     expect(html).toContain('var filter="open"');
     expect(html).toContain("function visible()");
     expect(html).toContain("No done comments.");
+  });
+
+  it("keeps the more menu non-empty on comments this viewer cannot delete", async () => {
+    const html = await hostHtml();
+    // An always-available action, so the more control never opens an empty menu.
+    expect(html).toContain('textContent="Copy text"');
+    expect(html).toContain("navigator.clipboard.writeText");
   });
 
   it("grants owner moderation from ?wt= and strips the token from the URL", async () => {

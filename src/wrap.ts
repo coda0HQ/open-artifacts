@@ -222,13 +222,18 @@ const COMMENTS_CSS = `
 .oa-cm-drawer .oa-cm-close:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 .oa-cm-drawer .oa-cm-close:active{transform:translateY(1px)}
 @media (hover:hover) and (pointer:fine){.oa-cm-drawer .oa-cm-close:hover{opacity:1;border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 25%)}}
-/* Filter tablist — done comments are hidden under "Open" by default, so the
-   filter is the way back to them. Shares the header's control language. */
-.oa-cm-filter{display:flex;align-items:center;gap:2px;padding:.4rem 1rem;border-bottom:1px solid var(--oa-border);flex-shrink:0}
-.oa-cm-filter button{height:26px;padding:0 .5rem;border:0;border-radius:6px;background:none;color:var(--oa-muted);font:inherit;font-size:.75rem;font-weight:500;cursor:pointer;transition:background .12s,color .12s}
-.oa-cm-filter button[aria-selected="true"]{background:var(--oa-surface);color:var(--oa-fg)}
-.oa-cm-filter button:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
-@media (hover:hover) and (pointer:fine){.oa-cm-filter button:hover{background:color-mix(in oklab,var(--oa-fg),transparent 94%);color:var(--oa-fg)}}
+/* Filter — done comments are hidden under "Open" by default, so this dropdown
+   is the way back to them. The trigger shares the close button's chrome and
+   sits beside it; a dot marks a filter narrower than "All". */
+.oa-cm-filter{position:relative;flex-shrink:0;display:flex}
+.oa-cm-filter-btn{position:relative;width:28px;height:28px;flex-shrink:0;display:grid;place-items:center;border-radius:6px;border:1px solid var(--oa-border);background:var(--oa-surface);color:var(--oa-fg);cursor:pointer;opacity:.8;transition:opacity .15s,border-color .15s,background .15s}
+.oa-cm-filter-btn svg{width:14px;height:14px;display:block}
+.oa-cm-filter-btn:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+.oa-cm-filter-btn:active{transform:translateY(1px)}
+.oa-cm-filter-btn[data-active]::after{content:"";position:absolute;top:-2px;right:-2px;width:6px;height:6px;border-radius:50%;background:var(--oa-accent);border:1px solid var(--oa-bg)}
+@media (hover:hover) and (pointer:fine){.oa-cm-filter-btn:hover{opacity:1;border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 25%)}}
+.oa-cm-filter-menu{top:calc(100% + 4px)}
+.oa-cm-filter-menu button[aria-checked="true"]{background:var(--oa-surface);color:var(--oa-fg);font-weight:600}
 /* Card list — each comment is a rounded surface card (reference UI). */
 .oa-cm-list{flex:1;min-height:0;overflow-y:auto;margin:.55rem .75rem .75rem;padding:0;border:0;background:transparent;display:flex;flex-direction:column;gap:.5rem}
 .oa-cm-empty{color:var(--oa-muted);font-size:.85rem;text-align:center;margin:2rem 1rem}
@@ -332,6 +337,9 @@ const DONE_CHECK_SVG =
 // Horizontal three-dot "more" control (reference card UI).
 const MORE_DOTS_SVG =
   '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><circle cx="5" cy="12" r="1.75"/><circle cx="12" cy="12" r="1.75"/><circle cx="19" cy="12" r="1.75"/></svg>';
+// Filter control in the drawer head (sits left of the close button).
+const FILTER_SVG =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M4 6h16M7 12h10M10 18h4"/></svg>';
 // The compose send button's up-arrow (post the comment).
 const SEND_ARROW_SVG =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M12 19V6M6 12l6-6 6 6"/></svg>';
@@ -435,12 +443,15 @@ function commentsDrawerHtml(
   return `<aside class="oa-cm-drawer" id="oa-cm-drawer" aria-label="Comments" aria-hidden="true" data-artifact-id="${escapeHtml(artifactId)}">
   <div class="oa-cm-head">
     <h2>Comments<span class="oa-cm-head-count" id="oa-cm-head-count"${count > 0 ? ` data-count="${count}"` : ""}>${count}</span></h2>
+    <div class="oa-cm-filter" id="oa-cm-filter">
+      <button class="oa-cm-filter-btn" type="button" aria-label="Filter comments" aria-haspopup="menu" aria-expanded="false">${FILTER_SVG}</button>
+      <div class="oa-cm-menu oa-cm-filter-menu" role="menu" hidden>
+        <button type="button" role="menuitemradio" data-filter="open" aria-checked="true">Open</button>
+        <button type="button" role="menuitemradio" data-filter="done" aria-checked="false">Done</button>
+        <button type="button" role="menuitemradio" data-filter="all" aria-checked="false">All</button>
+      </div>
+    </div>
     <button class="oa-cm-close" type="button" aria-label="Close comments" aria-controls="oa-cm-drawer">&times;</button>
-  </div>
-  <div class="oa-cm-filter" id="oa-cm-filter" role="tablist" aria-label="Filter comments">
-    <button type="button" role="tab" data-filter="open" aria-selected="true">Open</button>
-    <button type="button" role="tab" data-filter="done" aria-selected="false">Done</button>
-    <button type="button" role="tab" data-filter="all" aria-selected="false">All</button>
   </div>
   <div class="oa-cm-list" id="oa-cm-list">${items}</div>
 </aside>`;
@@ -1370,16 +1381,23 @@ const HOST_UI_SCRIPT = `
     var ch=[...name.trim()][0];
     return ch?ch.toUpperCase():"?";
   }
+  // Scoped to the drawer, not the list: the filter dropdown lives in the head
+  // and must close alongside the per-comment menus.
   function closeMenus(except){
-    if(!list)return;
-    var menus=list.querySelectorAll(".oa-cm-menu");
+    if(!drawer)return;
+    var menus=drawer.querySelectorAll(".oa-cm-menu");
     for(var i=0;i<menus.length;i++){
-      if(menus[i]!==except){
-        menus[i].setAttribute("hidden","");
-        var btn=menus[i].parentElement&&menus[i].parentElement.querySelector(".oa-cm-more");
-        if(btn)btn.setAttribute("aria-expanded","false");
-      }
+      if(menus[i]===except)continue;
+      menus[i].setAttribute("hidden","");
+      var btn=menus[i].parentElement&&menus[i].parentElement.querySelector('[aria-haspopup="menu"]');
+      if(btn)btn.setAttribute("aria-expanded","false");
     }
+  }
+  function toggleMenu(btn,menu){
+    var open=menu.hasAttribute("hidden");
+    closeMenus(menu);
+    if(open){menu.removeAttribute("hidden");btn.setAttribute("aria-expanded","true")}
+    else{menu.setAttribute("hidden","");btn.setAttribute("aria-expanded","false")}
   }
   function itemEl(cm){
     var item=document.createElement("div");item.className="oa-cm-item";item.setAttribute("data-id",cm.id);
@@ -1395,20 +1413,20 @@ const HOST_UI_SCRIPT = `
     more.setAttribute("aria-label","More actions");more.setAttribute("aria-expanded","false");more.setAttribute("aria-haspopup","menu");
     more.innerHTML=${jsonForInlineScript(MORE_DOTS_SVG)};
     var menu=document.createElement("div");menu.className="oa-cm-menu";menu.setAttribute("role","menu");menu.setAttribute("hidden","");
+    // Always-available action, so the more control is never an empty menu on a
+    // comment this viewer cannot delete.
+    var copy=document.createElement("button");copy.type="button";copy.setAttribute("role","menuitem");copy.textContent="Copy text";
+    copy.addEventListener("click",function(e){
+      e.stopPropagation();closeMenus();
+      try{navigator.clipboard.writeText(cm.body)}catch(err){}
+    });
+    menu.appendChild(copy);
     if(deleteTokenFor(cm.id)){
       var del=document.createElement("button");del.type="button";del.className="oa-cm-del";del.setAttribute("role","menuitem");del.textContent="Delete";
       del.addEventListener("click",function(e){e.stopPropagation();closeMenus();remove(cm.id)});
       menu.appendChild(del);
     }
-    more.addEventListener("click",function(e){
-      e.stopPropagation();
-      if(!menu.childNodes.length)return;
-      var open=menu.hasAttribute("hidden");
-      closeMenus(menu);
-      if(open){menu.removeAttribute("hidden");more.setAttribute("aria-expanded","true")}
-      else{menu.setAttribute("hidden","");more.setAttribute("aria-expanded","false")}
-    });
-    if(!deleteTokenFor(cm.id))more.setAttribute("hidden","");
+    more.addEventListener("click",function(e){e.stopPropagation();toggleMenu(more,menu)});
     actions.appendChild(more);actions.appendChild(menu);trail.appendChild(actions);
     var doneBtn=document.createElement("button");
     doneBtn.type="button";doneBtn.className="oa-cm-done";
@@ -1449,14 +1467,23 @@ const HOST_UI_SCRIPT = `
     rows.forEach(function(cm){list.appendChild(itemEl(cm))});
   }
   if(filterBar){
-    filterBar.addEventListener("click",function(e){
+    var filterBtn=filterBar.querySelector(".oa-cm-filter-btn");
+    var filterMenu=filterBar.querySelector(".oa-cm-filter-menu");
+    filterBtn.addEventListener("click",function(e){e.stopPropagation();toggleMenu(filterBtn,filterMenu)});
+    filterMenu.addEventListener("click",function(e){
       var b=e.target&&e.target.closest?e.target.closest("[data-filter]"):null;
-      if(!b||!filterBar.contains(b))return;
+      if(!b||!filterMenu.contains(b))return;
+      e.stopPropagation();
       filter=b.getAttribute("data-filter")||"open";
-      var tabs=filterBar.querySelectorAll("[data-filter]");
-      for(var i=0;i<tabs.length;i++)tabs[i].setAttribute("aria-selected",tabs[i]===b?"true":"false");
+      var opts=filterMenu.querySelectorAll("[data-filter]");
+      for(var i=0;i<opts.length;i++)opts[i].setAttribute("aria-checked",opts[i]===b?"true":"false");
+      // Dot the trigger whenever the view is narrowed, so a filtered list is
+      // never mistaken for an empty thread.
+      if(filter==="all")filterBtn.removeAttribute("data-active");
+      else filterBtn.setAttribute("data-active","");
       closeMenus();renderList();
     });
+    filterBtn.setAttribute("data-active","");
   }
   function toFrame(){if(window.__oaToFrame)window.__oaToFrame({type:"oa:comments",list:state,viewedVersion:window.__oaViewedVersion||1})}
   function sync(){renderList();bumpCount();toFrame()}
@@ -1474,10 +1501,14 @@ const HOST_UI_SCRIPT = `
     fetch("/api/artifacts/"+ID+"/comments/"+id,{method:"DELETE",headers:{authorization:"Bearer "+tok}})
       .then(function(r){if(!r.ok)return;state=state.filter(function(c){return c.id!==id});dropToken(id);sync()});
   }
+  // Click-away closes any open menu. Triggers and menu interiors are exempt so
+  // mousedown does not race the click handler that opens/acts on them.
   document.addEventListener("mousedown",function(e){
-    if(!list||list.contains(e.target))return;
+    var t=e.target;
+    if(t&&t.closest&&(t.closest(".oa-cm-menu")||t.closest('[aria-haspopup="menu"]')))return;
     closeMenus();
   });
+  document.addEventListener("keydown",function(e){if(e.key==="Escape")closeMenus()});
   window.__oaOnOrphans=function(msg){
     orphans={};
     (msg&&msg.ids||[]).forEach(function(id){if(typeof id==="string")orphans[id]=true});
