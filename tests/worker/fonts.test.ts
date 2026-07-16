@@ -92,4 +92,18 @@ describe("web-font surface — opt-in flag is set in wrangler.jsonc", () => {
     // 'self' alone must not be the only same-host source on an opaque frame.
     expect(csp).not.toMatch(/font-src 'self'/);
   });
+
+  it("never widens the host page CSP when the web-font flag is on", async () => {
+    const created = await create({ content: "<h1>Fonts</h1>" });
+    const res = await exports.default.fetch(`${BASE}/a/${created.id}`);
+    expect(res.status).toBe(200);
+    const csp = res.headers.get("content-security-policy") ?? "";
+    // The host is not the artifact: it carries no sandbox directive at all, so
+    // the opt-in can never hand the artifact same-origin access to it.
+    expect(csp).not.toContain("sandbox");
+    expect(csp).not.toContain("allow-same-origin");
+    // The flag reaches only the frame — the host keeps its fixed font policy.
+    expect(csp).not.toContain("cdn.fontshare.com");
+    expect(csp).toContain("connect-src 'self'");
+  });
 });

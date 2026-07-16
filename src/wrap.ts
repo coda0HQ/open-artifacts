@@ -892,30 +892,13 @@ const COMMENTS_SCRIPT = `
 `;
 
 // The host↔frame bridge. The artifact frame is air-gapped (connect-src 'none'),
-// so it can never fetch; it asks the host over postMessage and the host — the
-// only party with network access — performs the request. The contract is a
-// FIXED allowlist mapped to a FIXED route table keyed on the serve-time id; the
-// frame never supplies a URL, method, or host, so the relay can't become an
-// open proxy. Messages are authenticated by window identity (event.source),
-// not origin, because a sandboxed opaque-origin frame reports origin "null".
-
-// Pure route table (exported for unit testing and reuse by the host script's
-// fetch path). Only ever produces /api/artifacts/:id/comments[/:commentId].
-export function bridgeRoute(
-  type: string,
-  id: string,
-  commentId?: string,
-): { method: string; path: string } | null {
-  const base = `/api/artifacts/${id}/comments`;
-  if (type === "comments:list") return { method: "GET", path: base };
-  if (type === "comments:create") return { method: "POST", path: base };
-  if (type === "comments:delete") {
-    if (commentId && /^[a-z0-9]+$/i.test(commentId))
-      return { method: "DELETE", path: `${base}/${commentId}` };
-    return null;
-  }
-  return null;
-}
+// so it can never fetch. It does not ask the host to fetch on its behalf either:
+// the frame's whole vocabulary is a fixed set of oa:* messages carrying anchors
+// and marker events, and every request URL is built by the host from its own
+// serve-time id. There is no relay to turn into an open proxy — the frame cannot
+// supply a URL, method, host, or comment id used in a path. Messages are
+// authenticated by window identity (event.source), not origin, because a
+// sandboxed opaque-origin frame reports origin "null".
 
 // Frame side: announce readiness, then apply host commands. The frame never
 // initiates network I/O; it only relays anchor intents out and renders what the
