@@ -76,7 +76,7 @@ describe("bridge scripts are injected with identity guards", () => {
     expect(html).toContain("e.source!==window.parent");
   });
 
-  it("detects canvas mode in the frame and hides the drawer toggle host-side", async () => {
+  it("detects canvas mode in the frame and swaps host chrome (drawer vs pin tool)", async () => {
     const { id } = await createArtifact();
     const host = await (await exports.default.fetch(`${BASE}/a/${id}`)).text();
     const frame = await (
@@ -84,9 +84,13 @@ describe("bridge scripts are injected with identity guards", () => {
     ).text();
     // Frame derives its mode from the transformed plane of a canvas artifact.
     expect(frame).toContain("querySelector('.oa-plane')");
-    // Host hides the drawer toggle only when the frame reports canvas mode.
+    // Host: canvas → hide drawer toggle, show pin tool; document → hide pin tool.
     expect(host).toContain('msg.mode==="canvas"');
     expect(host).toContain('querySelector(".oa-cm-toggle")');
+    expect(host).toContain('querySelector(".oa-cm-tool")');
+    expect(host).toContain('tool.style.display="none"');
+    // Plain documents start with the pin tool hidden (selection chip only).
+    expect(host).toContain('if(!encrypted)arm.style.display="none"');
   });
 
   it("the host page guards on the frame window and inlines only public comment fields", async () => {

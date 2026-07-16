@@ -1129,13 +1129,23 @@ function hostBridgeScript(artifactId: string): string {
     var msg=e.data;
     if(!msg||typeof msg!=="object")return;
     if(msg.type==="oa:ready"){
-      // On a canvas the thread lives at the pins, so the header drawer toggle
-      // is redundant — hide it. A document keeps it (the drawer is the thread).
+      // Canvas: comments are pins — hide the drawer toggle, show the pin tool.
+      // Document: comments are text-selection chips — hide the pin tool, keep
+      // the drawer. Encrypted unlock shells keep the tool as the unanchored
+      // compose entry (text anchors are rejected server-side).
       window.__oaMode=msg.mode==="canvas"?"canvas":"text";
-      if(window.__oaMode==="canvas"){var tg=document.querySelector(".oa-cm-toggle");if(tg)tg.style.display="none"}
+      var tg=document.querySelector(".oa-cm-toggle");
+      var tool=document.querySelector(".oa-cm-tool");
+      var unlock=document.querySelector(".oa-unlock");
+      if(window.__oaMode==="canvas"){
+        if(tg)tg.style.display="none";
+        if(tool)tool.style.display="";
+      }else{
+        if(tool&&!unlock)tool.style.display="none";
+      }
       // Unlock shells keep .oa-unlock in the DOM; tell the frame so text-anchor
       // capture stays off (REQ-017 — encrypted interactive comments are unanchored).
-      post({type:"oa:config",encrypted:!!document.querySelector(".oa-unlock")});
+      post({type:"oa:config",encrypted:!!unlock});
       post({type:"oa:theme",theme:theme()});
       post({type:"oa:comments",list:inlined(),viewedVersion:window.__oaViewedVersion||1});
     }else if(msg.type==="oa:anchor:new"){
@@ -1196,14 +1206,17 @@ const HOST_UI_SCRIPT = `
   var arm=document.createElement("button");
   arm.type="button";arm.className="oa-cm-tool";arm.innerHTML=${jsonForInlineScript(COMMENT_ADD_SVG)};
   arm.setAttribute("aria-pressed","false");arm.title="Add a comment";arm.setAttribute("aria-label","Add a comment");
+  // Pin tool is canvas-only. Hide until oa:ready reports canvas; encrypted
+  // unlock shells keep it visible as the unanchored compose entry.
+  if(!encrypted)arm.style.display="none";
   if(header&&toggle)header.insertBefore(arm,toggle);else if(header)header.appendChild(arm);
   function setArmed(on){
     arm.setAttribute("aria-pressed",on?"true":"false");
     if(window.__oaToFrame)window.__oaToFrame({type:"oa:arm",mode:on?"on":null});
   }
   arm.addEventListener("click",function(e){
-    // Encrypted: unanchored compose only. Shift+click on plain docs: same.
-    if(encrypted||e.shiftKey){openCompose(null,{x:window.innerWidth/2,y:headerH()+48});return}
+    // Encrypted: unanchored compose only. Canvas: arm for pin drop.
+    if(encrypted){openCompose(null,{x:window.innerWidth/2,y:headerH()+48});return}
     setArmed(arm.getAttribute("aria-pressed")!=="true");
   });
 
