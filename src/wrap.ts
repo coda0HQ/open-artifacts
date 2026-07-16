@@ -208,7 +208,7 @@ const COMMENTS_CSS = `
 .oa-cm-toggle:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 .oa-cm-toggle:active{transform:translateY(1px)}
 .oa-cm-toggle svg{display:block;width:15px;height:15px;margin:auto}
-.oa-cm-toggle .oa-cm-count{position:absolute;top:-4px;right:-4px;min-width:15px;height:15px;padding:0 3px;border-radius:8px;background:var(--oa-accent);color:#fff;font-size:9px;font-weight:600;line-height:15px;text-align:center;display:none}
+.oa-cm-toggle .oa-cm-count{position:absolute;top:-4px;right:-4px;min-width:15px;height:15px;padding:0 3px;border-radius:8px;background:var(--oa-accent);color:var(--oa-accent-on);font-size:9px;font-weight:600;line-height:15px;text-align:center;display:none}
 .oa-cm-toggle[data-count] .oa-cm-count{display:block}
 .oa-cm-drawer{position:fixed;top:var(--oa-header-h);right:0;height:calc(100dvh - var(--oa-header-h));width:100%;max-width:23rem;transform:translateX(100%);transition:transform .18s ease;display:flex;flex-direction:column;background:var(--oa-bg);border-left:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 6%);z-index:2147483645;font-family:var(--oa-font)}
 .oa-cm-drawer[data-open]{transform:translateX(0)}
@@ -378,6 +378,12 @@ function versionPickerHtml(
   return `<label class="oa-version" for="oa-version-select"><span class="oa-version-sr" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0">Version</span><select id="oa-version-select" class="oa-version-select" aria-label="Artifact version">${options}</select></label>`;
 }
 
+// The badge counts what the drawer's default view shows (open comments), so a
+// fully-done thread never renders a count over a "No open comments." list.
+function openCommentsCount(comments: CommentMeta[]): number {
+  return comments.filter((c) => !c.done).length;
+}
+
 function headerHtml(
   favicon: string,
   title: string,
@@ -443,7 +449,7 @@ function commentsDrawerHtml(
         })
         .join("")
     : '<p class="oa-cm-empty">No comments yet.</p>';
-  const count = comments.length;
+  const count = openCommentsCount(comments);
   return `<aside class="oa-cm-drawer" id="oa-cm-drawer" aria-label="Comments" aria-hidden="true" data-artifact-id="${escapeHtml(artifactId)}">
   <div class="oa-cm-head">
     <h2>Comments<span class="oa-cm-head-count" id="oa-cm-head-count"${count > 0 ? ` data-count="${count}"` : ""}>${count}</span></h2>
@@ -855,7 +861,7 @@ export function hostShell(options: HostShellOptions): string {
 <style>${RESET_CSS}${COMMENTS_CSS}${HOST_FRAME_CSS}</style>
 </head>
 <body>
-${headerHtml(favicon, title, hostname, brandUrl, versions, currentVersion, url, artifactId, commentsList.length)}
+${headerHtml(favicon, title, hostname, brandUrl, versions, currentVersion, url, artifactId, openCommentsCount(commentsList))}
 <iframe id="oa-frame" src="${escapeHtml(frameSrc)}" sandbox="allow-scripts allow-modals allow-forms allow-popups" title="${escapeHtml(title)}"></iframe>
 ${drawer}
 ${commentsDataScript(commentsList)}
@@ -1363,13 +1369,16 @@ const HOST_UI_SCRIPT = `
       }).then(function(){posting=false});
   }
 
+  // Counts the default (open) view, not the whole thread: a fully-done thread
+  // otherwise shows a badge of "3" over a drawer reading "No open comments."
   function bumpCount(){
+    var n=state.filter(function(c){return !c.done}).length;
     if(toggle){
-      if(state.length>0){toggle.setAttribute("data-count",String(state.length));var c=toggle.querySelector(".oa-cm-count");if(c)c.textContent=String(state.length)}
+      if(n>0){toggle.setAttribute("data-count",String(n));var c=toggle.querySelector(".oa-cm-count");if(c)c.textContent=String(n)}
       else{toggle.removeAttribute("data-count");var c2=toggle.querySelector(".oa-cm-count");if(c2)c2.textContent="0"}
     }
     var hc=document.getElementById("oa-cm-head-count");
-    if(hc){if(state.length>0){hc.setAttribute("data-count",String(state.length));hc.textContent=String(state.length)}else{hc.removeAttribute("data-count");hc.textContent="0"}}
+    if(hc){if(n>0){hc.setAttribute("data-count",String(n));hc.textContent=String(n)}else{hc.removeAttribute("data-count");hc.textContent="0"}}
   }
   function relTime(iso){
     var t=Date.parse(iso);if(isNaN(t))return"";
@@ -1491,10 +1500,10 @@ const HOST_UI_SCRIPT = `
     if(!cm)return;
     var next=!cm.done;
     // Optimistic UI — roll back on failure.
-    cm.done=next;renderList();toFrame();
+    cm.done=next;renderList();bumpCount();toFrame();
     fetch("/api/artifacts/"+ID+"/comments/"+id,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({done:next})})
       .then(function(r){if(!r.ok)return Promise.reject(r.status)})
-      .catch(function(){cm.done=!next;renderList();toFrame()});
+      .catch(function(){cm.done=!next;renderList();bumpCount();toFrame()});
   }
   function remove(id){var tok=deleteTokenFor(id);if(!tok)return;
     fetch("/api/artifacts/"+ID+"/comments/"+id,{method:"DELETE",headers:{authorization:"Bearer "+tok}})
@@ -1523,8 +1532,9 @@ const HOST_UI_SCRIPT = `
   };
 
   // Upgrade the server-rendered list so this browser's own comments gain a
-  // Delete control (the server can't know which delete tokens we hold).
-  renderList();
+  // Delete control (the server can't know which delete tokens we hold), and
+  // sync the badge to the filtered view this render actually produced.
+  renderList();bumpCount();
 })();
 `;
 
@@ -1674,7 +1684,7 @@ input.focus();
 <style>${RESET_CSS}${UNLOCK_CSS}${COMMENTS_CSS}</style>
 </head>
 <body>
-${headerHtml(favicon, title, hostname, brandUrl, versions, currentVersion, url, artifactId, commentsList.length)}
+${headerHtml(favicon, title, hostname, brandUrl, versions, currentVersion, url, artifactId, openCommentsCount(commentsList))}
 <div class="oa-unlock">
   <form class="oa-card" id="oa-form">
     <div class="oa-emoji">${escapeHtml(favicon)}</div>

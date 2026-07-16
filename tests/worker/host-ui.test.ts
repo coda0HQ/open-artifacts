@@ -128,6 +128,65 @@ describe("host page interactive UI (tasks 009/010/011)", () => {
     expect(html).toContain("No done comments.");
   });
 
+  it("counts only open comments in the badge and refreshes it on done", async () => {
+    const html = await hostHtml();
+    // The badge must track the default (open) view, or a fully-done thread reads
+    // "3" on the button while the drawer says "No open comments."
+    expect(html).toContain(
+      "var n=state.filter(function(c){return !c.done}).length",
+    );
+    expect(html).not.toContain("String(state.length)");
+    // Marking done must move the badge, not just the list.
+    expect(html).toContain("cm.done=next;renderList();bumpCount();toFrame()");
+  });
+
+  it("renders the server-side badge from open comments only", async () => {
+    const created = await exports.default.fetch(
+      new Request(`${BASE}/api/artifacts`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          content: "<p>hello</p>",
+          title: "Badge",
+          favicon: "🔢",
+        }),
+      }),
+    );
+    const { id } = (await created.json()) as { id: string };
+    const post = async (body: string) =>
+      (await (
+        await exports.default.fetch(
+          new Request(`${BASE}/api/artifacts/${id}/comments`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ body }),
+          }),
+        )
+      ).json()) as { id: string };
+    const resolved = await post("resolve me");
+    await post("still open");
+    // Resolve one of the two; the badge must render 1, not 2.
+    await exports.default.fetch(
+      new Request(`${BASE}/api/artifacts/${id}/comments/${resolved.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ done: true }),
+      }),
+    );
+    const html = await (await exports.default.fetch(`${BASE}/a/${id}`)).text();
+    expect(html).toContain('data-count="1"');
+    expect(html).not.toContain('data-count="2"');
+  });
+
+  it("uses the on-accent token for the count badge in both themes", async () => {
+    const html = await hostHtml();
+    expect(html).toContain(
+      "background:var(--oa-accent);color:var(--oa-accent-on)",
+    );
+    // No hardcoded white on the accent chip — it fails contrast in dark.
+    expect(html).not.toContain("background:var(--oa-accent);color:#fff");
+  });
+
   it("keeps the more menu non-empty on comments this viewer cannot delete", async () => {
     const html = await hostHtml();
     // An always-available action, so the more control never opens an empty menu.

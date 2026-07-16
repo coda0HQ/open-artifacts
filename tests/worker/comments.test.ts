@@ -156,6 +156,25 @@ describe("POST /api/artifacts/:id/comments", () => {
     expect(res.status).toBe(413);
   });
 
+  it("accepts a full-size body that also carries an anchor", async () => {
+    const created = await createArtifact();
+    // Body at the cap plus a text anchor and an author serialises past the old
+    // content-length headroom, so the precheck 413'd a comment validateComment
+    // would have accepted.
+    const res = await postComment(created.id, {
+      author: "a".repeat(200),
+      body: "x".repeat(8 * 1024),
+      anchor: {
+        mode: "text",
+        quote: "q".repeat(1000),
+        prefix: "p".repeat(32),
+        suffix: "s".repeat(32),
+        start: 0,
+      },
+    });
+    expect(res.status).toBe(201);
+  });
+
   it("404s for an unknown artifact", async () => {
     const res = await postComment("zzzzzzzzzzzz", { body: "x" });
     expect(res.status).toBe(404);

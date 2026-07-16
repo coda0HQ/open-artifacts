@@ -64,6 +64,20 @@ Feature: Multi-user interaction on a shared artifact
     And this viewer holds no artifact write token
     Then the drawer item renders no three-dot more menu
 
+  Scenario: The comment count badge tracks the default view, not the whole thread
+    Given an artifact has three comments and all three are marked done
+    When a viewer opens the page
+    Then the header badge reads zero rather than three
+    And the drawer shows "No open comments."
+    When the viewer marks one comment not done
+    Then the header badge reads one without a reload
+
+  Scenario: A valid comment carrying both a full-size body and an anchor is accepted
+    Given a comment whose body is at the body cap and which also carries a text anchor
+    When a client POSTs it to /api/artifacts/:id/comments
+    Then the content-length precheck does not reject it before validation
+    And the response status is 201
+
   Scenario: Done comments are filtered out of the default drawer view
     Given an artifact has one open comment and one done comment
     When a viewer opens the comments drawer

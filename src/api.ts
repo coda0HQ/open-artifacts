@@ -359,7 +359,11 @@ api.get("/artifacts/:id/raw", async (c) => {
 // lists the auth model as an open question. A persisted comment reaches every
 // future viewer because the host fetches the thread on page load. Live
 // (no-reload) fan-out across concurrent viewers is Phase 2 (Durable Object).
-const COMMENT_BODY_BYTES = MAX_COMMENT_BODY_BYTES + 1024; // JSON braces/escaping headroom over the cap
+// Headroom over the body cap for everything else a comment may legitimately
+// carry: an anchor (≤2 KiB), an author (≤200 chars), and JSON braces/escaping.
+// Too tight and a comment validateComment would accept is 413'd before it is
+// read; validateComment stays the authoritative per-field gate.
+const COMMENT_BODY_BYTES = MAX_COMMENT_BODY_BYTES + 4 * 1024;
 
 api.get("/artifacts/:id/comments", async (c) => {
   const store = storeFrom(c);
