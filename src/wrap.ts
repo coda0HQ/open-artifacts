@@ -226,7 +226,7 @@ const COMMENTS_CSS = `
 .oa-cm-name{align-self:flex-start;max-width:70%;padding:.32rem .7rem;border:1px solid var(--oa-border);border-radius:999px;background:var(--oa-bg);color:var(--oa-fg);font:inherit;font-size:.78rem;box-shadow:0 6px 20px -8px rgba(0,0,0,.35)}
 .oa-cm-name[hidden]{display:none}
 .oa-cm-name:focus-visible{outline:none;border-color:var(--oa-accent);box-shadow:var(--oa-focus-ring)}
-.oa-cm-row{display:flex;align-items:flex-end;gap:.35rem;padding:.3rem .3rem .3rem .95rem;background:var(--oa-bg);border:1px solid var(--oa-border);border-radius:1.35rem;box-shadow:0 2px 6px rgba(0,0,0,.06),0 14px 34px -12px rgba(0,0,0,.4)}
+.oa-cm-row{display:flex;align-items:center;gap:.35rem;padding:.25rem .25rem .25rem .95rem;background:var(--oa-bg);border:1px solid var(--oa-border);border-radius:1.35rem;box-shadow:0 2px 6px rgba(0,0,0,.06),0 14px 34px -12px rgba(0,0,0,.4)}
 .oa-cm-row:focus-within{border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 22%)}
 .oa-cm-body{flex:1;min-width:0;border:0;background:none;resize:none;color:var(--oa-fg);font:inherit;font-size:.9rem;line-height:1.45;padding:.5rem 0;max-height:8rem;overflow-y:auto}
 .oa-cm-body:focus{outline:none}
@@ -856,7 +856,7 @@ const FRAME_ANCHOR_CSS = `
 .oa-cm-pin:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 /* Comment tool armed (canvas): a Figma-style comment marker replaces the pan
    cursor, its tail as the hotspot so the pin lands where the tip points. */
-html.oa-cm-arming,html.oa-cm-arming *{cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='30' height='30' viewBox='0 0 24 24'%3E%3Cpath d='M4 18V10a8 8 0 0 1 8-8 8 8 0 0 1 8 8 8 8 0 0 1-8 8H4z' fill='%23fff' stroke='%23fff' stroke-width='4' stroke-linejoin='round'/%3E%3Cpath d='M4 18V10a8 8 0 0 1 8-8 8 8 0 0 1 8 8 8 8 0 0 1-8 8H4z' fill='%23fff' stroke='%23000' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E") 5 22,crosshair !important}
+html.oa-cm-arming,html.oa-cm-arming *{cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='-2 -2 28 28'%3E%3Cpath d='M4 18V10a8 8 0 0 1 8-8 8 8 0 0 1 8 8 8 8 0 0 1-8 8H4z' fill='%23fff' stroke='%23fff' stroke-width='6' stroke-linejoin='round'/%3E%3Cpath d='M4 18V10a8 8 0 0 1 8-8 8 8 0 0 1 8 8 8 8 0 0 1-8 8H4z' fill='%23fff' stroke='%23000' stroke-width='1.2' stroke-linejoin='round'/%3E%3C/svg%3E") 7 23,crosshair !important}
 `;
 
 // Frame side, canvas mode: capture a click to drop a pin (world coords, read
