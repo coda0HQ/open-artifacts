@@ -46,7 +46,11 @@ export function buildTextAnchor(
   const quote =
     rawQuote.length > MAX_QUOTE ? rawQuote.slice(0, MAX_QUOTE) : rawQuote;
   const prefix = fullText.slice(Math.max(0, start - MAX_CTX), start);
-  const suffix = fullText.slice(end, end + MAX_CTX);
+  // Context must follow the truncated quote, not the original selection end:
+  // otherwise prefix+quote+suffix spans a gap and matches nothing, silently
+  // disabling the exact-with-context tier for every long selection.
+  const quoteEnd = start + quote.length;
+  const suffix = fullText.slice(quoteEnd, quoteEnd + MAX_CTX);
   const anchorVersion =
     Number.isInteger(viewedVersion) && viewedVersion >= 1 ? viewedVersion : 1;
   return { mode: "text", quote, prefix, suffix, start, anchorVersion };
@@ -81,7 +85,11 @@ export function reAnchor(
   const withCtx = anchor.prefix + quote + anchor.suffix;
   const ctxHits = allIndexes(fullText, withCtx);
   if (ctxHits.length > 0) {
-    const s = nearest(ctxHits, anchor.start) + anchor.prefix.length;
+    // ctxHits index the prefix start, so compare against the hint in the same
+    // space (quote start minus prefix) before shifting back to the quote.
+    const s =
+      nearest(ctxHits, anchor.start - anchor.prefix.length) +
+      anchor.prefix.length;
     return { start: s, end: s + quote.length };
   }
   const hits = allIndexes(fullText, quote);

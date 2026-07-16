@@ -22,6 +22,20 @@ describe("buildTextAnchor", () => {
     const a = buildTextAnchor(big, 0, big.length);
     expect(a.quote.length).toBe(1000);
   });
+
+  it("keeps a truncated quote's context contiguous so it can re-anchor", () => {
+    // A >1000-char selection: the suffix must follow the TRUNCATED quote, not
+    // the original end, or prefix+quote+suffix is a string the document does
+    // not contain and the exact-with-context tier silently never fires.
+    const doc = `HEAD${"a".repeat(1200)}TAIL-MARKER`;
+    const start = 4;
+    const end = start + 1200;
+    const a = buildTextAnchor(doc, start, end);
+    expect(a.quote.length).toBe(1000);
+    expect(doc).toContain(a.prefix + a.quote + a.suffix);
+    // And it must actually resolve back to the truncated range.
+    expect(reAnchor(doc, a)).toEqual({ start, end: start + 1000 });
+  });
 });
 
 describe("reAnchor", () => {
