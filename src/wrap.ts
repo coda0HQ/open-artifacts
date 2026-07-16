@@ -239,18 +239,26 @@ const COMMENTS_CSS = `
 .oa-cm-detached{font-style:italic}
 .oa-cm-item[data-done] .oa-cm-title{color:var(--oa-muted);text-decoration:line-through;text-decoration-thickness:1px}
 .oa-cm-item[data-done] .oa-cm-avatar{opacity:.65}
-/* Trail: more ··· then done ○✓ — always visible top-right. */
-.oa-cm-trail{display:inline-flex;align-items:center;gap:.1rem;flex-shrink:0;margin-top:-.1rem}
-.oa-cm-done{flex-shrink:0;width:20px;height:20px;padding:0;border-radius:50%;border:1.5px solid color-mix(in oklab,var(--oa-muted),transparent 25%);background:transparent;color:color-mix(in oklab,var(--oa-muted),transparent 15%);display:grid;place-items:center;cursor:pointer;transition:border-color .12s,background .12s,color .12s,box-shadow .12s}
+/* Trail: more ··· then done ○✓. Same 24px hit target; appear on card hover. */
+.oa-cm-trail{display:inline-flex;align-items:center;gap:.15rem;flex-shrink:0;margin-top:-.15rem}
+.oa-cm-actions{position:relative;flex-shrink:0}
+.oa-cm-more,.oa-cm-done{box-sizing:border-box;width:24px;height:24px;padding:0;flex-shrink:0;display:grid;place-items:center;cursor:pointer;color:var(--oa-muted);background:transparent;transition:opacity .12s,background .12s,color .12s,border-color .12s,box-shadow .12s}
+.oa-cm-more{border:0;border-radius:6px}
+.oa-cm-more svg{width:14px;height:14px;display:block}
+.oa-cm-done{border-radius:50%;border:1.5px solid color-mix(in oklab,var(--oa-muted),transparent 30%);color:color-mix(in oklab,var(--oa-muted),transparent 20%)}
 .oa-cm-done svg{width:11px;height:11px;display:block}
 .oa-cm-done[aria-pressed="true"]{background:var(--oa-accent);border-color:var(--oa-accent);color:var(--oa-accent-on)}
-.oa-cm-done:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
-@media (hover:hover) and (pointer:fine){.oa-cm-done:hover{border-color:var(--oa-muted);color:var(--oa-muted)}.oa-cm-done[aria-pressed="true"]:hover{background:color-mix(in oklab,var(--oa-accent),var(--oa-fg) 10%);color:var(--oa-accent-on)}}
-.oa-cm-actions{position:relative;flex-shrink:0}
-.oa-cm-more{width:22px;height:22px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--oa-muted);display:grid;place-items:center;cursor:pointer;transition:background .12s,color .12s}
-.oa-cm-more svg{width:14px;height:14px;display:block}
-.oa-cm-more:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
-@media (hover:hover) and (pointer:fine){.oa-cm-more:hover{background:color-mix(in oklab,var(--oa-fg),transparent 92%);color:var(--oa-fg)}}
+.oa-cm-more:focus-visible,.oa-cm-done:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+/* Fine pointer: hide until card hover / focus / open menu; shared hover wash. */
+@media (hover:hover) and (pointer:fine){
+  .oa-cm-more,.oa-cm-done{opacity:0}
+  .oa-cm-item:hover .oa-cm-more,.oa-cm-item:hover .oa-cm-done,
+  .oa-cm-item:focus-within .oa-cm-more,.oa-cm-item:focus-within .oa-cm-done,
+  .oa-cm-more[aria-expanded="true"],.oa-cm-more:focus-visible,.oa-cm-done:focus-visible{opacity:1}
+  .oa-cm-more:hover,.oa-cm-done:hover{background:color-mix(in oklab,var(--oa-fg),transparent 92%);color:var(--oa-fg)}
+  .oa-cm-done:hover{border-color:color-mix(in oklab,var(--oa-muted),var(--oa-fg) 20%)}
+  .oa-cm-done[aria-pressed="true"]:hover{background:color-mix(in oklab,var(--oa-accent),var(--oa-fg) 10%);border-color:color-mix(in oklab,var(--oa-accent),var(--oa-fg) 10%);color:var(--oa-accent-on)}
+}
 .oa-cm-menu{position:absolute;top:100%;right:0;z-index:2;min-width:7.5rem;padding:.25rem;border:1px solid var(--oa-border);border-radius:8px;background:var(--oa-bg);box-shadow:0 4px 16px -4px rgba(0,0,0,.18),0 12px 28px -12px rgba(0,0,0,.22)}
 .oa-cm-menu[hidden]{display:none}
 .oa-cm-menu button{display:block;width:100%;text-align:left;padding:.4rem .55rem;border:0;border-radius:6px;background:none;color:var(--oa-fg);font:inherit;font-size:.8rem;cursor:pointer}
