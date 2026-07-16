@@ -258,8 +258,9 @@ const COMMENTS_CSS = `
 .oa-cm-more[hidden],.oa-cm-done[hidden]{display:none}
 .oa-cm-more svg{width:14px;height:14px;display:block}
 .oa-cm-done svg{width:13px;height:13px;display:block}
-/* Shows a resolved state you are not allowed to change — readable, not clickable. */
-.oa-cm-done:disabled{cursor:default}
+/* Why a refused resolve/delete bounced back — the drawer's only error surface. */
+.oa-cm-drawer-err{flex-shrink:0;margin:.5rem 1rem 0;padding:.4rem .6rem;border:1px solid color-mix(in oklab,var(--oa-danger),transparent 60%);border-radius:6px;background:color-mix(in oklab,var(--oa-danger),transparent 92%);color:var(--oa-danger);font-size:.75rem;line-height:1.4}
+.oa-cm-drawer-err[hidden]{display:none}
 .oa-cm-done[aria-pressed="true"]{color:var(--oa-accent)}
 .oa-cm-done[aria-pressed="true"] svg circle{fill:var(--oa-accent)}
 .oa-cm-done[aria-pressed="true"] svg path{stroke:var(--oa-accent-on)}
@@ -271,7 +272,7 @@ const COMMENTS_CSS = `
   .oa-cm-item:focus-within .oa-cm-more,.oa-cm-item:focus-within .oa-cm-done,
   .oa-cm-more[aria-expanded="true"],.oa-cm-more:focus-visible,.oa-cm-done:focus-visible,
   .oa-cm-done[aria-pressed="true"]{opacity:1}
-  .oa-cm-more:hover,.oa-cm-done:not(:disabled):hover{background:color-mix(in oklab,var(--oa-fg),transparent 92%);color:var(--oa-fg)}
+  .oa-cm-more:hover,.oa-cm-done:hover{background:color-mix(in oklab,var(--oa-fg),transparent 92%);color:var(--oa-fg)}
   .oa-cm-done[aria-pressed="true"]:hover{color:var(--oa-accent)}
 }
 .oa-cm-menu{position:absolute;top:100%;right:0;z-index:2;min-width:7.5rem;padding:.25rem;border:1px solid var(--oa-border);border-radius:8px;background:var(--oa-bg)}
@@ -468,6 +469,7 @@ function commentsDrawerHtml(
     </div>
     <button class="oa-cm-close" type="button" aria-label="Close comments" aria-controls="oa-cm-drawer">&times;</button>
   </div>
+  <div class="oa-cm-drawer-err" id="oa-cm-drawer-err" role="alert" hidden></div>
   <div class="oa-cm-list" id="oa-cm-list">${items}</div>
 </aside>`;
 }
@@ -1257,6 +1259,14 @@ const HOST_UI_SCRIPT = `
   var filterBar=document.getElementById("oa-cm-filter");
   var ID=window.__oaBridgeId;
   if(!frame||!ID)return;
+  var drawerErrEl=document.getElementById("oa-cm-drawer-err");
+  var drawerErrTimer=null;
+  function drawerErr(msg){
+    if(!drawerErrEl)return;
+    drawerErrEl.textContent=msg;drawerErrEl.removeAttribute("hidden");
+    if(drawerErrTimer)clearTimeout(drawerErrTimer);
+    drawerErrTimer=setTimeout(function(){drawerErrEl.setAttribute("hidden","")},5000);
+  }
   function headerH(){return header?Math.round(header.getBoundingClientRect().height):40}
   function getName(){try{return localStorage.getItem("oa-cm-name")||""}catch(e){return""}}
   function setName(v){try{localStorage.setItem("oa-cm-name",v)}catch(e){}}
@@ -1435,13 +1445,8 @@ const HOST_UI_SCRIPT = `
     doneBtn.setAttribute("aria-label",cm.done?"Mark not done":"Mark done");
     doneBtn.innerHTML=${jsonForInlineScript(DONE_CHECK_SVG)};
     doneBtn.addEventListener("click",function(e){e.stopPropagation();toggleDone(cm.id)});
-    // Only offer the control the server would honour. A done comment still
-    // shows its state to everyone, but disabled rather than silently inert;
-    // an open comment simply has no control for a viewer who cannot resolve it.
-    if(!deleteTokenFor(cm.id)){
-      if(cm.done)doneBtn.disabled=true;
-      else doneBtn.setAttribute("hidden","");
-    }
+    // Always offered: the server is the authority on who may resolve, and a
+    // refused toggle rolls back and says why rather than being pre-disabled.
     trail.appendChild(doneBtn);
     top.appendChild(title);top.appendChild(trail);
     var byline=document.createElement("div");byline.className="oa-cm-byline";
@@ -1491,21 +1496,34 @@ const HOST_UI_SCRIPT = `
   function toFrame(){if(window.__oaToFrame)window.__oaToFrame({type:"oa:comments",list:state,viewedVersion:window.__oaViewedVersion||1})}
   function sync(){renderList();bumpCount();toFrame()}
   // Resolving hides a comment from the default view, so the server gates it like
-  // delete: the comment's own token, or the owner's write token.
+  // delete: the comment's own token, or the owner's write token. The control is
+  // always live — we attempt, and roll back with a reason if refused.
   function toggleDone(id){
     var cm=null;for(var i=0;i<state.length;i++){if(state[i].id===id){cm=state[i];break}}
     if(!cm)return;
-    var tok=deleteTokenFor(id);if(!tok)return;
+    var tok=deleteTokenFor(id);
     var next=!cm.done;
     // Optimistic UI — roll back on failure.
     cm.done=next;renderList();bumpCount();toFrame();
-    fetch("/api/artifacts/"+ID+"/comments/"+id,{method:"PATCH",headers:{"content-type":"application/json",authorization:"Bearer "+tok},body:JSON.stringify({done:next})})
+    var headers={"content-type":"application/json"};
+    if(tok)headers.authorization="Bearer "+tok;
+    fetch("/api/artifacts/"+ID+"/comments/"+id,{method:"PATCH",headers:headers,body:JSON.stringify({done:next})})
       .then(function(r){if(!r.ok)return Promise.reject(r.status)})
-      .catch(function(){cm.done=!next;renderList();bumpCount();toFrame()});
+      .catch(function(s){
+        cm.done=!next;renderList();bumpCount();toFrame();
+        drawerErr(s===401||s===403
+          ?"Only the comment's author or the artifact owner can resolve this."
+          :"Could not update that comment.");
+      });
   }
   function remove(id){var tok=deleteTokenFor(id);if(!tok)return;
     fetch("/api/artifacts/"+ID+"/comments/"+id,{method:"DELETE",headers:{authorization:"Bearer "+tok}})
-      .then(function(r){if(!r.ok)return;state=state.filter(function(c){return c.id!==id});dropToken(id);sync()});
+      .then(function(r){
+        if(!r.ok){drawerErr(r.status===401||r.status===403
+          ?"Only the comment's author or the artifact owner can delete this."
+          :"Could not delete that comment.");return}
+        state=state.filter(function(c){return c.id!==id});dropToken(id);sync();
+      });
   }
   // Click-away closes any open menu. Triggers and menu interiors are exempt so
   // mousedown does not race the click handler that opens/acts on them.
