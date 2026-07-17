@@ -12,6 +12,17 @@ Feature: Opt-in same-origin web fonts
   # The artifact document is /a/:id/frame since the host/frame split; /a/:id is
   # the privileged host page and never carries a sandbox directive at all.
 
+  # R1 is unconditional, not something each call site opts into. The old
+  # sandbox builder added allow-same-origin whenever web fonts were on unless a
+  # caller passed a "keep it strict" flag — so a new route that forgot the flag
+  # would silently open the air-gap. The builder now never emits it at all.
+
+  Scenario: A sandboxed CSP never grants allow-same-origin, whatever the arguments
+    Given the content-security-policy builder
+    When it builds a sandboxed policy with web fonts enabled
+    Then the sandbox directive omits allow-same-origin
+    And there is no argument that adds it back
+
   Scenario: Web-font surface turns on with the deploy flag
     When a deploy sets OPEN_ARTIFACTS_WEB_FONTS=1
     And I GET /a/:id/frame

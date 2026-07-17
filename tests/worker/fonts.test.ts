@@ -1,5 +1,34 @@
 import { env, exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
+import { contentSecurityPolicy } from "../../src/wrap";
+
+describe("contentSecurityPolicy sandbox invariant (R1)", () => {
+  const nonce = "test-nonce";
+
+  it("never grants allow-same-origin on a sandboxed policy, web fonts or not", () => {
+    // The two combinations a caller might reach. The old builder emitted
+    // allow-same-origin for the first because it only withheld it when an
+    // explicit flag was passed — the fail-open that a new route could trip.
+    for (const webFonts of [true, false]) {
+      const csp = contentSecurityPolicy({ sandbox: true, webFonts, nonce });
+      expect(csp).toContain("sandbox allow-scripts");
+      expect(csp).not.toContain("allow-same-origin");
+    }
+  });
+
+  it("still names the passed origin for opaque-frame subresources", () => {
+    // Removing the frame flag must not lose the origin substitution the frame
+    // route depends on: an opaque origin can't use 'self' for the /fonts proxy.
+    const csp = contentSecurityPolicy({
+      sandbox: true,
+      webFonts: true,
+      origin: "https://coda0.example",
+      nonce,
+    });
+    expect(csp).toContain("https://coda0.example");
+    expect(csp).not.toContain("allow-same-origin");
+  });
+});
 
 const BASE = "http://artifacts.test";
 
@@ -77,9 +106,9 @@ describe("web-font surface — opt-in flag is set in wrangler.jsonc", () => {
     expect(res.status).toBe(200);
     const csp = res.headers.get("content-security-policy") ?? "";
     // R1: the artifact frame must never become same-origin with the
-    // privileged host page, even with webFonts on — allow-same-origin is
-    // deliberately withheld here (frameSandbox), unlike the general
-    // contentSecurityPolicy({sandbox:true, webFonts:true}) default.
+    // privileged host page, even with webFonts on. The sandbox builder never
+    // emits allow-same-origin at all now, so this holds for every sandboxed
+    // response, not only where a caller remembered to withhold it.
     expect(csp).not.toContain("allow-same-origin");
     // Opaque frames: 'self' would not match the worker host, so the CSP
     // stamps the real response origin for the same-origin /fonts proxy.

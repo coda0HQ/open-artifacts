@@ -188,7 +188,7 @@ describe("GET /a/:id (plain HTML) — host page", () => {
     expect(csp).toContain("sandbox allow-scripts");
     expect(csp).toContain("default-src 'none'");
     // Opaque frame: CSP stamps the real response origin (not 'self') so the
-    // same-host /fonts proxy still loads under frameSandbox.
+    // same-host /fonts proxy still loads from an opaque origin.
     // script-src is nonce-only with the response origin (same-origin
     // /vendor/... runtime bundles) and NO 'unsafe-inline', NO external host,
     // NO 'strict-dynamic' (issue #11): with no external script host in the

@@ -352,11 +352,10 @@ app.get("/a/:id/frame", async (c) => {
       contentType: "text/html; charset=utf-8",
       webFonts,
       nonce,
-      // R1: the artifact frame must never become same-origin with the
-      // privileged host page, even when webFonts is on.
-      frameSandbox: true,
-      // Opaque-origin frames cannot use CSP 'self' for the /fonts proxy —
-      // pass the real response origin so same-host font CSS/bytes still load.
+      // Opaque-origin frames cannot use CSP 'self' for the /fonts proxy — pass
+      // the real response origin so same-host font CSS/bytes still load. The
+      // sandbox stays opaque unconditionally (R1); the builder never emits
+      // allow-same-origin, so no flag is needed to keep the air-gap.
       origin: new URL(c.req.url).origin,
     }),
   });

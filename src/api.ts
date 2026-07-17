@@ -26,9 +26,10 @@ export type Bindings = Env & {
   CREATE_TOKEN?: string;
   BRAND_URL?: string;
   PUBLIC_URL?: string;
-  // "1" enables the opt-in web-font surface: the /fonts proxy + an
-  // allow-same-origin sandbox so the browser can cache same-origin fonts.
-  // Absent (or any other value) keeps the strict opaque-origin sandbox.
+  // "1" enables the opt-in web-font surface: the /fonts proxy plus a widened
+  // font-src/style-src to the CDN allowlist. The sandbox stays opaque either
+  // way — the opt-in never grants allow-same-origin (R1). Absent (or any other
+  // value) keeps font-src data:-only.
   OPEN_ARTIFACTS_WEB_FONTS?: string;
 };
 export type AppContext = { Bindings: Bindings };
