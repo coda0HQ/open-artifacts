@@ -2,7 +2,6 @@ import type { Context } from "hono";
 import { Hono } from "hono";
 import type { CreateInput, FeedbackStatus } from "./domain";
 import {
-  COMMENT_RATE_LIMIT,
   MAX_COMMENT_BODY_BYTES,
   MAX_CONTENT_BYTES,
   MAX_FEEDBACK_BODY_BYTES,
@@ -12,6 +11,7 @@ import {
   validateFeedback,
   validateFeedbackStatus,
   validateUpdate,
+  WRITE_RATE_LIMIT,
 } from "./domain";
 import type { ArtifactRecord, ArtifactStore } from "./store";
 import { D1R2Store, FEEDBACK_PAGE_LIMIT } from "./store";
@@ -420,12 +420,12 @@ api.post("/artifacts/:id/comments", async (c) => {
   // everyone else — or exhaust its own budget across unrelated artifacts.
   const { allowed } = await store.consumeToken(
     `comments:${record.id}:${clientKey(c)}`,
-    COMMENT_RATE_LIMIT,
+    WRITE_RATE_LIMIT,
     Date.now(),
   );
   if (!allowed) {
     return c.json({ error: "too many comments, slow down" }, 429, {
-      "retry-after": String(retryAfterSeconds(COMMENT_RATE_LIMIT)),
+      "retry-after": String(retryAfterSeconds(WRITE_RATE_LIMIT)),
     });
   }
 
@@ -617,6 +617,23 @@ api.post("/artifacts/:id/feedback", async (c) => {
   const declaredLength = Number(c.req.header("content-length") ?? "0");
   if (declaredLength > FEEDBACK_BODY_BYTES) {
     return c.json({ error: "request body too large" }, 413);
+  }
+
+  // Same bound as /comments, on the same grounds: the precheck above caps one
+  // row, not how many. Below the auth check on purpose — a gated instance has
+  // already refused anonymous callers with a 401 and written nothing, so there
+  // is no row to bound and no reason to spend a token stopping it. Its own key
+  // namespace, so a viewer's thread activity and their reports to the agent do
+  // not compete for one budget.
+  const { allowed } = await store.consumeToken(
+    `feedback:${record.id}:${clientKey(c)}`,
+    WRITE_RATE_LIMIT,
+    Date.now(),
+  );
+  if (!allowed) {
+    return c.json({ error: "too much feedback, slow down" }, 429, {
+      "retry-after": String(retryAfterSeconds(WRITE_RATE_LIMIT)),
+    });
   }
 
   let body: Record<string, unknown>;

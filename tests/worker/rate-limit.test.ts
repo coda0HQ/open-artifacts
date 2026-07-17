@@ -5,7 +5,7 @@ import {
 import { env, exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import type { Bindings } from "../../src/api";
-import { COMMENT_RATE_LIMIT } from "../../src/domain";
+import { WRITE_RATE_LIMIT } from "../../src/domain";
 import app from "../../src/index";
 import { D1R2Store } from "../../src/store";
 
@@ -13,6 +13,8 @@ const BASE = "http://artifacts.test";
 
 interface CreateResult {
   id: string;
+  // Reading the feedback queue back is owner-only, so tests keep the token.
+  writeToken: string;
 }
 
 async function createArtifact(): Promise<CreateResult> {
@@ -59,7 +61,7 @@ async function exhaust(
   ip: string,
   bindings: Bindings = env,
 ): Promise<void> {
-  for (let i = 0; i < COMMENT_RATE_LIMIT.capacity; i++) {
+  for (let i = 0; i < WRITE_RATE_LIMIT.capacity; i++) {
     const res = await postComment(id, ip, `filler ${i}`, bindings);
     expect(res.status).toBe(201);
   }
@@ -81,7 +83,7 @@ describe("POST /comments rate limit", () => {
     const { comments } = (await list.json()) as {
       comments: { body: string }[];
     };
-    expect(comments).toHaveLength(COMMENT_RATE_LIMIT.capacity);
+    expect(comments).toHaveLength(WRITE_RATE_LIMIT.capacity);
     expect(comments.some((c) => c.body === "one too many")).toBe(false);
   });
 
@@ -121,6 +123,69 @@ describe("POST /comments rate limit", () => {
       }),
     );
     expect(res.status).toBe(200);
+  });
+});
+
+// /feedback is the other anonymous write surface: a row per request, queued
+// for the owning agent. Same exposure shape as /comments, so the same bound.
+async function postFeedback(
+  id: string,
+  ip: string,
+  body = "please change the project",
+  bindings: Bindings = env,
+): Promise<Response> {
+  return app.fetch(
+    new Request(`${BASE}/api/artifacts/${id}/feedback`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "CF-Connecting-IP": ip },
+      body: JSON.stringify({ body, projectRef: null }),
+    }),
+    bindings,
+  );
+}
+
+describe("POST /feedback rate limit", () => {
+  it("accepts a full bucket and rejects the next write with 429", async () => {
+    const { id, writeToken } = await createArtifact();
+    for (let i = 0; i < WRITE_RATE_LIMIT.capacity; i++) {
+      expect(
+        (await postFeedback(id, "203.0.113.6", `filler ${i}`)).status,
+      ).toBe(201);
+    }
+    const res = await postFeedback(id, "203.0.113.6", "one too many");
+    expect(res.status).toBe(429);
+    expect(Number(res.headers.get("retry-after"))).toBeGreaterThan(0);
+
+    // Rejected before the write: the flood never reaches the agent's queue.
+    const list = await app.fetch(
+      new Request(`${BASE}/api/artifacts/${id}/feedback`, {
+        headers: { authorization: `Bearer ${writeToken}` },
+      }),
+      env,
+    );
+    const { feedback } = (await list.json()) as {
+      feedback: { body: string }[];
+    };
+    expect(feedback.some((f) => f.body === "one too many")).toBe(false);
+  });
+
+  it("does not share a budget with comments", async () => {
+    // Separate key namespaces: chatting in the thread must not cost a viewer
+    // their ability to report a problem to the agent.
+    const { id } = await createArtifact();
+    await exhaust(id, "203.0.113.7");
+    expect((await postComment(id, "203.0.113.7")).status).toBe(429);
+    expect((await postFeedback(id, "203.0.113.7")).status).toBe(201);
+  });
+
+  it("is refused by auth, not the bucket, on a gated instance", async () => {
+    // /feedback (unlike /comments) requires the write token when gated, so an
+    // anonymous request writes no row and needs no token spent to stop it.
+    const gated: Bindings = { ...env, CREATE_TOKEN: "sekret-create" };
+    const { id } = await createArtifact();
+    expect(
+      (await postFeedback(id, "203.0.113.8", "blocked", gated)).status,
+    ).toBe(401);
   });
 });
 

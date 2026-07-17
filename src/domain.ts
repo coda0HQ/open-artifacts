@@ -99,11 +99,13 @@ export interface RateLimitRule {
   refillPerSecond: number;
 }
 
-// 30 comments per 10 minutes, per client, per artifact (R5). Far above what a
-// person threads through a drawer by hand, low enough that a flood stops being
-// free. Posting is open on every instance — gated or not — so this is the only
-// bound standing between an anonymous client and unbounded row growth.
-export const COMMENT_RATE_LIMIT: RateLimitRule = {
+// 30 writes per 10 minutes, per client, per artifact (R5) — the bound on both
+// anonymous write surfaces, /comments and /feedback. Far above what a person
+// types by hand, low enough that a flood stops being free. One rule, but the
+// buckets stay separate: each route namespaces its own key, so chatting in a
+// thread cannot cost a viewer their ability to report a problem. Split this in
+// two the day the two surfaces genuinely want different numbers.
+export const WRITE_RATE_LIMIT: RateLimitRule = {
   capacity: 30,
   refillPerSecond: 30 / (10 * 60),
 };

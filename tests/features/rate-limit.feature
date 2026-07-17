@@ -1,16 +1,18 @@
 Feature: Anonymous writes are rate-limited (R5)
 
-  # POST /comments accepts unauthenticated writes on every instance, gated or
-  # not, and persists a D1 row each. The content-length precheck bounds one
-  # row's size, not the number of rows, so a client that knows an artifact id
-  # can flood the table without bound. A per-IP, per-artifact token bucket
-  # (30 writes / 10 min) bounds the rate above that precheck.
+  # Two endpoints take anonymous writes and persist a D1 row each:
+  #   POST /comments  — open on EVERY instance, gated or not.
+  #   POST /feedback  — open on an instance with no CREATE_TOKEN.
+  # The content-length precheck bounds one row's size, not the number of rows,
+  # so a client that knows an artifact id can flood either table without bound.
+  # A per-IP, per-artifact token bucket (30 writes / 10 min) bounds the rate
+  # above that precheck.
   #
   # The bucket is keyed on CF-Connecting-IP, which Cloudflare's edge sets and
   # overwrites on every request, so a client cannot spoof its way into a fresh
   # bucket.
 
-  Scenario: An anonymous flood is throttled
+  Scenario: An anonymous comment flood is throttled
     Given a published artifact
     When the same client POSTs 30 comments within the window
     Then every one of them is accepted
@@ -53,6 +55,35 @@ Feature: Anonymous writes are rate-limited (R5)
     Given a client has exhausted its bucket on an artifact
     When that client GETs the comment thread
     Then the response status is 200
+
+  # /feedback is the other anonymous write surface. It queues work for the
+  # owning agent rather than a thread for viewers, but the exposure is the
+  # same shape: a row per request, bounded per row and not in number.
+
+  Scenario: An anonymous feedback flood is throttled
+    Given an open instance and a published artifact
+    When the same client POSTs 30 feedback items within the window
+    Then every one of them is accepted
+    When that client POSTs one more
+    Then the response status is 429
+    And the response carries a Retry-After header
+    And the feedback is not persisted in D1
+
+  Scenario: Feedback and comments do not share a budget
+    # Separate key namespaces on one artifact: a viewer who has been chatting
+    # in the thread must still be able to report a problem to the agent.
+    Given a client has exhausted its comment bucket on an artifact
+    When that client POSTs feedback to the same artifact
+    Then the response status is 201
+
+  Scenario: A gated instance refuses anonymous feedback before the bucket
+    # Unlike /comments, /feedback is not open on a gated instance: the write
+    # token is required. A rejected request writes no row, so it needs no
+    # bucket — auth already bounds it.
+    Given CREATE_TOKEN is set on the instance
+    When an anonymous client POSTs feedback
+    Then the response status is 401
+    And no token is spent
 
   Scenario: Concurrent writes cannot both take the last token
     Given a bucket with a single token left

@@ -224,13 +224,21 @@ CI/plain git are out of scope for v1 (documented).
 ## Limits
 
 - Content cap 4 MiB (post-base64 for encrypted) — fits free-tier envelope.
-- POST /comments — open on every instance — is rate-limited by a per-client,
-  per-artifact token bucket: 30 writes / 10 min, keyed on `CF-Connecting-IP`,
-  held in the `rate_limits` D1 table and spent in one atomic upsert. Rows are
-  pruned once fully refilled, so the table tracks recent write activity rather
-  than growing forever. Hand-rolled because the native `ratelimit` binding
-  caps its period at 10 or 60 seconds and is explicitly not an authoritative
-  accounting system. No other route is rate-limited; the optional
+- The two anonymous write surfaces — POST /comments (open on every instance)
+  and POST /feedback (open where no `CREATE_TOKEN` is set) — are rate-limited
+  by a per-client, per-artifact token bucket: 30 writes / 10 min, keyed on
+  `CF-Connecting-IP`, held in the `rate_limits` D1 table and spent in one
+  atomic upsert. One rule, two key namespaces, so the buckets are independent
+  and thread activity cannot cost a viewer their feedback budget. On /feedback
+  the bucket sits below the auth check: a gated instance already refuses
+  anonymous callers with a 401 and writes nothing. Rows are pruned once fully
+  refilled, so the table tracks recent write activity rather than growing
+  forever. Hand-rolled because the native `ratelimit` binding caps its period
+  at 10 or 60 seconds and is explicitly not an authoritative accounting
+  system. Known residual: the key is the full client address, so a client
+  holding an IPv6 /64 can rotate within it for fresh buckets — inherent to
+  per-IP limiting, and bounding the total (not just the rate) is the separate
+  second bound R5 leaves open. No other route is rate-limited; the optional
   `CREATE_TOKEN` bearer gate is the only guard on creation. (Cloudflare's
   edge-level protections sit in front of the Worker but are not configured by
   this project.)
