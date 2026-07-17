@@ -853,44 +853,6 @@ function commandList() {
 // back the plaintext — e.g. a locked design-direction comment at the top of
 // the page — when regenerating an update. No plaintext source copy is kept
 // on disk (the server is the source of truth); this is the on-demand read.
-// Poll a project-change (type 2) feedback queue for an artifact. GETs the
-// pending feedback records; the owning agent runs this to discover viewer
-// notes that may turn into source-project edits (and possibly a regen via
-// the existing `update` channel). The write token authorizes as the owner.
-async function commandFeedback(id, flags) {
-  const config = loadConfig(flags);
-  const credentials = loadCredentials();
-  const token = credentials.tokens[id];
-  const status = flags.status ?? "pending";
-  const url = `${config.apiUrl}/api/artifacts/${id}/feedback?status=${encodeURIComponent(status)}`;
-  const { status: resStatus, json } = await request(
-    "GET",
-    url,
-    undefined,
-    token,
-  );
-  if (resStatus === 401) {
-    fail(
-      `unauthorized: feedback polling requires the artifact's write token (${CREDENTIALS_PATH})`,
-    );
-  }
-  if (resStatus !== 200) {
-    fail(
-      `feedback poll failed (${resStatus}): ${json.error ?? "unknown error"}`,
-    );
-  }
-  const items = Array.isArray(json.feedback) ? json.feedback : [];
-  if (items.length === 0) {
-    console.error(`no ${status} feedback for ${id}`);
-    return;
-  }
-  for (const item of items) {
-    console.log(`${item.id}  [${item.status}]  ${item.url ?? ""}`);
-    if (item.projectRef) console.log(`  project: ${item.projectRef}`);
-    console.log(`  body: ${item.body}`);
-  }
-}
-
 async function commandShow(id, flags) {
   const config = loadConfig(flags);
   const credentials = loadCredentials();
@@ -940,6 +902,91 @@ async function commandShow(id, flags) {
   }
   const plaintext = await decryptContent(json, password);
   process.stdout.write(plaintext);
+}
+
+// Poll a project-change (type 2) feedback queue for an artifact. GETs the
+// pending feedback records; the owning agent runs this to discover viewer
+// notes that may turn into source-project edits (and possibly a regen via
+// the existing `update` channel). The write token authorizes as the owner.
+async function commandFeedback(id, flags) {
+  const config = loadConfig(flags);
+  const credentials = loadCredentials();
+  const token = credentials.tokens[id];
+  const status = flags.status ?? "pending";
+  const url = `${config.apiUrl}/api/artifacts/${id}/feedback?status=${encodeURIComponent(status)}`;
+  const { status: resStatus, json } = await request(
+    "GET",
+    url,
+    undefined,
+    token,
+  );
+  if (resStatus === 401) {
+    fail(
+      `unauthorized: feedback polling requires the artifact's write token (${CREDENTIALS_PATH})`,
+    );
+  }
+  if (resStatus !== 200) {
+    fail(
+      `feedback poll failed (${resStatus}): ${json.error ?? "unknown error"}`,
+    );
+  }
+  const items = Array.isArray(json.feedback) ? json.feedback : [];
+  if (items.length === 0) {
+    console.error(`no ${status} feedback for ${id}`);
+    return;
+  }
+  for (const item of items) {
+    console.log(`${item.id}  [${item.status}]  ${item.createdAt}`);
+    if (item.projectRef) console.log(`  project: ${item.projectRef}`);
+    console.log(`  body: ${item.body}`);
+  }
+}
+
+// Advance one feedback record's status (pending -> in_review -> in_progress ->
+// done). The agent calls this as it works a note: in_progress when it starts
+// editing the project, done when the change has landed (or when it decides not
+// to act). Owner-only; the transition is not order-enforced server-side.
+async function commandFeedbackAck(id, fid, flags) {
+  const config = loadConfig(flags);
+  const credentials = loadCredentials();
+  const token = credentials.tokens[id];
+  const status = flags.status;
+  if (!status) {
+    fail("feedback-ack requires --status <in_review|in_progress|done>");
+  }
+  const { status: resStatus, json } = await request(
+    "POST",
+    `${config.apiUrl}/api/artifacts/${id}/feedback/${fid}/ack`,
+    { status },
+    token,
+  );
+  if (resStatus !== 200) {
+    fail(
+      `feedback ack failed (${resStatus}): ${json.error ?? "unknown error"}`,
+    );
+  }
+  console.error(`${fid} -> ${json.status}`);
+}
+
+// Purge a feedback record outright. Submission is unauthenticated on an open
+// instance, so this is the owner's only way to drop spam — marking it "done"
+// merely hides it from the pending poll while the row stays in the database.
+async function commandFeedbackRm(id, fid, flags) {
+  const config = loadConfig(flags);
+  const credentials = loadCredentials();
+  const token = credentials.tokens[id];
+  const { status: resStatus, json } = await request(
+    "DELETE",
+    `${config.apiUrl}/api/artifacts/${id}/feedback/${fid}`,
+    undefined,
+    token,
+  );
+  if (resStatus !== 200) {
+    fail(
+      `feedback delete failed (${resStatus}): ${json.error ?? "unknown error"}`,
+    );
+  }
+  console.error(`deleted ${fid}`);
 }
 
 // Is the staleness Stop hook already present in this project's settings?
@@ -1306,6 +1353,10 @@ commands:
                        for encrypted artifacts using the stored password)
   feedback <id>        poll pending project-change (type 2) feedback for an
                        artifact (owner-only; uses the stored write token)
+  feedback-ack <id> <fid>
+                       advance one feedback record's status (--status)
+  feedback-rm <id> <fid>
+                       delete one feedback record outright (spam)
   delete <id>          delete an artifact from the server and manifest
   install-hook         add a Claude Code Stop hook that runs status --hook
 
@@ -1317,8 +1368,9 @@ options:
   --api <url>          instance URL (default: OPEN_ARTIFACTS_URL or config)
   --force              overwrite on version conflict
   --v <n>              (show) view a specific version's content
-  --status <s>        (feedback) poll a status other than pending
-                     (in_review|in_progress|done)
+  --status <s>         (feedback) poll a status other than pending;
+                       (feedback-ack) the status to advance to
+                       (in_review|in_progress|done)
   --hook               (status) emit Claude Code hook JSON instead of text
 `;
 
@@ -1393,6 +1445,18 @@ async function main() {
     case "feedback":
       if (!rest[0]) fail("feedback requires an artifact id");
       await commandFeedback(rest[0], flags);
+      break;
+    case "feedback-ack":
+      if (!rest[0] || !rest[1]) {
+        fail("feedback-ack requires an artifact id and a feedback id");
+      }
+      await commandFeedbackAck(rest[0], rest[1], flags);
+      break;
+    case "feedback-rm":
+      if (!rest[0] || !rest[1]) {
+        fail("feedback-rm requires an artifact id and a feedback id");
+      }
+      await commandFeedbackRm(rest[0], rest[1], flags);
       break;
     case "install-hook":
       commandInstallHook();
