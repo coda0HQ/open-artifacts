@@ -224,8 +224,12 @@ img,video,canvas{max-width:100%}
 @media (hover:hover) and (pointer:fine){.oa-header #oa-theme-toggle:hover,.oa-header #oa-feedback-toggle:hover{opacity:1;border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 25%)}.oa-brand:hover{color:var(--oa-fg);background:var(--oa-surface)}}
 @media (max-width:30rem){.oa-brand .oa-brand-text{display:none}}
 .oa-version{display:inline-flex;align-items:center;flex-shrink:0;min-width:0}
-@media (max-width:30rem){.oa-version .oa-version-select{max-width:5rem;padding-right:1.4rem}}
 .oa-version .oa-version-select{min-height:28px;padding:.2rem 1.6rem .2rem .5rem;border:1px solid var(--oa-border);border-radius:6px;background:var(--oa-surface);color:var(--oa-fg);font-size:.75rem;font-family:inherit;line-height:1.4;cursor:pointer;transition:border-color .15s,background .15s;-webkit-appearance:none;appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--oa-muted) 50%),linear-gradient(135deg,var(--oa-muted) 50%,transparent 50%);background-position:calc(100% - .7rem) 55%,calc(100% - .4rem) 55%;background-size:.3rem .3rem;background-repeat:no-repeat}
+/* After the base rule, not before: same selector, same specificity, and a
+   media query does not raise it, so source order alone decides. Emitted
+   first, the base rule's padding shorthand resets padding-right and silently
+   drops the narrow-screen value. */
+@media (max-width:30rem){.oa-version .oa-version-select{max-width:5rem;padding-right:1.4rem}}
 .oa-version .oa-version-select:focus-visible{outline:none;border-color:var(--oa-accent);box-shadow:var(--oa-focus-ring)}
 .oa-version .oa-version-select:active{transform:translateY(1px)}
 @media (hover:hover) and (pointer:fine){.oa-version .oa-version-select:hover{border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 25%)}}

@@ -771,6 +771,18 @@ describe("GET /a/:id version picker", () => {
     // The narrow-screen clamp is what keeps a long label from widening the
     // control once it is only a tooltip.
     expect(html).toContain("max-width:5rem");
+
+    // ...and it must come AFTER the base rule. Both use the same selector, so
+    // they have equal specificity and a media query does not raise it — source
+    // order alone decides. Emitted first, the base rule's `padding` shorthand
+    // silently resets the narrow-screen padding-right. Asserting only that the
+    // media query exists cannot catch that, so pin the order.
+    const baseRule = html.indexOf(".oa-version .oa-version-select{min-height");
+    const narrowRule = html.indexOf(
+      "@media (max-width:30rem){.oa-version .oa-version-select",
+    );
+    expect(baseRule).toBeGreaterThan(-1);
+    expect(narrowRule).toBeGreaterThan(baseRule);
   });
 
   it("selecting an older version via ?v= serves that snapshot and keeps the picker", async () => {
