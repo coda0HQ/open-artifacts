@@ -10,6 +10,7 @@ const artifact = {
   favicon: "📦",
   label: null,
   encrypted: null,
+  projectRef: null,
 };
 
 describe("D1R2Store comments", () => {
