@@ -11,5 +11,9 @@ dist/
 .artifacts/fragments.local/
 
 .claude/
+# Local git worktrees. Not ignoring these lets `git add -A` stage each one as a
+# submodule (gitlink, mode 160000), which silently commits a pointer to a local
+# checkout that exists on no other machine.
+.worktrees/
 .vendor-tmp/
 skills/using-open-artifacts-workspace/
