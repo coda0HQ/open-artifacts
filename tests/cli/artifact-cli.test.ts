@@ -2089,3 +2089,164 @@ const authored = 1;
     },
   );
 });
+
+describe("feedback poll", () => {
+  it("GETs the pending feedback queue for an artifact with the write token", async () => {
+    seedLegacyManifest();
+    nextResponse = {
+      status: 200,
+      body: {
+        artifactId: "testid123456",
+        feedback: [
+          {
+            id: "fb0000000001",
+            artifactId: "testid123456",
+            projectRef: "src/dashboard",
+            body: "Add a dark chart variant",
+            status: "pending",
+            createdAt: "2026-07-15T00:00:00.000Z",
+          },
+        ],
+      },
+    };
+    // The mock mirrors FeedbackRecord exactly — id, artifactId, projectRef,
+    // body, status, createdAt. The API returns no `url`, so nothing here may
+    // print one.
+
+    const result = await run(["feedback", "testid123456"]);
+
+    expect(requests).toHaveLength(1);
+    expect(requests[0].method).toBe("GET");
+    expect(requests[0].path).toBe(
+      "/api/artifacts/testid123456/feedback?status=pending",
+    );
+    expect(requests[0].auth).toBe(`Bearer wt_${"x".repeat(43)}`);
+    expect(result.stdout).toContain("fb0000000001");
+    expect(result.stdout).toContain("Add a dark chart variant");
+    expect(result.stdout).toContain("src/dashboard");
+    // createdAt is the poll's ordering key and the only time context the agent
+    // gets; it must be shown rather than an undefined field.
+    expect(result.stdout).toContain("2026-07-15T00:00:00.000Z");
+    expect(result.stdout).not.toContain("undefined");
+  });
+
+  it("reports an empty queue quietly", async () => {
+    seedLegacyManifest();
+    nextResponse = {
+      status: 200,
+      body: { artifactId: "testid123456", feedback: [] },
+    };
+    const result = await run(["feedback", "testid123456"]);
+    expect(result.stderr).toContain("no pending feedback");
+  });
+
+  it("warns that more feedback is waiting when a page is truncated", async () => {
+    seedLegacyManifest();
+    nextResponse = {
+      status: 200,
+      body: {
+        artifactId: "testid123456",
+        truncated: true,
+        feedback: [
+          {
+            id: "fb0000000001",
+            artifactId: "testid123456",
+            projectRef: null,
+            body: "one of many",
+            status: "pending",
+            createdAt: "2026-07-15T00:00:00.000Z",
+          },
+        ],
+      },
+    };
+    const result = await run(["feedback", "testid123456"]);
+    // A capped page must not read as a drained queue.
+    expect(result.stderr).toContain("more pending feedback is waiting");
+  });
+
+  it("does not warn when the queue fits in one page", async () => {
+    seedLegacyManifest();
+    nextResponse = {
+      status: 200,
+      body: {
+        artifactId: "testid123456",
+        truncated: false,
+        feedback: [
+          {
+            id: "fb0000000001",
+            artifactId: "testid123456",
+            projectRef: null,
+            body: "the only one",
+            status: "pending",
+            createdAt: "2026-07-15T00:00:00.000Z",
+          },
+        ],
+      },
+    };
+    const result = await run(["feedback", "testid123456"]);
+    expect(result.stderr).not.toContain("waiting");
+  });
+
+  it("advances a feedback record's status with feedback-ack", async () => {
+    seedLegacyManifest();
+    nextResponse = {
+      status: 200,
+      body: { id: "fb0000000001", status: "in_progress" },
+    };
+
+    const result = await run([
+      "feedback-ack",
+      "testid123456",
+      "fb0000000001",
+      "--status",
+      "in_progress",
+    ]);
+
+    expect(requests).toHaveLength(1);
+    expect(requests[0].method).toBe("POST");
+    expect(requests[0].path).toBe(
+      "/api/artifacts/testid123456/feedback/fb0000000001/ack",
+    );
+    expect(requests[0].body).toEqual({ status: "in_progress" });
+    expect(requests[0].auth).toBe(`Bearer wt_${"x".repeat(43)}`);
+    expect(result.stderr).toContain("in_progress");
+  });
+
+  it("refuses feedback-ack without a --status", async () => {
+    seedLegacyManifest();
+    const result = await run(["feedback-ack", "testid123456", "fb0000000001"], {
+      expectFailure: true,
+    });
+    // Nothing may reach the network without a target status.
+    expect(requests).toHaveLength(0);
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toContain("--status");
+  });
+
+  it("deletes a feedback record with feedback-rm", async () => {
+    seedLegacyManifest();
+    nextResponse = { status: 200, body: { ok: true } };
+
+    const result = await run(["feedback-rm", "testid123456", "fb0000000001"]);
+
+    expect(requests).toHaveLength(1);
+    expect(requests[0].method).toBe("DELETE");
+    expect(requests[0].path).toBe(
+      "/api/artifacts/testid123456/feedback/fb0000000001",
+    );
+    expect(requests[0].auth).toBe(`Bearer wt_${"x".repeat(43)}`);
+    expect(result.stderr).toContain("deleted fb0000000001");
+  });
+
+  it("surfaces a failed feedback-rm rather than reporting success", async () => {
+    seedLegacyManifest();
+    nextResponse = { status: 404, body: { error: "feedback not found" } };
+    const result = await run(["feedback-rm", "testid123456", "fb0000000001"], {
+      expectFailure: true,
+    });
+    // A failed delete must exit non-zero, not print a false "deleted".
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toContain("feedback not found");
+    expect(result.stderr).not.toContain("deleted fb0000000001");
+  });
+});

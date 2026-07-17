@@ -6,6 +6,9 @@ import type {
   CommentMeta,
   CreateInput,
   EncryptionParams,
+  FeedbackInput,
+  FeedbackRecord,
+  FeedbackStatus,
   UpdateInput,
   VersionMeta,
 } from "./domain";
@@ -57,7 +60,25 @@ export interface ArtifactStore {
   ): Promise<{ artifactId: string; deleteTokenHash: string | null } | null>;
   setCommentDone(commentId: string, done: boolean): Promise<boolean>;
   deleteComment(commentId: string): Promise<void>;
+  addFeedback(
+    artifactId: string,
+    input: FeedbackInput,
+  ): Promise<FeedbackRecord>;
+  listFeedback(
+    artifactId: string,
+    status?: FeedbackStatus,
+  ): Promise<FeedbackRecord[]>;
+  getFeedback(id: string): Promise<FeedbackRecord | null>;
+  updateFeedbackStatus(
+    id: string,
+    status: FeedbackStatus,
+  ): Promise<FeedbackRecord | null>;
+  deleteFeedback(id: string): Promise<void>;
 }
+
+// Max feedback rows one poll returns. Exported so the CLI can tell the agent
+// when a page is full and more may be waiting behind it.
+export const FEEDBACK_PAGE_LIMIT = 100;
 
 const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS artifacts (
@@ -70,6 +91,7 @@ const SCHEMA = [
     format TEXT NOT NULL,
     encrypted INTEGER NOT NULL DEFAULT 0,
     current_version INTEGER NOT NULL,
+    project_ref TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   )`,
@@ -95,6 +117,15 @@ const SCHEMA = [
   )`,
   `CREATE INDEX IF NOT EXISTS idx_comments_artifact_created
     ON comments(artifact_id, created_at)`,
+  `CREATE TABLE IF NOT EXISTS feedback (
+    id TEXT PRIMARY KEY,
+    artifact_id TEXT NOT NULL,
+    project_ref TEXT,
+    body TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    created_at TEXT NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_feedback_artifact_status ON feedback(artifact_id, status)`,
 ];
 
 // Columns added after launch; migrate existing DBs in place. Each ALTER
@@ -104,6 +135,7 @@ const SCHEMA = [
 // number of NULLs, so channel-less artifacts are unaffected).
 const MIGRATIONS = [
   `ALTER TABLE artifacts ADD COLUMN channel_hash TEXT`,
+  `ALTER TABLE artifacts ADD COLUMN project_ref TEXT`,
   `ALTER TABLE versions ADD COLUMN title TEXT NOT NULL DEFAULT ''`,
   `ALTER TABLE versions ADD COLUMN description TEXT NOT NULL DEFAULT ''`,
   `ALTER TABLE versions ADD COLUMN favicon TEXT NOT NULL DEFAULT ''`,
@@ -190,8 +222,29 @@ interface ArtifactRow {
   format: string;
   encrypted: number;
   current_version: number;
+  project_ref: string | null;
   created_at: string;
   updated_at: string;
+}
+
+interface FeedbackRow {
+  id: string;
+  artifact_id: string;
+  project_ref: string | null;
+  body: string;
+  status: string;
+  created_at: string;
+}
+
+function toFeedbackRecord(row: FeedbackRow): FeedbackRecord {
+  return {
+    id: row.id,
+    artifactId: row.artifact_id,
+    projectRef: row.project_ref,
+    body: row.body,
+    status: row.status as FeedbackStatus,
+    createdAt: row.created_at,
+  };
 }
 
 function toRecord(row: ArtifactRow): ArtifactRecord {
@@ -205,6 +258,7 @@ function toRecord(row: ArtifactRow): ArtifactRecord {
     format: row.format as ArtifactFormat,
     encrypted: row.encrypted === 1,
     currentVersion: row.current_version,
+    projectRef: row.project_ref,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -261,8 +315,8 @@ export class D1R2Store implements ArtifactStore {
     const insert = this.db.batch([
       this.db
         .prepare(
-          `INSERT INTO artifacts (id, token_hash, channel_hash, title, description, favicon, format, encrypted, current_version, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+          `INSERT INTO artifacts (id, token_hash, channel_hash, title, description, favicon, format, encrypted, current_version, project_ref, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
         )
         .bind(
           id,
@@ -273,6 +327,7 @@ export class D1R2Store implements ArtifactStore {
           input.favicon,
           input.format,
           input.encrypted ? 1 : 0,
+          input.projectRef,
           now,
           now,
         ),
@@ -310,6 +365,7 @@ export class D1R2Store implements ArtifactStore {
       format: input.format,
       encrypted: input.encrypted !== null,
       currentVersion: 1,
+      projectRef: input.projectRef,
       createdAt: now,
       updatedAt: now,
     };
@@ -419,7 +475,7 @@ export class D1R2Store implements ArtifactStore {
     const claimed = await this.db
       .prepare(
         `UPDATE artifacts
-         SET title = ?, description = ?, favicon = ?, format = ?, encrypted = ?, current_version = ?, updated_at = ?
+         SET title = ?, description = ?, favicon = ?, format = ?, encrypted = ?, current_version = ?, project_ref = ?, updated_at = ?
          WHERE id = ? AND current_version = ?`,
       )
       .bind(
@@ -429,6 +485,7 @@ export class D1R2Store implements ArtifactStore {
         input.format ?? record.format,
         input.encrypted ? 1 : 0,
         version,
+        input.projectRef ?? record.projectRef,
         now,
         record.id,
         record.currentVersion,
@@ -491,6 +548,7 @@ export class D1R2Store implements ArtifactStore {
       this.db.prepare("DELETE FROM versions WHERE artifact_id = ?").bind(id),
       this.db.prepare("DELETE FROM artifacts WHERE id = ?").bind(id),
       this.db.prepare("DELETE FROM comments WHERE artifact_id = ?").bind(id),
+      this.db.prepare("DELETE FROM feedback WHERE artifact_id = ?").bind(id),
     ]);
   }
 
@@ -578,6 +636,90 @@ export class D1R2Store implements ArtifactStore {
       .prepare("DELETE FROM comments WHERE id = ?")
       .bind(commentId)
       .run();
+  }
+
+  async addFeedback(
+    artifactId: string,
+    input: FeedbackInput,
+  ): Promise<FeedbackRecord> {
+    await ensureSchema(this.db);
+    const id = generateId();
+    const now = new Date().toISOString();
+    await this.db
+      .prepare(
+        `INSERT INTO feedback (id, artifact_id, project_ref, body, status, created_at)
+         VALUES (?, ?, ?, ?, 'pending', ?)`,
+      )
+      .bind(id, artifactId, input.projectRef, input.body, now)
+      .run();
+    return {
+      id,
+      artifactId,
+      projectRef: input.projectRef,
+      body: input.body,
+      status: "pending",
+      createdAt: now,
+    };
+  }
+
+  // Bound the poll response, mirroring listComments' cap. Submission is
+  // unauthenticated on an open instance, so an artifact's queue can be flooded
+  // with 12 KiB rows; without a cap the owner's poll would try to load all of
+  // them into one JSON response and fall over exactly when the owner needs it
+  // to find the spam ids to purge.
+  //
+  // Unlike comments this keeps the OLDEST window (ASC LIMIT), which is safe
+  // here for the reason it is not there: a feedback row leaves the status
+  // filter once it is acked or purged, so draining the queue advances the
+  // window. Comments are never removed from their list, so an ASC LIMIT would
+  // freeze on the first 100 forever.
+  async listFeedback(
+    artifactId: string,
+    status?: FeedbackStatus,
+  ): Promise<FeedbackRecord[]> {
+    await ensureSchema(this.db);
+    const stmt =
+      status === undefined
+        ? this.db.prepare(
+            `SELECT * FROM feedback WHERE artifact_id = ?
+             ORDER BY created_at ASC, id ASC LIMIT ${FEEDBACK_PAGE_LIMIT}`,
+          )
+        : this.db.prepare(
+            `SELECT * FROM feedback WHERE artifact_id = ? AND status = ?
+             ORDER BY created_at ASC, id ASC LIMIT ${FEEDBACK_PAGE_LIMIT}`,
+          );
+    const bound =
+      status === undefined
+        ? stmt.bind(artifactId)
+        : stmt.bind(artifactId, status);
+    const { results } = await bound.all<FeedbackRow>();
+    return results.map(toFeedbackRecord);
+  }
+
+  async getFeedback(id: string): Promise<FeedbackRecord | null> {
+    await ensureSchema(this.db);
+    const row = await this.db
+      .prepare("SELECT * FROM feedback WHERE id = ?")
+      .bind(id)
+      .first<FeedbackRow>();
+    return row ? toFeedbackRecord(row) : null;
+  }
+
+  async updateFeedbackStatus(
+    id: string,
+    status: FeedbackStatus,
+  ): Promise<FeedbackRecord | null> {
+    await ensureSchema(this.db);
+    await this.db
+      .prepare("UPDATE feedback SET status = ? WHERE id = ?")
+      .bind(status, id)
+      .run();
+    return this.getFeedback(id);
+  }
+
+  async deleteFeedback(id: string): Promise<void> {
+    await ensureSchema(this.db);
+    await this.db.prepare("DELETE FROM feedback WHERE id = ?").bind(id).run();
   }
 }
 

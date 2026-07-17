@@ -1,15 +1,18 @@
 import type { Context } from "hono";
 import { Hono } from "hono";
-import type { CreateInput } from "./domain";
+import type { CreateInput, FeedbackStatus } from "./domain";
 import {
   MAX_COMMENT_BODY_BYTES,
   MAX_CONTENT_BYTES,
+  MAX_FEEDBACK_BODY_BYTES,
   validateComment,
   validateCreate,
+  validateFeedback,
+  validateFeedbackStatus,
   validateUpdate,
 } from "./domain";
 import type { ArtifactRecord, ArtifactStore } from "./store";
-import { D1R2Store } from "./store";
+import { D1R2Store, FEEDBACK_PAGE_LIMIT } from "./store";
 import {
   generateId,
   generateWriteToken,
@@ -36,6 +39,15 @@ const MAX_BODY_BYTES = MAX_CONTENT_BYTES * 1.5 + 16 * 1024;
 
 export const storeFrom = (c: Context<AppContext>): ArtifactStore =>
   new D1R2Store(c.env.DB, c.env.CONTENT);
+
+// An instance is "open" when no CREATE_TOKEN is configured (empty counts as
+// absent, matching the PUBLIC_URL convention). Open instances accept
+// unauthenticated artifact creation and unauthenticated project-change
+// feedback; gated ones accept neither. The viewer consults this to decide
+// whether to render the feedback control at all, so the chrome and the route
+// agree on one definition instead of drifting apart.
+export const isOpenInstance = (c: Context<AppContext>): boolean =>
+  c.env.CREATE_TOKEN === undefined || c.env.CREATE_TOKEN === "";
 
 // Canonical origin for every generated link. A non-empty PUBLIC_URL pins
 // links to the SaaS domain no matter which host the request arrived on (so
@@ -138,6 +150,7 @@ async function publishToChannel(
       encrypted: input.encrypted,
       baseVersion: null,
       force: false,
+      projectRef: input.projectRef,
     });
     if (typeof result === "number") {
       return c.json({
@@ -367,6 +380,11 @@ api.get("/artifacts/:id/raw", async (c) => {
 // read; validateComment stays the authoritative per-field gate.
 const COMMENT_BODY_BYTES = MAX_COMMENT_BODY_BYTES + 4 * 1024;
 
+// Same idiom for feedback: headroom over the body cap for the projectRef
+// (≤500 chars) and JSON braces/escaping. validateFeedback stays the
+// authoritative per-field gate; this only stops a payload from being buffered.
+const FEEDBACK_BODY_BYTES = MAX_FEEDBACK_BODY_BYTES + 4 * 1024;
+
 api.get("/artifacts/:id/comments", async (c) => {
   const store = storeFrom(c);
   const record = await store.get(c.req.param("id"));
@@ -521,5 +539,149 @@ api.delete("/artifacts/:id/comments/:commentId", async (c) => {
   if (!auth.ok) return c.json({ error: auth.error }, auth.status);
 
   await store.deleteComment(commentId);
+  return c.json({ ok: true });
+});
+
+// Project-change (type 2) feedback channel. A viewer submits a note about the
+// source project behind an artifact; it is stored as an independent record,
+// NOT a new artifact version. The owning agent polls pending feedback via the
+// skill CLI, edits the project, then either regenerates (reusing the existing
+// channel/update path) or closes the feedback as "done".
+//
+// Auth tradeoff: feedback submission is intentionally permissive. A write
+// token (wt_) presented via Bearer is honored (so a creator's host chrome
+// authenticates); when NO token is presented, the route falls back to the
+// CREATE_TOKEN gate — anonymous submission is allowed only on an open
+// instance (no CREATE_TOKEN). A gated instance therefore requires the
+// artifact's own write token: the create token authorizes *creating* an
+// artifact, not writing to an existing one, so it is not accepted here and
+// no other token can stand in for the wt_. This prevents unauthenticated
+// abuse on locked deployments while keeping the channel usable by viewers,
+// who never hold a write token, on self-hosted open instances. Because a
+// viewer's browser holds no token, the host chrome only renders the feedback
+// control on an open instance (see feedbackEnabled in index.ts) rather than
+// shipping a button that always 401s.
+api.post("/artifacts/:id/feedback", async (c) => {
+  const store = storeFrom(c);
+  const id = c.req.param("id");
+  const record = await store.get(id);
+  if (record === null) return c.json({ error: "artifact not found" }, 404);
+
+  const token = bearerToken(c);
+  if (token !== null) {
+    // A presented token must authorize against this artifact; the create token
+    // is NOT a write token (it cannot mutate an artifact), so reject it here.
+    if (looksLikeChannelToken(token)) {
+      return c.json({ error: "invalid write token" }, 403);
+    }
+    const tokenHash = await sha256Hex(token);
+    if (!timingSafeEqual(tokenHash, record.tokenHash)) {
+      return c.json({ error: "invalid write token" }, 403);
+    }
+  } else if (!isOpenInstance(c)) {
+    return c.json({ error: "this instance requires authentication" }, 401);
+  }
+
+  // Reject oversized bodies before parsing — mirrors the comment endpoint's
+  // pre-parse content-length guard so an attacker can't force the Worker to
+  // buffer/parse an arbitrarily large payload before validateFeedback rejects
+  // it. Sized to the feedback body cap, NOT the artifact content cap: a
+  // 4 MiB-scale guard on an 8 KiB field would let ~6 MiB through before the
+  // domain layer looked at it.
+  const declaredLength = Number(c.req.header("content-length") ?? "0");
+  if (declaredLength > FEEDBACK_BODY_BYTES) {
+    return c.json({ error: "request body too large" }, 413);
+  }
+
+  let body: Record<string, unknown>;
+  try {
+    body = await c.req.json<Record<string, unknown>>();
+  } catch {
+    return c.json({ error: "request body must be JSON" }, 400);
+  }
+
+  const parsed = validateFeedback(body);
+  if (!parsed.ok) return c.json({ error: parsed.error }, parsed.status);
+
+  const feedback = await store.addFeedback(id, parsed.value);
+  return c.json(
+    {
+      id: feedback.id,
+      artifactId: feedback.artifactId,
+      status: feedback.status,
+    },
+    201,
+  );
+});
+
+// Owner-only pending-list poll. Returns feedback records for an artifact,
+// optionally filtered by status; defaults to pending (the agent's poll loop).
+api.get("/artifacts/:id/feedback", async (c) => {
+  const store = storeFrom(c);
+  const auth = await authorizeWrite(c, store, c.req.param("id"));
+  if (!auth.ok) return auth.response;
+
+  const statusParam = c.req.query("status");
+  let status: FeedbackStatus = "pending";
+  if (statusParam !== undefined) {
+    const parsed = validateFeedbackStatus(statusParam);
+    if (!parsed.ok) return c.json({ error: parsed.error }, parsed.status);
+    status = parsed.value;
+  }
+  const items = await store.listFeedback(auth.record.id, status);
+  // A full page means rows may be waiting behind it. Say so rather than let a
+  // capped response read as a drained queue — the agent decides whether to
+  // work/purge this page and poll again.
+  return c.json({
+    artifactId: auth.record.id,
+    feedback: items,
+    truncated: items.length === FEEDBACK_PAGE_LIMIT,
+  });
+});
+
+// Advance a feedback record's status through pending -> in_review ->
+// in_progress -> done. Owner-only. The transition itself is not enforced
+// in-order (the agent may jump straight to done); keep simple.
+api.post("/artifacts/:id/feedback/:fid/ack", async (c) => {
+  const store = storeFrom(c);
+  const auth = await authorizeWrite(c, store, c.req.param("id"));
+  if (!auth.ok) return auth.response;
+
+  const fid = c.req.param("fid");
+  const existing = await store.getFeedback(fid);
+  if (existing === null || existing.artifactId !== auth.record.id) {
+    return c.json({ error: "feedback not found" }, 404);
+  }
+
+  let body: Record<string, unknown>;
+  try {
+    body = await c.req.json<Record<string, unknown>>();
+  } catch {
+    return c.json({ error: "request body must be JSON" }, 400);
+  }
+  const parsed = validateFeedbackStatus(body.status);
+  if (!parsed.ok) return c.json({ error: parsed.error }, parsed.status);
+
+  const updated = await store.updateFeedbackStatus(fid, parsed.value);
+  if (updated === null) return c.json({ error: "feedback not found" }, 404);
+  return c.json({ id: fid, status: updated.status });
+});
+
+// Purge a feedback record. Owner-only. Submission is unauthenticated on an
+// open instance, so the owner needs a way to remove spam outright — marking it
+// "done" only hides it from the pending poll while the row (and its 8 KiB
+// body) stays in D1 forever.
+api.delete("/artifacts/:id/feedback/:fid", async (c) => {
+  const store = storeFrom(c);
+  const auth = await authorizeWrite(c, store, c.req.param("id"));
+  if (!auth.ok) return auth.response;
+
+  const fid = c.req.param("fid");
+  const existing = await store.getFeedback(fid);
+  if (existing === null || existing.artifactId !== auth.record.id) {
+    return c.json({ error: "feedback not found" }, 404);
+  }
+
+  await store.deleteFeedback(fid);
   return c.json({ ok: true });
 });
