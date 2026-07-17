@@ -557,11 +557,16 @@ export class D1R2Store implements ArtifactStore {
     // Cap at 100 to bound inlined HTML. Keep the *newest* window (DESC LIMIT),
     // then reverse so callers still see chronological oldest-first. ASC LIMIT
     // would freeze on the first 100 and hide every subsequent post.
+    //
+    // Tie-break on rowid, not id: created_at is only millisecond-precise, so a
+    // same-millisecond burst ties on it, and id is random — which would make
+    // both the order and which 100 survive the cap nondeterministic. rowid is
+    // monotonic with insertion. Same fix the feedback poll took (#22).
     const { results } = await this.db
       .prepare(
         `SELECT id, artifact_id, author, body, anchor, done, created_at
          FROM comments WHERE artifact_id = ?
-         ORDER BY created_at DESC, id DESC LIMIT 100`,
+         ORDER BY created_at DESC, rowid DESC LIMIT 100`,
       )
       .bind(artifactId)
       .all<CommentRow>();
