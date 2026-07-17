@@ -69,18 +69,42 @@ describe("web-font surface — opt-in flag is set in wrangler.jsonc", () => {
     await env.CONTENT.delete(key);
   });
 
-  it("stamps allow-same-origin, font CDN allowlist, and style-src Google Fonts on the CSP", async () => {
+  it("stamps the font CDN allowlist and style-src Google Fonts on the frame CSP, without allow-same-origin", async () => {
+    const created = await create({ content: "<h1>Fonts</h1>" });
+    // The artifact body — and its CSP — now live on the frame sub-route; the
+    // host page (/a/:id) never gets the webFonts-widened CSP at all.
+    const res = await exports.default.fetch(`${BASE}/a/${created.id}/frame`);
+    expect(res.status).toBe(200);
+    const csp = res.headers.get("content-security-policy") ?? "";
+    // R1: the artifact frame must never become same-origin with the
+    // privileged host page, even with webFonts on — allow-same-origin is
+    // deliberately withheld here (frameSandbox), unlike the general
+    // contentSecurityPolicy({sandbox:true, webFonts:true}) default.
+    expect(csp).not.toContain("allow-same-origin");
+    // Opaque frames: 'self' would not match the worker host, so the CSP
+    // stamps the real response origin for the same-origin /fonts proxy.
+    expect(csp).toMatch(
+      /font-src http:\/\/artifacts\.test data: cdn\.fontshare\.com fonts\.gstatic\.com/,
+    );
+    expect(csp).toMatch(
+      /style-src http:\/\/artifacts\.test 'unsafe-inline' fonts\.googleapis\.com/,
+    );
+    // 'self' alone must not be the only same-host source on an opaque frame.
+    expect(csp).not.toMatch(/font-src 'self'/);
+  });
+
+  it("never widens the host page CSP when the web-font flag is on", async () => {
     const created = await create({ content: "<h1>Fonts</h1>" });
     const res = await exports.default.fetch(`${BASE}/a/${created.id}`);
     expect(res.status).toBe(200);
     const csp = res.headers.get("content-security-policy") ?? "";
-    expect(csp).toContain("allow-same-origin");
-    expect(csp).toMatch(
-      /font-src 'self' data: cdn\.fontshare\.com fonts\.gstatic\.com/,
-    );
-    expect(csp).toMatch(
-      /style-src 'self' 'unsafe-inline' fonts\.googleapis\.com/,
-    );
+    // The host is not the artifact: it carries no sandbox directive at all, so
+    // the opt-in can never hand the artifact same-origin access to it.
+    expect(csp).not.toContain("sandbox");
+    expect(csp).not.toContain("allow-same-origin");
+    // The flag reaches only the frame — the host keeps its fixed font policy.
+    expect(csp).not.toContain("cdn.fontshare.com");
+    expect(csp).toContain("connect-src 'self'");
     // Opt-in script-src: nonce-only with 'self' (same-origin /vendor/...
     // runtime bundles), no external host, no 'unsafe-inline', no
     // 'strict-dynamic' (issue #11 — rework to self-hosted mermaid).

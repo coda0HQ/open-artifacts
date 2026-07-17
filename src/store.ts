@@ -1,12 +1,16 @@
 import type {
+  Anchor,
   ArtifactFormat,
   ArtifactMeta,
+  CommentInput,
+  CommentMeta,
   CreateInput,
   EncryptionParams,
   UpdateInput,
   VersionMeta,
 } from "./domain";
 import { contentByteLength } from "./domain";
+import { generateId } from "./tokens";
 
 export interface ArtifactRecord extends ArtifactMeta {
   tokenHash: string;
@@ -29,11 +33,30 @@ export interface ArtifactStore {
   findByChannel(channelHash: string): Promise<ArtifactRecord | null>;
   listVersions(id: string): Promise<VersionMeta[]>;
   getContent(id: string, version: number): Promise<StoredContent | null>;
+  // Authoritative per-version encrypted flag without reading the ≤4 MiB body.
+  // The versions-table flag can be stale on legacy mixed-encryption artifacts
+  // (the ensureSchema backfill stamps it from the artifact's current state),
+  // so the host route reads R2 object metadata instead.
+  getContentMeta(
+    id: string,
+    version: number,
+  ): Promise<{ encrypted: boolean } | null>;
   update(
     record: ArtifactRecord,
     input: UpdateInput,
   ): Promise<number | { conflict: true; currentVersion: number }>;
   delete(id: string): Promise<void>;
+  listComments(artifactId: string): Promise<CommentMeta[]>;
+  addComment(
+    artifactId: string,
+    input: CommentInput,
+    deleteTokenHash?: string | null,
+  ): Promise<CommentMeta>;
+  getComment(
+    commentId: string,
+  ): Promise<{ artifactId: string; deleteTokenHash: string | null } | null>;
+  setCommentDone(commentId: string, done: boolean): Promise<boolean>;
+  deleteComment(commentId: string): Promise<void>;
 }
 
 const SCHEMA = [
@@ -63,6 +86,15 @@ const SCHEMA = [
     created_at TEXT NOT NULL,
     PRIMARY KEY (artifact_id, version)
   )`,
+  `CREATE TABLE IF NOT EXISTS comments (
+    id TEXT PRIMARY KEY,
+    artifact_id TEXT NOT NULL,
+    author TEXT,
+    body TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_comments_artifact_created
+    ON comments(artifact_id, created_at)`,
 ];
 
 // Columns added after launch; migrate existing DBs in place. Each ALTER
@@ -78,6 +110,12 @@ const MIGRATIONS = [
   `ALTER TABLE versions ADD COLUMN format TEXT NOT NULL DEFAULT 'html'`,
   `ALTER TABLE versions ADD COLUMN encrypted INTEGER NOT NULL DEFAULT 0`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_artifacts_channel_hash ON artifacts(channel_hash)`,
+  // Anchored comments (#5): nullable JSON anchor + per-comment delete-token hash.
+  // Legacy rows read NULL for both — unanchored and owner-removable only.
+  `ALTER TABLE comments ADD COLUMN anchor TEXT`,
+  `ALTER TABLE comments ADD COLUMN delete_token_hash TEXT`,
+  // Soft "done" / resolved flag — open toggle for all viewers (not delete).
+  `ALTER TABLE comments ADD COLUMN done INTEGER NOT NULL DEFAULT 0`,
 ];
 
 // After the ALTERs above add columns to existing rows with empty defaults,
@@ -354,6 +392,18 @@ export class D1R2Store implements ArtifactStore {
     return { body, encrypted: null };
   }
 
+  async getContentMeta(
+    id: string,
+    version: number,
+  ): Promise<{ encrypted: boolean } | null> {
+    // head() returns the R2 object's metadata without streaming the body —
+    // the authoritative per-version encrypted flag, which the versions-table
+    // flag is not on legacy mixed-encryption artifacts.
+    const object = await this.bucket.head(contentKey(id, version));
+    if (object === null) return null;
+    return { encrypted: object.customMetadata?.encrypted === "1" };
+  }
+
   async update(
     record: ArtifactRecord,
     input: UpdateInput,
@@ -440,6 +490,115 @@ export class D1R2Store implements ArtifactStore {
     await this.db.batch([
       this.db.prepare("DELETE FROM versions WHERE artifact_id = ?").bind(id),
       this.db.prepare("DELETE FROM artifacts WHERE id = ?").bind(id),
+      this.db.prepare("DELETE FROM comments WHERE artifact_id = ?").bind(id),
     ]);
   }
+
+  async listComments(artifactId: string): Promise<CommentMeta[]> {
+    await ensureSchema(this.db);
+    // Cap at 100 to bound inlined HTML. Keep the *newest* window (DESC LIMIT),
+    // then reverse so callers still see chronological oldest-first. ASC LIMIT
+    // would freeze on the first 100 and hide every subsequent post.
+    const { results } = await this.db
+      .prepare(
+        `SELECT id, artifact_id, author, body, anchor, done, created_at
+         FROM comments WHERE artifact_id = ?
+         ORDER BY created_at DESC, id DESC LIMIT 100`,
+      )
+      .bind(artifactId)
+      .all<CommentRow>();
+    return results.map(toComment).reverse();
+  }
+
+  async addComment(
+    artifactId: string,
+    input: CommentInput,
+    deleteTokenHash: string | null = null,
+  ): Promise<CommentMeta> {
+    await ensureSchema(this.db);
+    const id = generateId();
+    const now = new Date().toISOString();
+    const anchorJson = input.anchor ? JSON.stringify(input.anchor) : null;
+    await this.db
+      .prepare(
+        `INSERT INTO comments (id, artifact_id, author, body, anchor, delete_token_hash, done, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, 0, ?)`,
+      )
+      .bind(
+        id,
+        artifactId,
+        input.author,
+        input.body,
+        anchorJson,
+        deleteTokenHash,
+        now,
+      )
+      .run();
+    return {
+      id,
+      artifactId,
+      author: input.author,
+      body: input.body,
+      anchor: input.anchor,
+      done: false,
+      createdAt: now,
+    };
+  }
+
+  // Delete authorization needs only the owning artifact and the stored token
+  // hash; the hash never leaves the server and is never part of CommentMeta.
+  async getComment(
+    commentId: string,
+  ): Promise<{ artifactId: string; deleteTokenHash: string | null } | null> {
+    await ensureSchema(this.db);
+    const row = await this.db
+      .prepare(
+        "SELECT artifact_id, delete_token_hash FROM comments WHERE id = ?",
+      )
+      .bind(commentId)
+      .first<{ artifact_id: string; delete_token_hash: string | null }>();
+    return row
+      ? { artifactId: row.artifact_id, deleteTokenHash: row.delete_token_hash }
+      : null;
+  }
+
+  /** Returns false if the comment row does not exist. */
+  async setCommentDone(commentId: string, done: boolean): Promise<boolean> {
+    await ensureSchema(this.db);
+    const result = await this.db
+      .prepare("UPDATE comments SET done = ? WHERE id = ?")
+      .bind(done ? 1 : 0, commentId)
+      .run();
+    return (result.meta.changes ?? 0) > 0;
+  }
+
+  async deleteComment(commentId: string): Promise<void> {
+    await ensureSchema(this.db);
+    await this.db
+      .prepare("DELETE FROM comments WHERE id = ?")
+      .bind(commentId)
+      .run();
+  }
+}
+
+interface CommentRow {
+  id: string;
+  artifact_id: string;
+  author: string | null;
+  body: string;
+  anchor: string | null;
+  done: number | null;
+  created_at: string;
+}
+
+function toComment(row: CommentRow): CommentMeta {
+  return {
+    id: row.id,
+    artifactId: row.artifact_id,
+    author: row.author,
+    body: row.body,
+    anchor: row.anchor ? (JSON.parse(row.anchor) as Anchor) : null,
+    done: row.done === 1,
+    createdAt: row.created_at,
+  };
 }

@@ -62,8 +62,44 @@ async function encrypt(
   };
 }
 
-describe("GET /a/:id (plain HTML)", () => {
-  it("wraps content in a complete skeleton with title, favicon, and reset", async () => {
+describe("GET /a/:id (plain HTML) — host page", () => {
+  it("serves the host shell without the artifact body — the frame reads it", async () => {
+    const created = await create({ content: "<h1>Big payload</h1>" });
+    // The host never renders the artifact body; /a/:id/frame reads it itself.
+    // Reading it here too would pull the ≤4 MiB body into worker memory only to
+    // throw it away — doubling the storage read on every plain-artifact view.
+    // A call-count assertion is not testable in the cloudflare-workers pool: the
+    // fetch runs in a separate realm, so spies on the store prototype OR on
+    // env.CONTENT cannot observe calls made inside it. Assert the behaviour the
+    // optimization enables instead: the host page does not contain the artifact
+    // body payload, while the frame does.
+    const res = await exports.default.fetch(`${BASE}/a/${created.id}`);
+    expect(res.status).toBe(200);
+    const hostHtml = await res.text();
+    expect(hostHtml).not.toContain("<h1>Big payload</h1>");
+    const frameHtml = await (
+      await exports.default.fetch(`${BASE}/a/${created.id}/frame`)
+    ).text();
+    expect(frameHtml).toContain("<h1>Big payload</h1>");
+  });
+
+  it("renders the version picker from the single list resolveRecord fetched", async () => {
+    const created = await create({ content: "<h1>Picker</h1>" });
+    // resolveRecord fetches listVersions once and returns it; the handler
+    // reuses that array for the picker rather than re-querying. A positive
+    // call-count assertion is not testable here — the cloudflare-workers pool
+    // runs the fetch in a separate realm, so a prototype spy on the store
+    // cannot observe calls made inside it. This asserts the behaviour the
+    // reuse enables (the picker still renders from the fetched list); a
+    // regression to a second fetch would pass this, so the redundancy is
+    // caught by review, not by this test.
+    const res = await exports.default.fetch(`${BASE}/a/${created.id}`);
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toMatch(/<select[^>]*data-version-picker|oa-version|version/i);
+  });
+
+  it("wraps the chrome in a complete skeleton with title, favicon, and reset, embedding the artifact frame", async () => {
     const created = await create({ content: "<h1>Wrapped</h1>" });
     const res = await exports.default.fetch(`${BASE}/a/${created.id}`);
     expect(res.status).toBe(200);
@@ -76,7 +112,61 @@ describe("GET /a/:id (plain HTML)", () => {
     expect(html).toContain('rel="icon"');
     expect(html).toContain("data:image/svg+xml");
     expect(html).toContain("box-sizing");
-    expect(html).toContain("<h1>Wrapped</h1>");
+    // The artifact body itself lives only in the framed sub-document.
+    expect(html).not.toContain("<h1>Wrapped</h1>");
+    expect(html).toContain(
+      `<iframe id="oa-frame" src="/a/${created.id}/frame"`,
+    );
+  });
+
+  it("has a normal-origin CSP (connect-src 'self', frame-src 'self', no sandbox) and embeds a sandboxed artifact frame with the opposite CSP", async () => {
+    const created = await create({ content: "<h1>Wrapped</h1>" });
+    const hostRes = await exports.default.fetch(`${BASE}/a/${created.id}`);
+    const hostCsp = hostRes.headers.get("content-security-policy") ?? "";
+    expect(hostCsp).toContain("connect-src 'self'");
+    expect(hostCsp).toContain("frame-src 'self'");
+    expect(hostCsp).not.toMatch(/(^|;\s*)sandbox/);
+    expect(hostCsp).toContain("default-src 'none'");
+    expect(hostCsp).toContain("form-action 'none'");
+    expect(hostCsp).toContain("base-uri 'none'");
+
+    const frameRes = await exports.default.fetch(
+      `${BASE}/a/${created.id}/frame`,
+    );
+    expect(frameRes.status).toBe(200);
+    const frameCsp = frameRes.headers.get("content-security-policy") ?? "";
+    expect(frameCsp).toContain("sandbox allow-scripts");
+    expect(frameCsp).toContain("connect-src 'none'");
+    // R1: never allow-same-origin on the artifact frame, even with webFonts
+    // on (the test environment's wrangler.jsonc sets it to "1").
+    expect(frameCsp).not.toContain("allow-same-origin");
+    const frameHtml = await frameRes.text();
+    expect(frameHtml).toContain("<h1>Wrapped</h1>");
+    // No host chrome (og/title meta, header element, drawer) leaks into the
+    // frame — it renders no <header>, even though the frame's reset CSS
+    // still carries the (unused, harmless) .oa-header selector rules.
+    expect(frameHtml).not.toContain("<title>");
+    expect(frameHtml).not.toContain("<header");
+    expect(frameHtml).not.toContain("oa-cm-drawer");
+  });
+
+  it("carries crawler metadata on the host page, with og:url pointing at /a/:id (never /a/:id/frame)", async () => {
+    const created = await create({
+      content: "<h1>Wrapped</h1>",
+      description: "A crawlable page.",
+    });
+    const html = await (
+      await exports.default.fetch(`${BASE}/a/${created.id}`)
+    ).text();
+    expect(html).toContain(`<title>Viewer Test`);
+    expect(html).toContain(
+      `<meta property="og:image" content="${BASE}/og/${created.id}">`,
+    );
+    // The exact match (closing quote right after the id) proves og:url is
+    // the canonical page, never the "/frame" sub-route.
+    expect(html).toContain(
+      `<meta property="og:url" content="${BASE}/a/${created.id}">`,
+    );
   });
 
   it("escapes the title", async () => {
@@ -91,25 +181,31 @@ describe("GET /a/:id (plain HTML)", () => {
     expect(html).toContain("&lt;img");
   });
 
-  it("sends the sandboxing CSP and hardening headers", async () => {
+  it("frame sends the sandboxing CSP and hardening headers", async () => {
     const created = await create({ content: "<p>safe</p>" });
-    const res = await exports.default.fetch(`${BASE}/a/${created.id}`);
+    const res = await exports.default.fetch(`${BASE}/a/${created.id}/frame`);
     const csp = res.headers.get("content-security-policy") ?? "";
     expect(csp).toContain("sandbox allow-scripts");
     expect(csp).toContain("default-src 'none'");
-    // script-src is nonce-only with 'self' (same-origin /vendor/... runtime
-    // bundles) and NO 'unsafe-inline', NO external host, NO 'strict-dynamic'
-    // (issue #11): with no external script host in the CSP, an artifact's inline
-    // JS cannot createElement("script", {src: <external>}) to load an arbitrary
-    // package — the bypass is closed without breaking user JS (the nonce is
-    // stamped on every user <script> at serve time).
-    expect(csp).toMatch(/script-src 'self' 'nonce-[^']+'/);
+    // Opaque frame: CSP stamps the real response origin (not 'self') so the
+    // same-host /fonts proxy still loads under frameSandbox.
+    // script-src is nonce-only with the response origin (same-origin
+    // /vendor/... runtime bundles) and NO 'unsafe-inline', NO external host,
+    // NO 'strict-dynamic' (issue #11): with no external script host in the
+    // CSP, an artifact's inline JS cannot createElement("script", {src:
+    // <external>}) to load an arbitrary package — the bypass is closed
+    // without breaking user JS (the nonce is stamped on every user <script>
+    // at serve time).
+    expect(csp).toMatch(/script-src http:\/\/artifacts\.test 'nonce-[^']+'/);
     expect(csp).not.toContain("'unsafe-inline' cdn.jsdelivr.net");
     expect(csp).not.toContain("cdn.jsdelivr.net");
     expect(csp).not.toContain("'strict-dynamic'");
     expect(csp).not.toContain("script-src 'unsafe-inline'");
     expect(csp).toContain(
-      "style-src 'self' 'unsafe-inline' fonts.googleapis.com",
+      "style-src http://artifacts.test 'unsafe-inline' fonts.googleapis.com",
+    );
+    expect(csp).toMatch(
+      /font-src http:\/\/artifacts\.test data: cdn\.fontshare\.com fonts\.gstatic\.com/,
     );
     expect(csp).toContain("img-src data: blob:");
     expect(csp).toContain("connect-src 'none'");
@@ -126,9 +222,14 @@ describe("GET /a/:id (plain HTML)", () => {
     expect(nonceMatch).not.toBeNull();
     const nonce = nonceMatch?.[1] ?? "";
     const html = await res.text();
-    // Every inline <script> the viewer emits (THEME_SCRIPT, LAYOUT_SCRIPT) must
-    // carry the nonce attribute matching the CSP.
-    const inlineScripts = html.match(/<script(?:\s[^>]*)?>/gi) ?? [];
+    // Every inline <script> the viewer emits (THEME_SCRIPT, LAYOUT_SCRIPT,
+    // COMMENTS_SCRIPT, host bridge, HOST_UI_SCRIPT) must carry the nonce
+    // attribute matching the CSP. Non-executable <script type="application/json">
+    // data blocks (the serve-time comment thread) are excluded — they are data,
+    // not JS, so a nonce is meaningless and intentionally omitted.
+    const inlineScripts = (html.match(/<script(?:\s[^>]*)?>/gi) ?? []).filter(
+      (t) => !/type="application\/json"/i.test(t),
+    );
     expect(inlineScripts.length).toBeGreaterThan(0);
     for (const tag of inlineScripts) {
       // Authored <script src> tags do not appear in plain-HTML artifacts; every
@@ -145,11 +246,12 @@ describe("GET /a/:id (plain HTML)", () => {
   it("stamps the per-request nonce on user-authored <script> in an HTML artifact", async () => {
     // Under nonce-only script-src, a nonceless user inline <script> would be
     // blocked — the rework of issue #11 stamps the per-request nonce onto
-    // every user <script> at serve time so user JS still runs.
+    // every user <script> at serve time so user JS still runs. The artifact
+    // body lives in the frame sub-route, so the stamping is visible there.
     const created = await create({
       content: "<main><p>x</p><script>console.log(1)</script></main>",
     });
-    const res = await exports.default.fetch(`${BASE}/a/${created.id}`);
+    const res = await exports.default.fetch(`${BASE}/a/${created.id}/frame`);
     const csp = res.headers.get("content-security-policy") ?? "";
     const nonce = csp.match(/'nonce-([^']+)'/)?.[1] ?? "";
     expect(nonce).not.toBe("");
@@ -171,7 +273,7 @@ describe("GET /a/:id (plain HTML)", () => {
     const created = await create({
       content: `<main><script>${inner}</script></main>`,
     });
-    const res = await exports.default.fetch(`${BASE}/a/${created.id}`);
+    const res = await exports.default.fetch(`${BASE}/a/${created.id}/frame`);
     const csp = res.headers.get("content-security-policy") ?? "";
     const nonce = csp.match(/'nonce-([^']+)'/)?.[1] ?? "";
     expect(nonce).not.toBe("");
@@ -191,7 +293,7 @@ describe("GET /a/:id (plain HTML)", () => {
     const created = await create({
       content: `<main><SCRIPT>console.log("up")</SCRIPT></main>`,
     });
-    const res = await exports.default.fetch(`${BASE}/a/${created.id}`);
+    const res = await exports.default.fetch(`${BASE}/a/${created.id}/frame`);
     const csp = res.headers.get("content-security-policy") ?? "";
     const nonce = csp.match(/'nonce-([^']+)'/)?.[1] ?? "";
     expect(nonce).not.toBe("");
@@ -210,7 +312,7 @@ describe("GET /a/:id (plain HTML)", () => {
     const created = await create({
       content: `<main><scriptish>keep me</scriptish></main>`,
     });
-    const res = await exports.default.fetch(`${BASE}/a/${created.id}`);
+    const res = await exports.default.fetch(`${BASE}/a/${created.id}/frame`);
     const csp = res.headers.get("content-security-policy") ?? "";
     const nonce = csp.match(/'nonce-([^']+)'/)?.[1] ?? "";
     const html = await res.text();
@@ -293,7 +395,7 @@ describe("GET /a/:id (plain HTML)", () => {
     expect(res.status).toBe(404);
   });
 
-  it("serves a specific version via ?v=", async () => {
+  it("serves a specific version via ?v=, and the host page's frame src carries it through", async () => {
     const created = await create({ content: "<p>first</p>" });
     await exports.default.fetch(
       new Request(`${BASE}/api/artifacts/${created.id}`, {
@@ -306,23 +408,28 @@ describe("GET /a/:id (plain HTML)", () => {
       }),
     );
     const v1 = await (
-      await exports.default.fetch(`${BASE}/a/${created.id}?v=1`)
+      await exports.default.fetch(`${BASE}/a/${created.id}/frame?v=1`)
     ).text();
     expect(v1).toContain("<p>first</p>");
     const latest = await (
-      await exports.default.fetch(`${BASE}/a/${created.id}`)
+      await exports.default.fetch(`${BASE}/a/${created.id}/frame`)
     ).text();
     expect(latest).toContain("<p>second</p>");
+
+    const hostV1 = await (
+      await exports.default.fetch(`${BASE}/a/${created.id}?v=1`)
+    ).text();
+    expect(hostV1).toContain(`src="/a/${created.id}/frame?v=1"`);
   });
 });
 
-describe("GET /a/:id (markdown)", () => {
+describe("GET /a/:id/frame (markdown)", () => {
   it("embeds the markdown source and a client-side renderer", async () => {
     const created = await create({
       content: "# Heading\n\nSome **bold** text.",
       format: "markdown",
     });
-    const res = await exports.default.fetch(`${BASE}/a/${created.id}`);
+    const res = await exports.default.fetch(`${BASE}/a/${created.id}/frame`);
     const html = await res.text();
     expect(html).toContain("marked");
     expect(html).toContain("Some **bold** text.");
@@ -345,7 +452,7 @@ describe("GET /a/:id (markdown)", () => {
       format: "markdown",
     });
     const html = await (
-      await exports.default.fetch(`${BASE}/a/${created.id}`)
+      await exports.default.fetch(`${BASE}/a/${created.id}/frame`)
     ).text();
     expect(html).not.toContain("</script><script>alert(1)");
   });
@@ -389,15 +496,40 @@ describe("GET /a/:id (encrypted)", () => {
     expect(html).toContain(envelope.salt);
     expect(html).toContain("PBKDF2");
     expect(html).toContain("sandbox");
+    // The unlock shell is itself a host page (hostHeaders — connect-src
+    // 'self', no sandbox); the strict connect-src 'none' air-gap now lives on
+    // the <meta> CSP re-asserted inside the srcdoc'd artifact frame template
+    // (R2), embedded below as part of the decrypt script.
     const csp = res.headers.get("content-security-policy") ?? "";
     expect(csp).not.toMatch(/(^|;\s*)sandbox/);
     expect(csp).toContain("default-src 'none'");
-    expect(csp).toContain("connect-src 'none'");
+    expect(csp).toContain("connect-src 'self'");
+    // The re-asserted meta CSP (R2) rides along inside the JSON-embedded
+    // srcdoc template in the decrypt script — single quotes survive
+    // JSON.stringify unescaped, so both substrings still appear verbatim.
+    expect(html).toContain("Content-Security-Policy");
+    expect(html).toContain("connect-src 'none'");
     expect(html).toContain('<label class="oa-label" for="oa-password">');
     expect(html).toContain('aria-describedby="oa-help oa-error"');
     expect(html).toContain("min-height:44px");
     expect(html).toContain("color:var(--oa-danger)");
     expect(html).toContain("Password incorrect. Check it and try again.");
+  });
+
+  it("the frame sub-route refuses to serve an encrypted artifact as plaintext", async () => {
+    const envelope = await encrypt("<h1>Top Secret</h1>", "hunter2");
+    const created = await create({
+      content: envelope.content,
+      encrypted: {
+        salt: envelope.salt,
+        iv: envelope.iv,
+        iterations: envelope.iterations,
+      },
+    });
+    const res = await exports.default.fetch(`${BASE}/a/${created.id}/frame`);
+    expect(res.status).toBe(404);
+    const body = await res.text();
+    expect(body).not.toContain("Top Secret");
   });
 
   it("stamps the per-request nonce on the unlock-shell inline scripts", async () => {
@@ -423,9 +555,14 @@ describe("GET /a/:id (encrypted)", () => {
     expect(csp).not.toContain("'strict-dynamic'");
     expect(csp).not.toContain("'unsafe-inline' cdn.jsdelivr.net");
     const html = await res.text();
-    // The unlock shell emits unlockScript + THEME_SCRIPT + LAYOUT_SCRIPT inline;
-    // every one must carry the nonce.
-    const inlineScripts = html.match(/<script(?:\s[^>]*)?>/gi) ?? [];
+    // The unlock shell emits unlockScript + VERSION_SCRIPT + THEME_SCRIPT +
+    // LAYOUT_SCRIPT + COMMENTS_SCRIPT + host bridge + HOST_UI_SCRIPT inline;
+    // every executable one must carry the nonce. Non-executable
+    // <script type="application/json"> data blocks (the serve-time comment
+    // thread) are excluded — a nonce is meaningless for data.
+    const inlineScripts = (html.match(/<script(?:\s[^>]*)?>/gi) ?? []).filter(
+      (t) => !/type="application\/json"/i.test(t),
+    );
     expect(inlineScripts.length).toBeGreaterThan(0);
     for (const tag of inlineScripts) {
       expect(tag).toContain(`nonce="${nonce}"`);
@@ -567,11 +704,18 @@ describe("GET /a/:id version picker", () => {
     const v1 = await (
       await exports.default.fetch(`${BASE}/a/${created.id}?v=1`)
     ).text();
-    expect(v1).toContain("<p>v1</p>");
-    expect(v1).not.toContain("<p>v3</p>");
-    // Picker still present, and v1 is now the selected option.
+    // Picker is on the host page, with v1 the selected option; the artifact
+    // body itself lives in the sandboxed sub-frame (see below).
     expect(v1).toContain('id="oa-version-select"');
     expect(v1).toMatch(/value="[^"]*v=1"[^>]* selected/);
+    // The host page mirrors the pinned version into the frame src.
+    expect(v1).toContain(`/a/${created.id}/frame?v=1`);
+    // The version-1 snapshot is served by the frame route, not the host page.
+    const frameV1 = await (
+      await exports.default.fetch(`${BASE}/a/${created.id}/frame?v=1`)
+    ).text();
+    expect(frameV1).toContain("<p>v1</p>");
+    expect(frameV1).not.toContain("<p>v3</p>");
   });
 
   it("renders no picker for a single-version artifact", async () => {

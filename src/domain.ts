@@ -59,6 +59,50 @@ export interface VersionMeta {
   createdAt: string;
 }
 
+// Comments live outside the sandboxed artifact body (in the surrounding chrome)
+// and persist to D1 so a thread survives disconnects and reaches future viewers.
+export const MAX_COMMENT_BODY_BYTES = 8 * 1024;
+export const MAX_COMMENT_AUTHOR_LENGTH = 200;
+
+// Anchor caps. Quote/context are code-point lengths (a selection is measured in
+// characters); the whole-anchor cap is UTF-8 bytes so a multibyte quote that
+// passes the code-point cap can still be rejected before it reaches storage.
+export const MAX_COMMENT_QUOTE_LENGTH = 1000;
+export const MAX_COMMENT_QUOTE_CONTEXT_LENGTH = 32;
+export const MAX_ANCHOR_BYTES = 2 * 1024;
+export const CURRENT_ANCHOR_VERSION = 1;
+
+// A comment's anchor: null = unanchored (page-level; Phase-1 back-compat),
+// "point" = a canvas world coordinate, "text" = a W3C-style quote selector.
+// The viewer re-resolves the anchor at render time; the server stores it verbatim.
+export type Anchor =
+  | { mode: "point"; x: number; y: number; anchorVersion: number }
+  | {
+      mode: "text";
+      quote: string;
+      prefix: string;
+      suffix: string;
+      start: number;
+      anchorVersion: number;
+    };
+
+export interface CommentMeta {
+  id: string;
+  artifactId: string;
+  author: string | null;
+  body: string;
+  anchor: Anchor | null;
+  /** Resolved / acknowledged — soft state, not deletion. */
+  done: boolean;
+  createdAt: string;
+}
+
+export interface CommentInput {
+  author: string | null;
+  body: string;
+  anchor: Anchor | null;
+}
+
 export type Validated<T> =
   | { ok: true; value: T }
   | { ok: false; error: string; status: 400 | 413 };
@@ -285,5 +329,118 @@ export function validateUpdate(
       baseVersion: parsedBase,
       force: force === true,
     },
+  };
+}
+
+// Anchor validation, mirroring validateEncryption's shape. Point coordinates
+// are unbounded world px (a canvas point can be negative or large) so only
+// finiteness is enforced; text selectors are length-capped, and the whole
+// serialized anchor is byte-capped so a multibyte quote cannot slip past.
+function validateAnchorVersion(raw: unknown): number | null {
+  if (raw === undefined || raw === null) return CURRENT_ANCHOR_VERSION;
+  if (typeof raw !== "number" || !Number.isInteger(raw) || raw < 1) return null;
+  return raw;
+}
+
+export function validateAnchor(raw: unknown): Validated<Anchor> {
+  if (typeof raw !== "object" || raw === null)
+    return invalid("anchor must be an object");
+  const obj = raw as Record<string, unknown>;
+  const anchorVersion = validateAnchorVersion(obj.anchorVersion);
+  if (anchorVersion === null)
+    return invalid("anchor.anchorVersion must be a positive integer");
+
+  let value: Anchor;
+  if (obj.mode === "point") {
+    const { x, y } = obj;
+    if (typeof x !== "number" || !Number.isFinite(x))
+      return invalid("anchor.x must be a finite number");
+    if (typeof y !== "number" || !Number.isFinite(y))
+      return invalid("anchor.y must be a finite number");
+    value = { mode: "point", x, y, anchorVersion };
+  } else if (obj.mode === "text") {
+    const { quote, prefix, suffix, start } = obj;
+    if (typeof quote !== "string" || quote.length === 0)
+      return invalid("anchor.quote is required");
+    if ([...quote].length > MAX_COMMENT_QUOTE_LENGTH)
+      return invalid(
+        `anchor.quote exceeds ${MAX_COMMENT_QUOTE_LENGTH} characters`,
+      );
+    const ctx = (v: unknown): string | null => {
+      if (v === undefined || v === null) return "";
+      if (typeof v !== "string") return null;
+      return [...v].length > MAX_COMMENT_QUOTE_CONTEXT_LENGTH ? null : v;
+    };
+    const parsedPrefix = ctx(prefix);
+    const parsedSuffix = ctx(suffix);
+    if (parsedPrefix === null || parsedSuffix === null)
+      return invalid(
+        `anchor.prefix/suffix must be strings of at most ${MAX_COMMENT_QUOTE_CONTEXT_LENGTH} characters`,
+      );
+    let parsedStart = 0;
+    if (start !== undefined && start !== null) {
+      if (typeof start !== "number" || !Number.isInteger(start) || start < 0)
+        return invalid("anchor.start must be a non-negative integer");
+      parsedStart = start;
+    }
+    value = {
+      mode: "text",
+      quote,
+      prefix: parsedPrefix,
+      suffix: parsedSuffix,
+      start: parsedStart,
+      anchorVersion,
+    };
+  } else {
+    return invalid('anchor.mode must be "point" or "text"');
+  }
+
+  if (contentByteLength(JSON.stringify(value)) > MAX_ANCHOR_BYTES)
+    return invalid(`anchor exceeds the ${MAX_ANCHOR_BYTES} byte limit`);
+  return { ok: true, value };
+}
+
+// Comment authoring validation. `body` is required and size-capped in UTF-8
+// bytes (matching the content cap convention); `author` is optional and
+// length-capped; `anchor` is optional (null = unanchored). Open for Phase 1:
+// posting is not token-gated, documented at the route.
+export function validateComment(
+  body: Record<string, unknown>,
+): Validated<CommentInput> {
+  const { body: text, author, anchor } = body;
+
+  if (typeof text !== "string" || text.length === 0) {
+    return invalid("body is required and must be a non-empty string");
+  }
+  if (contentByteLength(text) > MAX_COMMENT_BODY_BYTES) {
+    return invalid(
+      `body exceeds the ${MAX_COMMENT_BODY_BYTES} byte limit`,
+      413,
+    );
+  }
+
+  let parsedAuthor: string | null = null;
+  if (author !== undefined && author !== null) {
+    if (
+      typeof author !== "string" ||
+      author.length > MAX_COMMENT_AUTHOR_LENGTH
+    ) {
+      return invalid(
+        `author must be a string of at most ${MAX_COMMENT_AUTHOR_LENGTH} characters`,
+      );
+    }
+    parsedAuthor = author;
+  }
+
+  let parsedAnchor: Anchor | null = null;
+  if (anchor !== undefined && anchor !== null) {
+    const result = validateAnchor(anchor);
+    if (!result.ok) return result;
+    parsedAnchor = result.value;
+  }
+
+  return {
+    ok: true,
+    value: { author: parsedAuthor, body: text, anchor: parsedAnchor },
   };
 }

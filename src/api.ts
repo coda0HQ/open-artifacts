@@ -1,7 +1,13 @@
 import type { Context } from "hono";
 import { Hono } from "hono";
 import type { CreateInput } from "./domain";
-import { MAX_CONTENT_BYTES, validateCreate, validateUpdate } from "./domain";
+import {
+  MAX_COMMENT_BODY_BYTES,
+  MAX_CONTENT_BYTES,
+  validateComment,
+  validateCreate,
+  validateUpdate,
+} from "./domain";
 import type { ArtifactRecord, ArtifactStore } from "./store";
 import { D1R2Store } from "./store";
 import {
@@ -347,4 +353,173 @@ api.get("/artifacts/:id/raw", async (c) => {
     nonce: generateNonce(),
   });
   return new Response(content.body, { headers });
+});
+
+// Comment thread on an artifact. The thread lives in the surrounding chrome
+// (not the sandboxed iframe body), so the host page POSTs and renders the list.
+// Phase 1: posting is open (not token-gated) and reads are open — the issue
+// lists the auth model as an open question. A persisted comment reaches every
+// future viewer because the host fetches the thread on page load. Live
+// (no-reload) fan-out across concurrent viewers is Phase 2 (Durable Object).
+// Headroom over the body cap for everything else a comment may legitimately
+// carry: an anchor (≤2 KiB), an author (≤200 chars), and JSON braces/escaping.
+// Too tight and a comment validateComment would accept is 413'd before it is
+// read; validateComment stays the authoritative per-field gate.
+const COMMENT_BODY_BYTES = MAX_COMMENT_BODY_BYTES + 4 * 1024;
+
+api.get("/artifacts/:id/comments", async (c) => {
+  const store = storeFrom(c);
+  const record = await store.get(c.req.param("id"));
+  if (record === null) return c.json({ error: "artifact not found" }, 404);
+  const comments = await store.listComments(record.id);
+  return c.json({ comments });
+});
+
+api.post("/artifacts/:id/comments", async (c) => {
+  const store = storeFrom(c);
+  const record = await store.get(c.req.param("id"));
+  if (record === null) return c.json({ error: "artifact not found" }, 404);
+
+  const declaredLength = Number(c.req.header("content-length") ?? "0");
+  if (declaredLength > COMMENT_BODY_BYTES) {
+    return c.json({ error: "request body too large" }, 413);
+  }
+
+  let body: Record<string, unknown>;
+  try {
+    body = await c.req.json<Record<string, unknown>>();
+  } catch {
+    return c.json({ error: "request body must be JSON" }, 400);
+  }
+
+  const parsed = validateComment(body);
+  if (!parsed.ok) return c.json({ error: parsed.error }, parsed.status);
+
+  // A text anchor stores a verbatim quote of the artifact body. On an encrypted
+  // artifact the server never holds plaintext, so accepting one would copy
+  // plaintext into D1 and break the zero-knowledge guarantee. Point anchors
+  // (world coordinates) and unanchored comments leak nothing and are allowed.
+  if (parsed.value.anchor?.mode === "text" && record.encrypted) {
+    return c.json(
+      { error: "text anchors are not allowed on encrypted artifacts" },
+      400,
+    );
+  }
+
+  // Stamp/clamp anchorVersion to the artifact's version space so a client
+  // cannot forge a future version that hides markers for every real viewer
+  // (anchorVersion > viewedVersion filters them out). Keep an in-range claim;
+  // otherwise stamp currentVersion.
+  //
+  // The raw body is consulted because validateAnchor fills a missing
+  // anchorVersion with a placeholder the domain layer cannot know is right —
+  // it has no artifact. Trusting that value would record every version-less
+  // API post as v1: a false drift tag, and a marker on versions where the
+  // comment never existed.
+  let input = parsed.value;
+  if (input.anchor) {
+    const rawAnchor = body.anchor as Record<string, unknown> | null | undefined;
+    const claimed = input.anchor.anchorVersion;
+    const stamped =
+      typeof rawAnchor?.anchorVersion === "number" &&
+      claimed <= record.currentVersion
+        ? claimed
+        : record.currentVersion;
+    input = {
+      ...input,
+      anchor: { ...input.anchor, anchorVersion: stamped },
+    };
+  }
+
+  // Per-comment delete token, mirroring the artifact write-token idiom: only the
+  // SHA-256 hash is stored; the plaintext is returned once so the poster can
+  // delete their own comment later.
+  const deleteToken = generateWriteToken();
+  const comment = await store.addComment(
+    record.id,
+    input,
+    await sha256Hex(deleteToken),
+  );
+  return c.json({ ...comment, deleteToken }, 201);
+});
+
+// Authorizes a mutation of an existing comment: the comment's own delete token
+// (the author, from this browser) or the artifact's write/channel token (owner
+// moderation). Legacy Phase-1 rows have a null delete-token hash and so are
+// owner-only. Shared by PATCH and DELETE — resolving a comment hides it from
+// the drawer's default view, so it is gated exactly like removing it.
+async function authorizeCommentMutation(
+  c: Context<{ Bindings: Env }>,
+  store: ArtifactStore,
+  artifactId: string,
+  deleteTokenHash: string | null,
+): Promise<{ ok: true } | { ok: false; status: 401 | 403; error: string }> {
+  const token = bearerToken(c);
+  if (token === null) {
+    return { ok: false, status: 401, error: "missing bearer token" };
+  }
+  const tokenHash = await sha256Hex(token);
+  const authorMatch =
+    deleteTokenHash !== null && timingSafeEqual(tokenHash, deleteTokenHash);
+  if (authorMatch) return { ok: true };
+  if ((await authorizeWrite(c, store, artifactId)).ok) return { ok: true };
+  return { ok: false, status: 403, error: "not authorized for this comment" };
+}
+
+// Mark done / undone. Not open like create: done removes a comment from the
+// drawer's default "open" view, so an unauthenticated toggle would let any
+// passer-by silently suppress a whole thread.
+api.patch("/artifacts/:id/comments/:commentId", async (c) => {
+  const store = storeFrom(c);
+  const id = c.req.param("id");
+  const commentId = c.req.param("commentId");
+
+  const comment = await store.getComment(commentId);
+  if (comment === null || comment.artifactId !== id) {
+    return c.json({ error: "comment not found" }, 404);
+  }
+
+  const auth = await authorizeCommentMutation(
+    c,
+    store,
+    id,
+    comment.deleteTokenHash,
+  );
+  if (!auth.ok) return c.json({ error: auth.error }, auth.status);
+
+  let body: Record<string, unknown>;
+  try {
+    body = await c.req.json<Record<string, unknown>>();
+  } catch {
+    return c.json({ error: "request body must be JSON" }, 400);
+  }
+  if (typeof body.done !== "boolean") {
+    return c.json({ error: "done must be a boolean" }, 400);
+  }
+
+  const ok = await store.setCommentDone(commentId, body.done);
+  if (!ok) return c.json({ error: "comment not found" }, 404);
+  return c.json({ ok: true, done: body.done });
+});
+
+api.delete("/artifacts/:id/comments/:commentId", async (c) => {
+  const store = storeFrom(c);
+  const id = c.req.param("id");
+  const commentId = c.req.param("commentId");
+
+  const comment = await store.getComment(commentId);
+  if (comment === null || comment.artifactId !== id) {
+    return c.json({ error: "comment not found" }, 404);
+  }
+
+  const auth = await authorizeCommentMutation(
+    c,
+    store,
+    id,
+    comment.deleteTokenHash,
+  );
+  if (!auth.ok) return c.json({ error: auth.error }, auth.status);
+
+  await store.deleteComment(commentId);
+  return c.json({ ok: true });
 });
