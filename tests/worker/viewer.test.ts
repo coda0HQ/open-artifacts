@@ -704,7 +704,12 @@ describe("GET /a/:id (encrypted)", () => {
 });
 
 describe("GET /a/:id version picker", () => {
-  async function putVersion(id: string, writeToken: string, content: string) {
+  async function putVersion(
+    id: string,
+    writeToken: string,
+    content: string,
+    label?: string,
+  ) {
     const res = await exports.default.fetch(
       new Request(`${BASE}/api/artifacts/${id}`, {
         method: "PUT",
@@ -712,7 +717,9 @@ describe("GET /a/:id version picker", () => {
           "content-type": "application/json",
           authorization: `Bearer ${writeToken}`,
         },
-        body: JSON.stringify({ content }),
+        body: JSON.stringify(
+          label === undefined ? { content } : { content, label },
+        ),
       }),
     );
     expect(res.status).toBe(200);
@@ -735,6 +742,47 @@ describe("GET /a/:id version picker", () => {
     // No runtime fetch for versions: the list is inlined as options, and the
     // CSP forbids any connect.
     expect(html).toContain('aria-label="Artifact version"');
+  });
+
+  it("keeps a labeled option compact, carrying the label as a tooltip", async () => {
+    // The header is cramped on narrow screens, so an option's visible text is
+    // always the short "v<n>" form. The label is not dropped — it moves to the
+    // title attribute, so context survives. Without this a long label stretches
+    // the select and squeezes the title out of the header.
+    const created = await create({ content: "<p>v1</p>" });
+    await putVersion(
+      created.id,
+      created.writeToken,
+      "<p>v2</p>",
+      "a rather long design-direction label",
+    );
+
+    const html = await (
+      await exports.default.fetch(`${BASE}/a/${created.id}`)
+    ).text();
+
+    expect(html).toContain(
+      ' title="a rather long design-direction label">v2</option>',
+    );
+    // The label must not be inlined into the visible option text.
+    expect(html).not.toContain(
+      ">a rather long design-direction label (v2)</option>",
+    );
+    // The narrow-screen clamp is what keeps a long label from widening the
+    // control once it is only a tooltip.
+    expect(html).toContain("max-width:5rem");
+
+    // ...and it must come AFTER the base rule. Both use the same selector, so
+    // they have equal specificity and a media query does not raise it — source
+    // order alone decides. Emitted first, the base rule's `padding` shorthand
+    // silently resets the narrow-screen padding-right. Asserting only that the
+    // media query exists cannot catch that, so pin the order.
+    const baseRule = html.indexOf(".oa-version .oa-version-select{min-height");
+    const narrowRule = html.indexOf(
+      "@media (max-width:30rem){.oa-version .oa-version-select",
+    );
+    expect(baseRule).toBeGreaterThan(-1);
+    expect(narrowRule).toBeGreaterThan(baseRule);
   });
 
   it("selecting an older version via ?v= serves that snapshot and keeps the picker", async () => {

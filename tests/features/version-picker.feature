@@ -21,6 +21,16 @@ Feature: Version selection in the viewer
     Then no network request is made to fetch versions
     And the version list was already embedded in the served HTML
 
+  # The picker shares the header with the title, brand chip and toggles. A
+  # version's label can be arbitrarily long, so rendering it as the option's
+  # visible text stretches the control and squeezes the title out on a phone.
+  Scenario: A labeled version stays compact in the header
+    Given version 2 of an artifact has the label "a rather long design-direction label"
+    When a viewer opens the artifact URL
+    Then the option's visible text is the short form "v2"
+    And its label is carried as a title tooltip, not dropped
+    And on a narrow viewport the select is width-clamped
+
   Scenario: Single-version artifact shows no picker
     Given an artifact has only version 1
     When a viewer opens it
