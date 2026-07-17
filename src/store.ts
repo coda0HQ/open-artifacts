@@ -76,6 +76,10 @@ export interface ArtifactStore {
   deleteFeedback(id: string): Promise<void>;
 }
 
+// Max feedback rows one poll returns. Exported so the CLI can tell the agent
+// when a page is full and more may be waiting behind it.
+export const FEEDBACK_PAGE_LIMIT = 100;
+
 const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS artifacts (
     id TEXT PRIMARY KEY,
@@ -658,6 +662,17 @@ export class D1R2Store implements ArtifactStore {
     };
   }
 
+  // Bound the poll response, mirroring listComments' cap. Submission is
+  // unauthenticated on an open instance, so an artifact's queue can be flooded
+  // with 12 KiB rows; without a cap the owner's poll would try to load all of
+  // them into one JSON response and fall over exactly when the owner needs it
+  // to find the spam ids to purge.
+  //
+  // Unlike comments this keeps the OLDEST window (ASC LIMIT), which is safe
+  // here for the reason it is not there: a feedback row leaves the status
+  // filter once it is acked or purged, so draining the queue advances the
+  // window. Comments are never removed from their list, so an ASC LIMIT would
+  // freeze on the first 100 forever.
   async listFeedback(
     artifactId: string,
     status?: FeedbackStatus,
@@ -666,10 +681,12 @@ export class D1R2Store implements ArtifactStore {
     const stmt =
       status === undefined
         ? this.db.prepare(
-            "SELECT * FROM feedback WHERE artifact_id = ? ORDER BY created_at ASC",
+            `SELECT * FROM feedback WHERE artifact_id = ?
+             ORDER BY created_at ASC, id ASC LIMIT ${FEEDBACK_PAGE_LIMIT}`,
           )
         : this.db.prepare(
-            "SELECT * FROM feedback WHERE artifact_id = ? AND status = ? ORDER BY created_at ASC",
+            `SELECT * FROM feedback WHERE artifact_id = ? AND status = ?
+             ORDER BY created_at ASC, id ASC LIMIT ${FEEDBACK_PAGE_LIMIT}`,
           );
     const bound =
       status === undefined

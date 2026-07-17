@@ -940,6 +940,12 @@ async function commandFeedback(id, flags) {
     if (item.projectRef) console.log(`  project: ${item.projectRef}`);
     console.log(`  body: ${item.body}`);
   }
+  // The server caps a page. Without this a full page reads as a drained queue.
+  if (json.truncated) {
+    console.error(
+      `${items.length} shown; more ${status} feedback is waiting — work or delete these, then poll again`,
+    );
+  }
 }
 
 // Advance one feedback record's status (pending -> in_review -> in_progress ->

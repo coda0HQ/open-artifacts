@@ -12,7 +12,7 @@ import {
   validateUpdate,
 } from "./domain";
 import type { ArtifactRecord, ArtifactStore } from "./store";
-import { D1R2Store } from "./store";
+import { D1R2Store, FEEDBACK_PAGE_LIMIT } from "./store";
 import {
   generateId,
   generateWriteToken,
@@ -629,7 +629,14 @@ api.get("/artifacts/:id/feedback", async (c) => {
     status = parsed.value;
   }
   const items = await store.listFeedback(auth.record.id, status);
-  return c.json({ artifactId: auth.record.id, feedback: items });
+  // A full page means rows may be waiting behind it. Say so rather than let a
+  // capped response read as a drained queue — the agent decides whether to
+  // work/purge this page and poll again.
+  return c.json({
+    artifactId: auth.record.id,
+    feedback: items,
+    truncated: items.length === FEEDBACK_PAGE_LIMIT,
+  });
 });
 
 // Advance a feedback record's status through pending -> in_review ->

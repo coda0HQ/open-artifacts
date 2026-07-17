@@ -2140,6 +2140,53 @@ describe("feedback poll", () => {
     expect(result.stderr).toContain("no pending feedback");
   });
 
+  it("warns that more feedback is waiting when a page is truncated", async () => {
+    seedLegacyManifest();
+    nextResponse = {
+      status: 200,
+      body: {
+        artifactId: "testid123456",
+        truncated: true,
+        feedback: [
+          {
+            id: "fb0000000001",
+            artifactId: "testid123456",
+            projectRef: null,
+            body: "one of many",
+            status: "pending",
+            createdAt: "2026-07-15T00:00:00.000Z",
+          },
+        ],
+      },
+    };
+    const result = await run(["feedback", "testid123456"]);
+    // A capped page must not read as a drained queue.
+    expect(result.stderr).toContain("more pending feedback is waiting");
+  });
+
+  it("does not warn when the queue fits in one page", async () => {
+    seedLegacyManifest();
+    nextResponse = {
+      status: 200,
+      body: {
+        artifactId: "testid123456",
+        truncated: false,
+        feedback: [
+          {
+            id: "fb0000000001",
+            artifactId: "testid123456",
+            projectRef: null,
+            body: "the only one",
+            status: "pending",
+            createdAt: "2026-07-15T00:00:00.000Z",
+          },
+        ],
+      },
+    };
+    const result = await run(["feedback", "testid123456"]);
+    expect(result.stderr).not.toContain("waiting");
+  });
+
   it("advances a feedback record's status with feedback-ack", async () => {
     seedLegacyManifest();
     nextResponse = {

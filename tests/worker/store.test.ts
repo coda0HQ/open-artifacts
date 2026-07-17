@@ -129,6 +129,32 @@ describe("feedback store round-trip", () => {
     expect(remaining[0].id).toBe(keep.id);
   });
 
+  it("caps a poll at 100 rows and advances the window as the queue drains", async () => {
+    // Submission is unauthenticated on an open instance, so the queue can be
+    // flooded. An uncapped poll would try to load every row into one response —
+    // and the owner needs that poll to work to find the ids to purge.
+    const store = new D1R2Store(env.DB, env.CONTENT);
+    const id = "fb-cap";
+    await store.create(id, "hash", INPUT, null);
+    for (let i = 0; i < 105; i++) {
+      await store.addFeedback(id, { projectRef: null, body: `note ${i}` });
+    }
+
+    const first = await store.listFeedback(id, "pending");
+    expect(first).toHaveLength(100);
+    // Oldest-first window, not an arbitrary 100.
+    expect(first[0].body).toBe("note 0");
+
+    // Draining the head advances the window — the ASC LIMIT does not freeze,
+    // because acked/purged rows leave the pending filter.
+    for (const row of first.slice(0, 10)) {
+      await store.deleteFeedback(row.id);
+    }
+    const second = await store.listFeedback(id, "pending");
+    expect(second).toHaveLength(95);
+    expect(second[0].body).toBe("note 10");
+  });
+
   it("getFeedback returns null for an unknown id", async () => {
     const store = new D1R2Store(env.DB, env.CONTENT);
     expect(await store.getFeedback("no-such-feedback-id")).toBeNull();
