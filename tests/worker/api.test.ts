@@ -320,7 +320,7 @@ describe("PUT /api/artifacts/:id", () => {
     const body = (await res.json()) as { version: number };
     expect(body.version).toBe(2);
 
-    const page = await exports.default.fetch(`${BASE}/a/${created.id}`);
+    const page = await exports.default.fetch(`${BASE}/a/${created.id}/frame`);
     expect(await page.text()).toContain("<h1>Updated</h1>");
   });
 
@@ -530,7 +530,7 @@ describe("compare-and-swap update safety (store layer)", () => {
     ).json()) as { versions: Array<{ version: number }> };
     expect(meta.versions.map((v) => v.version)).toEqual([1, 2]);
     const live = await (
-      await exports.default.fetch(`${BASE}/a/${created.id}`)
+      await exports.default.fetch(`${BASE}/a/${created.id}/frame`)
     ).text();
     expect(live).toContain("winner");
     expect(live).not.toContain("loser");
@@ -862,5 +862,38 @@ describe("project-change feedback (type 2)", () => {
     ).text();
     expect(html).toContain("oa-feedback-toggle");
     expect(html).toContain('"src/dashboard"');
+  });
+
+  it("serves the feedback panel only where its POST is permitted by CSP", async () => {
+    // The panel fetches /api/artifacts/:id/feedback. A document can only do
+    // that when its own CSP allows a same-origin connect — true for the host
+    // page, false for the artifact frame. Asserting the panel's presence alone
+    // (as an earlier test did) passes even when the POST is dead on arrival,
+    // so pair each side's markup with the CSP that governs it.
+    const created = await createArtifact({ projectRef: "src/dashboard" });
+
+    const hostRes = await exports.default.fetch(`${BASE}/a/${created.id}`);
+    const hostCsp = hostRes.headers.get("content-security-policy") ?? "";
+    const hostHtml = await hostRes.text();
+    expect(hostCsp).toContain("connect-src 'self'");
+    expect(hostCsp).not.toContain("connect-src 'none'");
+    expect(hostHtml).toContain('id="oa-feedback-toggle"');
+    expect(hostHtml).toContain('id="oa-feedback-backdrop"');
+    expect(hostHtml).toContain(
+      'fetch("/api/artifacts/"+OA.artifactId+"/feedback"',
+    );
+
+    const frameRes = await exports.default.fetch(
+      `${BASE}/a/${created.id}/frame`,
+    );
+    const frameCsp = frameRes.headers.get("content-security-policy") ?? "";
+    const frameHtml = await frameRes.text();
+    expect(frameCsp).toContain("connect-src 'none'");
+    // The frame renders no chrome: no toggle element, no panel, no POST. Match
+    // the elements (id= attributes), not the bare ids — the frame's reset CSS
+    // still carries the unused .oa-header selector rules that name them.
+    expect(frameHtml).not.toContain('id="oa-feedback-toggle"');
+    expect(frameHtml).not.toContain('id="oa-feedback-backdrop"');
+    expect(frameHtml).not.toContain("/feedback");
   });
 });

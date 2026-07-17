@@ -7,16 +7,20 @@ import {
   parseVersionParam,
   storeFrom,
 } from "./api";
+import type { VersionMeta } from "./domain";
 import { fontFaceCss, materializeFont, parseSlug } from "./fonts";
 import { brandHomepageForCoda0, isCoda0Host } from "./home";
 import { renderOgCardPng } from "./og";
+import type { ArtifactRecord, ArtifactStore, StoredContent } from "./store";
 import {
   badVersionPage,
+  frameDocument,
   generateNonce,
+  hostHeaders,
+  hostShell,
   notFoundPage,
   unlockShell,
   userContentHeaders,
-  wrapDocument,
 } from "./wrap";
 
 const app = new Hono<AppContext>();
@@ -106,63 +110,169 @@ app.get("/vendor/mermaid.runtime.js", async (c) => {
   return new Response(asset.body, {
     headers: {
       "content-type": "text/javascript; charset=utf-8",
-      "cache-control": "public, max-age=31536000, immutable",
+      // The bundle bytes change across deploys but the URL is fixed, so an
+      // immutable one-year cache would pin returning visitors to a stale
+      // (possibly security-patched) bundle until it expired. Cache but
+      // revalidate: the assets runtime serves an ETag, so a revalidate is a
+      // 304 when the bundle is unchanged and a fresh fetch when it is not.
+      "cache-control":
+        "public, max-age=3600, must-revalidate, stale-while-revalidate=86400",
       "x-content-type-options": "nosniff",
     },
   });
 });
 
-app.get("/a/:id", async (c) => {
-  const store = storeFrom(c);
-  const record = await store.get(c.req.param("id"));
-  const hostname = new URL(c.req.url).hostname;
-  const webFonts = c.env.OPEN_ARTIFACTS_WEB_FONTS === "1";
-  // One nonce per request: stamped on every viewer-injected inline <script> and
-  // emitted in script-src so 'unsafe-inline' can be dropped (issue #11).
-  const nonce = generateNonce();
-  const htmlHeaders = (sandbox: boolean) =>
-    userContentHeaders({
-      sandbox,
-      contentType: "text/html; charset=utf-8",
-      webFonts,
-      nonce,
-    });
+// Shared by both /a/:id (the host page) and /a/:id/frame (the artifact
+// frame): resolve the record, the requested ?v= version, and that version's
+// stored content. Each route renders its own failure response — the host
+// page shows a branded status page, the frame returns a bare 404 — so this
+// only reports what went wrong, not how to display it.
+type ResolvedArtifact =
+  | {
+      ok: true;
+      record: ArtifactRecord;
+      version: number;
+      content: StoredContent;
+    }
+  | { ok: false; status: 400 | 404; badVersion: boolean };
 
-  if (record === null) {
-    return new Response(notFoundPage(hostname), {
-      status: 404,
-      headers: htmlHeaders(true),
-    });
+// A content-less resolve for the host page: the host never renders the
+// artifact body (the frame sub-route does, and reads it once itself), so
+// pulling the ≤4 MiB body into worker memory here only to drop it would
+// double the storage read on every plain-artifact view. The host needs only
+// the per-version encrypted flag — which listVersions already carries — to
+// pick the unlock shell vs the frame shell.
+type ResolvedRecord =
+  | {
+      ok: true;
+      record: ArtifactRecord;
+      version: number;
+      encrypted: boolean;
+      versions: VersionMeta[];
+    }
+  | { ok: false; status: 400 | 404; badVersion: boolean };
+
+async function resolveRecord(
+  store: ArtifactStore,
+  id: string,
+  rawVersion: string | undefined,
+): Promise<ResolvedRecord> {
+  const record = await store.get(id);
+  if (record === null) return { ok: false, status: 404, badVersion: false };
+
+  const version = parseVersionParam(rawVersion, record.currentVersion);
+  if (typeof version !== "number") {
+    return {
+      ok: false,
+      status: version.status,
+      badVersion: version.status === 400,
+    };
   }
 
-  const version = parseVersionParam(c.req.query("v"), record.currentVersion);
+  // Fetched once and returned, so the host handler does not re-query the
+  // versions table for the picker on the same request.
+  const versions = await store.listVersions(record.id);
+  const viewed = versions.find((v) => v.version === version);
+  // A version row is created at publish time; if it is somehow absent, the
+  // content lookup below would 404 anyway — treat that as not-found rather
+  // than guessing the encryption state.
+  if (viewed === undefined) {
+    return { ok: false, status: 404, badVersion: false };
+  }
+  // The encrypted flag is read from R2 object metadata, NOT the versions-table
+  // row: the ensureSchema backfill stamps legacy rows from the artifact's
+  // current state, so on a mixed-encryption artifact an older encrypted
+  // version's row can read `false` and the host would render a plain shell
+  // whose frame then 404s — un-unlockable. R2 metadata is authoritative per
+  // version (head() fetches only metadata, not the ≤4 MiB body).
+  const meta = await store.getContentMeta(record.id, version);
+  if (meta === null) {
+    return { ok: false, status: 404, badVersion: false };
+  }
+  return {
+    ok: true,
+    record,
+    version,
+    encrypted: meta.encrypted,
+    versions,
+  };
+}
+
+async function resolveArtifact(
+  store: ArtifactStore,
+  id: string,
+  rawVersion: string | undefined,
+): Promise<ResolvedArtifact> {
+  const record = await store.get(id);
+  if (record === null) return { ok: false, status: 404, badVersion: false };
+
+  const version = parseVersionParam(rawVersion, record.currentVersion);
   if (typeof version !== "number") {
-    const page =
-      version.status === 400
-        ? badVersionPage(hostname)
-        : notFoundPage(hostname);
-    return new Response(page, {
+    return {
+      ok: false,
       status: version.status,
-      headers: htmlHeaders(true),
-    });
+      badVersion: version.status === 400,
+    };
   }
 
   const content = await store.getContent(record.id, version);
-  if (content === null) {
-    return new Response(notFoundPage(hostname), {
-      status: 404,
-      headers: htmlHeaders(true),
+  if (content === null) return { ok: false, status: 404, badVersion: false };
+
+  return { ok: true, record, version, content };
+}
+
+// The HOST PAGE: a normal-origin document (hostHeaders — connect-src 'self',
+// frame-src 'self', no sandbox) that embeds the artifact as a sandboxed
+// <iframe src="/a/:id/frame">, or (encrypted) a password form that decrypts
+// client-side and injects the artifact frame via srcdoc. It never renders the
+// artifact body itself.
+app.get("/a/:id", async (c) => {
+  const store = storeFrom(c);
+  const hostname = new URL(c.req.url).hostname;
+  const rawVersion = c.req.query("v");
+  // One nonce per host request: stamped on every viewer-injected inline
+  // <script> in hostShell/unlockShell and emitted in script-src so
+  // 'unsafe-inline' can be dropped (issue #11).
+  const nonce = generateNonce();
+  const resolved = await resolveRecord(store, c.req.param("id"), rawVersion);
+
+  if (!resolved.ok) {
+    const page = resolved.badVersion
+      ? badVersionPage(hostname)
+      : notFoundPage(hostname);
+    return new Response(page, {
+      status: resolved.status,
+      headers: hostHeaders(nonce),
     });
   }
 
+  const { record, version, encrypted, versions } = resolved;
   const url = artifactUrl(c, record.id);
   const ogImage = ogImageUrl(c, record.id);
   const brandUrl = c.env.BRAND_URL ?? null;
-  // Inline the full version list into the chrome so the picker is populated
-  // at serve time — the sandboxed opaque-origin iframe cannot fetch later.
-  const versions = await store.listVersions(record.id);
+  // Inline the comment thread at serve time for both plain and encrypted
+  // artifacts: the artifact frame is sandboxed with connect-src 'none', so
+  // runtime fetch from inside it is impossible. Future viewers still see the
+  // persisted thread because it is stamped into the host page here —
+  // including the encrypted unlock shell, whose surrounding chrome carries
+  // the drawer (only the body stays hidden until unlock).
+  const comments = await store.listComments(record.id);
+  const frameSrc = `/a/${record.id}/frame${rawVersion !== undefined ? `?v=${encodeURIComponent(rawVersion)}` : ""}`;
+  // versions was already fetched by resolveRecord (it derives the encrypted
+  // flag from the matching version row); the picker reuses it rather than
+  // issuing a second listVersions query on the same request.
 
-  if (content.encrypted !== null) {
+  if (encrypted) {
+    // Only the encrypted path needs the body — the ciphertext — and it must
+    // not be served by /a/:id/frame (the server never holds plaintext). Read
+    // it here, once, for the unlock shell.
+    const content = await store.getContent(record.id, version);
+    if (content === null) {
+      return new Response(notFoundPage(hostname), {
+        status: 404,
+        headers: hostHeaders(nonce),
+      });
+    }
     const page = unlockShell({
       title: record.title,
       description: record.description,
@@ -172,32 +282,81 @@ app.get("/a/:id", async (c) => {
       ogImage,
       hostname,
       brandUrl,
+      artifactId: record.id,
+      comments,
       projectRef: record.projectRef,
-      envelope: { ...content.encrypted, ciphertext: content.body },
-      webFonts,
+      envelope: { ...content.encrypted!, ciphertext: content.body },
       nonce,
       versions,
       currentVersion: version,
     });
-    return new Response(page, { headers: htmlHeaders(false) });
+    return new Response(page, { headers: hostHeaders(nonce) });
   }
 
-  const page = wrapDocument({
+  const page = hostShell({
     title: record.title,
     description: record.description,
     favicon: record.favicon,
-    format: record.format,
-    content: content.body,
     url,
     ogImage,
     hostname,
     brandUrl,
+    artifactId: record.id,
+    comments,
+    frameSrc,
     projectRef: record.projectRef,
     nonce,
     versions,
     currentVersion: version,
   });
-  return new Response(page, { headers: htmlHeaders(true) });
+  return new Response(page, { headers: hostHeaders(nonce) });
+});
+
+// The ARTIFACT FRAME: the sandboxed, opaque-origin document embedded by the
+// host page's <iframe>. Plain artifacts only — the server never holds
+// plaintext for an encrypted artifact, so this always 404s for one; the
+// unlock shell instead builds the same frameDocument() client-side after
+// decrypting and assigns it to the iframe's `srcdoc`.
+app.get("/a/:id/frame", async (c) => {
+  const store = storeFrom(c);
+  const webFonts = c.env.OPEN_ARTIFACTS_WEB_FONTS === "1";
+  // One nonce per frame request: the frame's inline <script>s (THEME_SCRIPT,
+  // the marked bootstrap, etc.) are stamped with the same nonce scheme as the
+  // host page so script-src stays nonce-only with no 'unsafe-inline'.
+  const nonce = generateNonce();
+  const resolved = await resolveArtifact(
+    store,
+    c.req.param("id"),
+    c.req.query("v"),
+  );
+
+  if (!resolved.ok) {
+    return new Response("not found", { status: resolved.status });
+  }
+  const { record, content } = resolved;
+  if (content.encrypted !== null) {
+    return new Response("not found", { status: 404 });
+  }
+
+  const page = frameDocument({
+    format: record.format,
+    content: content.body,
+    nonce,
+  });
+  return new Response(page, {
+    headers: userContentHeaders({
+      sandbox: true,
+      contentType: "text/html; charset=utf-8",
+      webFonts,
+      nonce,
+      // R1: the artifact frame must never become same-origin with the
+      // privileged host page, even when webFonts is on.
+      frameSandbox: true,
+      // Opaque-origin frames cannot use CSP 'self' for the /fonts proxy —
+      // pass the real response origin so same-host font CSS/bytes still load.
+      origin: new URL(c.req.url).origin,
+    }),
+  });
 });
 
 // OpenGraph card image: a 1200x630 PNG rasterized from a self-contained card

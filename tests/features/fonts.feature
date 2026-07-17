@@ -9,17 +9,27 @@ Feature: Opt-in same-origin web fonts
     Then the response status is 404
     And no request reaches Fontshare
 
+  # The artifact document is /a/:id/frame since the host/frame split; /a/:id is
+  # the privileged host page and never carries a sandbox directive at all.
+
   Scenario: Web-font surface turns on with the deploy flag
     When a deploy sets OPEN_ARTIFACTS_WEB_FONTS=1
-    And I GET /a/:id
-    Then the Content-Security-Policy allows same-origin fonts
-    And the sandbox directive includes allow-same-origin
+    And I GET /a/:id/frame
+    Then the Content-Security-Policy allows fonts from the font CDN allowlist
+    And font-src names the response origin, because 'self' cannot match from an opaque origin
+    And the sandbox directive still omits allow-same-origin, so the air-gap holds
 
   Scenario: Non-opt-in deploy keeps the strict sandbox
     When a deploy does not set OPEN_ARTIFACTS_WEB_FONTS
-    And I GET /a/:id
+    And I GET /a/:id/frame
     Then the Content-Security-Policy allows fonts only from data:
     And the sandbox directive omits allow-same-origin
+
+  Scenario: The host page is never widened by the web-font opt-in
+    When a deploy sets OPEN_ARTIFACTS_WEB_FONTS=1
+    And I GET /a/:id
+    Then the host Content-Security-Policy is unchanged by the flag
+    And it carries no sandbox directive, because the host is not the artifact
 
   Scenario: .woff2 is materialized from Fontshare into R2 on first hit
     Given a deploy sets OPEN_ARTIFACTS_WEB_FONTS=1

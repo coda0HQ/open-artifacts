@@ -56,3 +56,19 @@ Feature: Project-change feedback channel (type 2)
     Given an artifact created from project path "src/dashboard"
     When a viewer GETs /a/abc123
     Then the served HTML inlines the projectRef so the host chrome can attach it
+
+  # The panel POSTs. It is only reachable from a document whose CSP permits a
+  # same-origin fetch — the host page (connect-src 'self'), never the artifact
+  # frame (connect-src 'none', opaque origin). Rendering it in the frame would
+  # ship a button that silently fails.
+  Scenario: The feedback panel is served where it can actually POST
+    Given an artifact exists at id "abc123"
+    When a viewer GETs /a/abc123
+    Then the host page's CSP allows a same-origin connect
+    And the host page carries the feedback toggle and panel
+
+  Scenario: The air-gapped artifact frame carries no feedback control
+    Given an artifact exists at id "abc123"
+    When a viewer GETs /a/abc123/frame
+    Then the frame's CSP forbids every connect
+    And the frame carries neither the feedback toggle nor the panel
