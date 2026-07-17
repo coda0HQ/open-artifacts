@@ -673,6 +673,12 @@ export class D1R2Store implements ArtifactStore {
   // filter once it is acked or purged, so draining the queue advances the
   // window. Comments are never removed from their list, so an ASC LIMIT would
   // freeze on the first 100 forever.
+  //
+  // Tie-break on rowid, not id: created_at is only millisecond-precise, so a
+  // burst of submissions shares a timestamp, and ids are random (generateId)
+  // — ordering by them would shuffle same-millisecond rows and make both
+  // "oldest first" and which 100 the cap returns nondeterministic. rowid is
+  // SQLite's monotonic insert counter, so it is the real arrival order.
   async listFeedback(
     artifactId: string,
     status?: FeedbackStatus,
@@ -682,11 +688,11 @@ export class D1R2Store implements ArtifactStore {
       status === undefined
         ? this.db.prepare(
             `SELECT * FROM feedback WHERE artifact_id = ?
-             ORDER BY created_at ASC, id ASC LIMIT ${FEEDBACK_PAGE_LIMIT}`,
+             ORDER BY created_at ASC, rowid ASC LIMIT ${FEEDBACK_PAGE_LIMIT}`,
           )
         : this.db.prepare(
             `SELECT * FROM feedback WHERE artifact_id = ? AND status = ?
-             ORDER BY created_at ASC, id ASC LIMIT ${FEEDBACK_PAGE_LIMIT}`,
+             ORDER BY created_at ASC, rowid ASC LIMIT ${FEEDBACK_PAGE_LIMIT}`,
           );
     const bound =
       status === undefined
