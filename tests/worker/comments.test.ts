@@ -519,6 +519,41 @@ describe("anchored comments", () => {
     expect(list.comments.length).toBe(0);
   });
 
+  it("accepts an omitted-version text anchor on the plaintext current version after a mixed history", async () => {
+    // validateAnchor fills a missing anchorVersion with CURRENT_ANCHOR_VERSION
+    // (1). The stamp block must override that placeholder with currentVersion
+    // before the encryption guard runs — otherwise a mixed-encryption artifact
+    // (v1 encrypted, v2 plain) would reject a legitimate text anchor on v2
+    // because the guard would check v1. Omitting the field is exactly the
+    // path that would hide a "use parsed.value before stamp" regression.
+    const envelope = await encrypt("secret revenue $5M", "pw");
+    const created = await createEncrypted(envelope);
+    const put = await exports.default.fetch(
+      jsonRequest(
+        "PUT",
+        `/api/artifacts/${created.id}`,
+        { content: "<h1>now public</h1>" },
+        { authorization: `Bearer ${created.writeToken}` },
+      ),
+    );
+    expect(put.status).toBe(200);
+
+    const ok = await postComment(created.id, {
+      body: "annotating the public current version",
+      anchor: {
+        mode: "text",
+        quote: "now public",
+        prefix: "",
+        suffix: "",
+        start: 4,
+        // anchorVersion deliberately omitted
+      },
+    });
+    expect(ok.status).toBe(201);
+    const comment = (await ok.json()) as { anchor: { anchorVersion: number } };
+    expect(comment.anchor.anchorVersion).toBe(2);
+  });
+
   it("allows a text anchor on a plaintext past version after an encrypted update", async () => {
     // The mirror case: v1 plaintext, v2 encrypted. A text anchor on v1 leaks
     // nothing — v1 was never secret — so the guard must NOT block it, or it

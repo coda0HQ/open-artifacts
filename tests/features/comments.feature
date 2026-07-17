@@ -95,6 +95,16 @@ Feature: Multi-user interaction on a shared artifact
     Then the stored anchorVersion is 2, the version the poster must have seen
     And the drawer shows no version-drift tag for it
 
+  # The encryption guard must see the stamped version. validateAnchor fills a
+  # missing anchorVersion with a v1 placeholder; if the guard ran on that
+  # before the stamp, a mixed-encryption artifact (encrypted v1, plain v2)
+  # would reject a legitimate text anchor on the current plaintext version.
+  Scenario: Omitting anchorVersion on a mixed-encryption artifact targets the current plain version
+    Given an artifact whose v1 is encrypted and whose current v2 is plaintext
+    When an API client POSTs a text-anchored comment omitting anchorVersion
+    Then the comment is accepted
+    And the stored anchorVersion is 2
+
   Scenario: The frame receives the live comment list, not the serve-time seed
     Given an encrypted artifact whose unlock shell is still locked
     And the thread has changed since the page was served
