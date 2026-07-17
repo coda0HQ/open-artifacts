@@ -75,8 +75,8 @@ describe("feedback store round-trip", () => {
     });
     expect(first.status).toBe("pending");
     expect(first.artifactId).toBe(id);
-    // Ensure createdAt spacing so ordering is deterministic, not same-ms.
-    await new Promise((r) => setTimeout(r, 10));
+    // No createdAt spacing: these two land in the same millisecond, which the
+    // rowid tie-break orders by arrival. Sleeping here would have hidden that.
     const second = await store.addFeedback(id, {
       projectRef: null,
       body: "Rename the project",
@@ -142,8 +142,13 @@ describe("feedback store round-trip", () => {
 
     const first = await store.listFeedback(id, "pending");
     expect(first).toHaveLength(100);
-    // Oldest-first window, not an arbitrary 100.
-    expect(first[0].body).toBe("note 0");
+    // The oldest window in true arrival order, not an arbitrary 100. These
+    // rows are written in a tight loop, so they share a millisecond in
+    // created_at — this is exactly the case that a random-id tie-break gets
+    // wrong, so assert the whole window rather than just its head.
+    expect(first.map((f) => f.body)).toEqual(
+      Array.from({ length: 100 }, (_, i) => `note ${i}`),
+    );
 
     // Draining the head advances the window — the ASC LIMIT does not freeze,
     // because acked/purged rows leave the pending filter.
@@ -152,7 +157,13 @@ describe("feedback store round-trip", () => {
     }
     const second = await store.listFeedback(id, "pending");
     expect(second).toHaveLength(95);
-    expect(second[0].body).toBe("note 10");
+    expect(second.map((f) => f.body).slice(0, 5)).toEqual([
+      "note 10",
+      "note 11",
+      "note 12",
+      "note 13",
+      "note 14",
+    ]);
   });
 
   it("getFeedback returns null for an unknown id", async () => {

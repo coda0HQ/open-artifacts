@@ -701,7 +701,8 @@ describe("project-change feedback (type 2)", () => {
         body: "first",
       }),
     );
-    await new Promise((r) => setTimeout(r, 10));
+    // No sleep: back-to-back posts share a millisecond, and the rowid
+    // tie-break is what keeps them in arrival order.
     await exports.default.fetch(
       jsonRequest("POST", `/api/artifacts/${created.id}/feedback`, {
         projectRef: null,
