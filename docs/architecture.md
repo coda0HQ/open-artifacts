@@ -60,9 +60,9 @@ vitest miniflare tests.
 - Write token: `wt_` + 32 random bytes base64url, returned once at create.
   Only SHA-256(token) is stored; compared with `crypto.subtle.timingSafeEqual`.
 - Optional instance gate: if the `CREATE_TOKEN` secret is set on the deploy,
-  POST /api/artifacts requires it as a bearer token. Unset = open instance —
-  creation is then unguarded. The gate covers creation only: POST /comments is
-  open on every instance and is bounded by its own rate limit instead (below).
+  POST /api/artifacts requires it as a bearer token. Unset = open instance
+  (no per-request rate limiting is applied — the bearer gate is the only
+  abuse guard).
 - Optional canonical domain: if `PUBLIC_URL` (e.g. `https://coda0.com`) is set
   on the deploy, it is the base of every generated link (the API `url`,
   `og:url`, `og:image`) regardless of the host the request arrived on — so the
@@ -224,23 +224,8 @@ CI/plain git are out of scope for v1 (documented).
 ## Limits
 
 - Content cap 4 MiB (post-base64 for encrypted) — fits free-tier envelope.
-- The two anonymous write surfaces — POST /comments (open on every instance)
-  and POST /feedback (open where no `CREATE_TOKEN` is set) — are rate-limited
-  by a per-client, per-artifact token bucket: 30 writes / 10 min, keyed on
-  `CF-Connecting-IP`, held in the `rate_limits` D1 table and spent in one
-  atomic upsert. One rule, two key namespaces, so the buckets are independent
-  and thread activity cannot cost a viewer their feedback budget. On /feedback
-  the bucket sits below the auth check: a gated instance already refuses
-  anonymous callers with a 401 and writes nothing. Rows are pruned once fully
-  refilled, so the table tracks recent write activity rather than growing
-  forever. Hand-rolled because the native `ratelimit` binding caps its period
-  at 10 or 60 seconds and is explicitly not an authoritative accounting
-  system. Known residual: the key is the full client address, so a client
-  holding an IPv6 /64 can rotate within it for fresh buckets — inherent to
-  per-IP limiting, and bounding the total (not just the rate) is the separate
-  second bound R5 leaves open. No other route is rate-limited; the optional
-  `CREATE_TOKEN` bearer gate is the only guard on creation. (Cloudflare's
-  edge-level protections sit in front of the Worker but are not configured by
-  this project.)
+- No per-request rate limiting is implemented; the optional `CREATE_TOKEN`
+  bearer gate is the only abuse guard. (Cloudflare's edge-level protections
+  sit in front of the Worker but are not configured by this project.)
 - Free tier headroom: Workers 100k req/day, R2 1M writes/mo, D1 100k row
   writes/day.

@@ -1634,7 +1634,7 @@ const HOST_UI_SCRIPT = `
   pop.appendChild(nameEl);pop.appendChild(row);pop.appendChild(errEl);
   document.body.appendChild(pop);
 
-  var pending=null,posting=false,lastPost=0;
+  var pending=null,posting=false;
   function autosize(){bodyEl.style.height="auto";bodyEl.style.height=Math.min(bodyEl.scrollHeight,128)+"px"}
   function refreshSend(){if(bodyEl.value.trim())sendBtn.setAttribute("data-ready","");else sendBtn.removeAttribute("data-ready")}
   function clearErr(){errEl.textContent="";errEl.setAttribute("hidden","")}
@@ -1662,12 +1662,8 @@ const HOST_UI_SCRIPT = `
   sendBtn.addEventListener("click",submit);
   function submit(){
     var body=bodyEl.value.trim();if(!body||posting)return;
-    // Key-repeat guard, not a security control — the server's token bucket is
-    // authoritative. Stops a held Enter from spending the real budget on
-    // duplicates, which would then lock the thread out for everyone on this IP.
-    if(Date.now()-lastPost<1500)return;
     var author=nameEl.value.trim();if(author)setName(author);
-    posting=true;lastPost=Date.now();clearErr();
+    posting=true;clearErr();
     fetch("/api/artifacts/"+ID+"/comments",{method:"POST",headers:{"content-type":"application/json"},
       body:JSON.stringify({body:body,author:author||null,anchor:pending,anchorVersion:(pending&&pending.anchorVersion)||1})})
       .then(function(r){return r.ok?r.json():Promise.reject(r.status)})
@@ -1675,10 +1671,7 @@ const HOST_UI_SCRIPT = `
         state.push({id:cm.id,author:cm.author,body:cm.body,anchor:cm.anchor,done:!!cm.done,createdAt:cm.createdAt});
         sync();closePop();
       }).catch(function(err){
-        // 429 is the rate limit, and it is the one failure here a viewer can
-        // actually act on — say so plainly instead of showing them a number.
-        errEl.textContent=err===429?"Too many comments just now. Try again in a moment.":
-          typeof err==="number"?"Could not post ("+err+")":"Could not post";
+        errEl.textContent=typeof err==="number"?"Could not post ("+err+")":"Could not post";
         errEl.removeAttribute("hidden");
       }).then(function(){posting=false});
   }
