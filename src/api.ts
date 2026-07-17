@@ -5,13 +5,11 @@ import {
   MAX_COMMENT_BODY_BYTES,
   MAX_CONTENT_BYTES,
   MAX_FEEDBACK_BODY_BYTES,
-  retryAfterSeconds,
   validateComment,
   validateCreate,
   validateFeedback,
   validateFeedbackStatus,
   validateUpdate,
-  WRITE_RATE_LIMIT,
 } from "./domain";
 import type { ArtifactRecord, ArtifactStore } from "./store";
 import { D1R2Store, FEEDBACK_PAGE_LIMIT } from "./store";
@@ -387,15 +385,6 @@ const COMMENT_BODY_BYTES = MAX_COMMENT_BODY_BYTES + 4 * 1024;
 // authoritative per-field gate; this only stops a payload from being buffered.
 const FEEDBACK_BODY_BYTES = MAX_FEEDBACK_BODY_BYTES + 4 * 1024;
 
-// Bucket identity for an unauthenticated writer. Cloudflare's edge sets
-// CF-Connecting-IP on every request and overwrites any client-supplied value,
-// so a client cannot spoof its way into a fresh bucket. It is absent only
-// off-platform (wrangler dev, tests); collapsing those onto one shared bucket
-// is the safe reading of an unknown client, and beats a limiter that quietly
-// disables itself wherever the header is missing.
-const clientKey = (c: Context<AppContext>): string =>
-  c.req.header("CF-Connecting-IP") ?? "unknown";
-
 api.get("/artifacts/:id/comments", async (c) => {
   const store = storeFrom(c);
   const record = await store.get(c.req.param("id"));
@@ -412,21 +401,6 @@ api.post("/artifacts/:id/comments", async (c) => {
   const declaredLength = Number(c.req.header("content-length") ?? "0");
   if (declaredLength > COMMENT_BODY_BYTES) {
     return c.json({ error: "request body too large" }, 413);
-  }
-
-  // Above the size precheck, which bounds one row and not the number of them.
-  // Spent before the body is parsed, so malformed floods cost a token too, and
-  // per (artifact, client) so one abusive client cannot mute a thread for
-  // everyone else — or exhaust its own budget across unrelated artifacts.
-  const { allowed } = await store.consumeToken(
-    `comments:${record.id}:${clientKey(c)}`,
-    WRITE_RATE_LIMIT,
-    Date.now(),
-  );
-  if (!allowed) {
-    return c.json({ error: "too many comments, slow down" }, 429, {
-      "retry-after": String(retryAfterSeconds(WRITE_RATE_LIMIT)),
-    });
   }
 
   let body: Record<string, unknown>;
@@ -617,23 +591,6 @@ api.post("/artifacts/:id/feedback", async (c) => {
   const declaredLength = Number(c.req.header("content-length") ?? "0");
   if (declaredLength > FEEDBACK_BODY_BYTES) {
     return c.json({ error: "request body too large" }, 413);
-  }
-
-  // Same bound as /comments, on the same grounds: the precheck above caps one
-  // row, not how many. Below the auth check on purpose — a gated instance has
-  // already refused anonymous callers with a 401 and written nothing, so there
-  // is no row to bound and no reason to spend a token stopping it. Its own key
-  // namespace, so a viewer's thread activity and their reports to the agent do
-  // not compete for one budget.
-  const { allowed } = await store.consumeToken(
-    `feedback:${record.id}:${clientKey(c)}`,
-    WRITE_RATE_LIMIT,
-    Date.now(),
-  );
-  if (!allowed) {
-    return c.json({ error: "too much feedback, slow down" }, 429, {
-      "retry-after": String(retryAfterSeconds(WRITE_RATE_LIMIT)),
-    });
   }
 
   let body: Record<string, unknown>;

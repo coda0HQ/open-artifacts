@@ -9,7 +9,6 @@ import type {
   FeedbackInput,
   FeedbackRecord,
   FeedbackStatus,
-  RateLimitRule,
   UpdateInput,
   VersionMeta,
 } from "./domain";
@@ -75,13 +74,6 @@ export interface ArtifactStore {
     status: FeedbackStatus,
   ): Promise<FeedbackRecord | null>;
   deleteFeedback(id: string): Promise<void>;
-  // Spend one token from `key`'s bucket. `now` is epoch ms, injected so the
-  // time-dependent behavior is testable without a clock.
-  consumeToken(
-    key: string,
-    rule: RateLimitRule,
-    now: number,
-  ): Promise<{ allowed: boolean }>;
 }
 
 // Max feedback rows one poll returns. Exported so the CLI can tell the agent
@@ -134,17 +126,6 @@ const SCHEMA = [
     created_at TEXT NOT NULL
   )`,
   `CREATE INDEX IF NOT EXISTS idx_feedback_artifact_status ON feedback(artifact_id, status)`,
-  // Token buckets for anonymous writes (R5). Timestamps are REAL epoch seconds
-  // rather than the ISO TEXT used elsewhere because refill is arithmetic on
-  // them, done in SQL. Rows are spent state, not content: they are pruned once
-  // fully refilled, so this table stays bounded by recent write activity.
-  `CREATE TABLE IF NOT EXISTS rate_limits (
-    bucket_key TEXT PRIMARY KEY,
-    tokens REAL NOT NULL,
-    updated_at REAL NOT NULL
-  )`,
-  `CREATE INDEX IF NOT EXISTS idx_rate_limits_updated
-    ON rate_limits(updated_at)`,
 ];
 
 // Columns added after launch; migrate existing DBs in place. Each ALTER
@@ -739,47 +720,6 @@ export class D1R2Store implements ArtifactStore {
   async deleteFeedback(id: string): Promise<void> {
     await ensureSchema(this.db);
     await this.db.prepare("DELETE FROM feedback WHERE id = ?").bind(id).run();
-  }
-
-  // Hand-rolled on D1 rather than the native ratelimit binding, which cannot
-  // express this rule: its period is restricted to 10 or 60 seconds, so a
-  // 10-minute window is out of reach, and it is documented as per-colo and
-  // "intentionally designed to not be used as an accurate accounting system".
-  // R5 asks for an authoritative bound, so the cost of counting writes with a
-  // write is accepted — one statement beside the row the request already adds.
-  async consumeToken(
-    key: string,
-    rule: RateLimitRule,
-    now: number,
-  ): Promise<{ allowed: boolean }> {
-    await ensureSchema(this.db);
-    const seconds = now / 1000;
-    // A row idle this long has refilled to capacity however empty it was, so it
-    // says nothing a missing row would not. Dropping it keeps the limiter from
-    // becoming the unbounded-growth vector it exists to prevent: a client
-    // rotating addresses would otherwise mint a permanent row per address.
-    const staleBefore = seconds - rule.capacity / rule.refillPerSecond;
-    // Refill, spend, and refuse in one statement so two concurrent requests on
-    // a key cannot both read the same balance and both pass. An empty bucket
-    // fails the DO UPDATE's WHERE, which writes nothing and returns no row —
-    // that empty result, not a balance, is the rejection.
-    const [, spend] = await this.db.batch<{ tokens: number }>([
-      this.db
-        .prepare("DELETE FROM rate_limits WHERE updated_at <= ?")
-        .bind(staleBefore),
-      this.db
-        .prepare(
-          `INSERT INTO rate_limits (bucket_key, tokens, updated_at)
-             VALUES (?1, ?2 - 1, ?3)
-           ON CONFLICT(bucket_key) DO UPDATE SET
-             tokens = MIN(?2, rate_limits.tokens + (?3 - rate_limits.updated_at) * ?4) - 1,
-             updated_at = ?3
-           WHERE MIN(?2, rate_limits.tokens + (?3 - rate_limits.updated_at) * ?4) >= 1
-           RETURNING tokens`,
-        )
-        .bind(key, rule.capacity, seconds, rule.refillPerSecond),
-    ]);
-    return { allowed: spend.results.length > 0 };
   }
 }
 
