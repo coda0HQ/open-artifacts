@@ -33,6 +33,14 @@ and previews are gitignored. On the **first `create` in a project**, ask
 whether the artifact should be local and **recommend local**. Record the
 choice in `artifact.local` and place the Recipe/fragments accordingly.
 
+**Run `create`/`update`/`delete`/`migrate` one at a time — never concurrently.**
+`credentials.json` and the manifests are updated with an unlocked
+read-modify-write. The write re-reads immediately beforehand, which closes the
+window around each command's network round-trip, but two commands whose writes
+truly interleave can still lose one. A lost write token is unrecoverable — no
+endpoint re-issues one — so serialize them. This matters most for a
+"regenerate everything" pass: loop, don't fan out.
+
 If the user has no instance yet, point them at
 `${CLAUDE_SKILL_DIR}/references/deployment.md` — it has the three ways to get
 one (use the public shared instance with zero setup, self-host on their own

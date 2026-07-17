@@ -94,6 +94,10 @@ const requests: RecordedRequest[] = [];
 let nextResponse: { status: number; body: Record<string, unknown> } | null =
   null;
 let nextRaw: { contentType: string; body: string } | null = null;
+// Fires once, just before the response is written — after the CLI has sent its
+// request and is blocked awaiting the reply. Stands in for another process
+// touching shared state mid-round-trip, so a test can assert the CLI re-reads.
+let onRequest: (() => void) | null = null;
 let projectDir: string;
 
 beforeAll(async () => {
@@ -108,6 +112,11 @@ beforeAll(async () => {
         auth: req.headers.authorization,
         body: raw ? JSON.parse(raw) : {},
       });
+      if (onRequest) {
+        const hook = onRequest;
+        onRequest = null;
+        hook();
+      }
       if (req.method === "GET" && (req.url ?? "").includes("/raw")) {
         const preset = nextRaw ?? {
           contentType: "text/plain; charset=utf-8",
@@ -155,6 +164,7 @@ beforeEach(() => {
   requests.length = 0;
   nextResponse = null;
   nextRaw = null;
+  onRequest = null;
   projectDir = mkdtempSync(join(tmpdir(), "oa-cli-"));
   mkdirSync(join(projectDir, ".git"));
   mkdirSync(join(projectDir, "src"));
@@ -2088,6 +2098,64 @@ const authored = 1;
       expect(statSync(credentialsPath).mode & 0o777).toBe(0o600);
     },
   );
+});
+
+describe("credentials read-modify-write is re-read across the network", () => {
+  // Inject a token into credentials.json during the command's round-trip —
+  // standing in for a concurrent create by another process. A command that
+  // wrote back a pre-network snapshot would erase it; one that re-reads keeps it.
+  function injectTokenMidRequest(id: string, token: string): void {
+    onRequest = () => {
+      const path = join(projectDir, ".artifacts/credentials.json");
+      const current = existsSync(path)
+        ? readJson<CredentialsState>(path)
+        : { tokens: {} };
+      current.tokens = { ...current.tokens, [id]: token };
+      writeFileSync(path, `${JSON.stringify(current, null, 2)}\n`);
+    };
+  }
+
+  it("delete does not clobber a token written during its round-trip", async () => {
+    const { recipePath } = writeRecipe();
+    await run(["create", recipePath]);
+    expect(credentials().tokens?.testid123456).toMatch(/^wt_/);
+
+    const concurrent = `wt_${"y".repeat(43)}`;
+    injectTokenMidRequest("concurrent99", concurrent);
+    await run(["delete", "testid123456"]);
+
+    const after = credentials();
+    // The deleted artifact's own token is gone — the command still did its job.
+    expect(after.tokens?.testid123456).toBeUndefined();
+    // The token added mid-flight survived — the write-back re-read the file.
+    expect(after.tokens?.concurrent99).toBe(concurrent);
+  });
+
+  it("delete does not resurrect a sibling token deleted during its round-trip", async () => {
+    // Seed a second artifact's token, then delete the first. Mid-round-trip a
+    // concurrent process removes the *sibling* — the one this command isn't
+    // touching. A snapshot write-back (which read the sibling as present) would
+    // resurrect it; a re-read leaves it gone. Using a sibling, not the deleted
+    // id itself, is what makes the two implementations distinguishable — the
+    // command removes its own token under both.
+    const path = join(projectDir, ".artifacts/credentials.json");
+    const { recipePath } = writeRecipe();
+    await run(["create", recipePath]);
+    const seeded = credentials();
+    seeded.tokens = { ...seeded.tokens, sibling00000: `wt_${"z".repeat(43)}` };
+    writeFileSync(path, `${JSON.stringify(seeded, null, 2)}\n`);
+
+    onRequest = () => {
+      const current = readJson<CredentialsState>(path);
+      delete current.tokens?.sibling00000;
+      writeFileSync(path, `${JSON.stringify(current, null, 2)}\n`);
+    };
+    await run(["delete", "testid123456"]);
+
+    const after = credentials();
+    expect(after.tokens?.testid123456).toBeUndefined();
+    expect(after.tokens?.sibling00000).toBeUndefined();
+  });
 });
 
 describe("feedback poll", () => {
