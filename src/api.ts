@@ -2,8 +2,10 @@ import type { Context } from "hono";
 import { Hono } from "hono";
 import type { CreateInput } from "./domain";
 import {
+  COMMENT_RATE_LIMIT,
   MAX_COMMENT_BODY_BYTES,
   MAX_CONTENT_BYTES,
+  retryAfterSeconds,
   validateComment,
   validateCreate,
   validateUpdate,
@@ -367,6 +369,15 @@ api.get("/artifacts/:id/raw", async (c) => {
 // read; validateComment stays the authoritative per-field gate.
 const COMMENT_BODY_BYTES = MAX_COMMENT_BODY_BYTES + 4 * 1024;
 
+// Bucket identity for an unauthenticated writer. Cloudflare's edge sets
+// CF-Connecting-IP on every request and overwrites any client-supplied value,
+// so a client cannot spoof its way into a fresh bucket. It is absent only
+// off-platform (wrangler dev, tests); collapsing those onto one shared bucket
+// is the safe reading of an unknown client, and beats a limiter that quietly
+// disables itself wherever the header is missing.
+const clientKey = (c: Context<AppContext>): string =>
+  c.req.header("CF-Connecting-IP") ?? "unknown";
+
 api.get("/artifacts/:id/comments", async (c) => {
   const store = storeFrom(c);
   const record = await store.get(c.req.param("id"));
@@ -383,6 +394,21 @@ api.post("/artifacts/:id/comments", async (c) => {
   const declaredLength = Number(c.req.header("content-length") ?? "0");
   if (declaredLength > COMMENT_BODY_BYTES) {
     return c.json({ error: "request body too large" }, 413);
+  }
+
+  // Above the size precheck, which bounds one row and not the number of them.
+  // Spent before the body is parsed, so malformed floods cost a token too, and
+  // per (artifact, client) so one abusive client cannot mute a thread for
+  // everyone else — or exhaust its own budget across unrelated artifacts.
+  const { allowed } = await store.consumeToken(
+    `comments:${record.id}:${clientKey(c)}`,
+    COMMENT_RATE_LIMIT,
+    Date.now(),
+  );
+  if (!allowed) {
+    return c.json({ error: "too many comments, slow down" }, 429, {
+      "retry-after": String(retryAfterSeconds(COMMENT_RATE_LIMIT)),
+    });
   }
 
   let body: Record<string, unknown>;
