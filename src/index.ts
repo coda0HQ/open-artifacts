@@ -3,6 +3,7 @@ import type { AppContext } from "./api";
 import {
   api,
   artifactUrl,
+  isOpenInstance,
   ogImageUrl,
   parseVersionParam,
   storeFrom,
@@ -285,6 +286,7 @@ app.get("/a/:id", async (c) => {
       artifactId: record.id,
       comments,
       projectRef: record.projectRef,
+      feedbackEnabled: isOpenInstance(c),
       envelope: { ...content.encrypted!, ciphertext: content.body },
       nonce,
       versions,
@@ -305,6 +307,7 @@ app.get("/a/:id", async (c) => {
     comments,
     frameSrc,
     projectRef: record.projectRef,
+    feedbackEnabled: isOpenInstance(c),
     nonce,
     versions,
     currentVersion: version,

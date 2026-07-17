@@ -855,6 +855,231 @@ describe("project-change feedback (type 2)", () => {
     expect(res.status).toBe(201);
   });
 
+  it("does not accept the create token as a write token on a gated instance", async () => {
+    // The create token authorizes CREATING an artifact, not writing to an
+    // existing one. Honouring it here would let anyone who can create on the
+    // instance submit feedback as the artifact's owner.
+    const gatedEnv = { ...env, CREATE_TOKEN: "sekret-create" };
+    const ctx = createExecutionContext();
+    const createRes = await app.fetch(
+      jsonRequest(
+        "POST",
+        "/api/artifacts",
+        { content: "<p>x</p>", title: "t", favicon: "📊" },
+        { authorization: "Bearer sekret-create" },
+      ),
+      gatedEnv,
+      ctx,
+    );
+    await waitOnExecutionContext(ctx);
+    const { id } = (await createRes.json()) as { id: string };
+
+    const ctx2 = createExecutionContext();
+    const res = await app.fetch(
+      jsonRequest(
+        "POST",
+        `/api/artifacts/${id}/feedback`,
+        { body: "note" },
+        { authorization: "Bearer sekret-create" },
+      ),
+      gatedEnv,
+      ctx2,
+    );
+    await waitOnExecutionContext(ctx2);
+    expect(res.status).toBe(403);
+  });
+
+  it("serves no feedback control on a gated instance", async () => {
+    // A viewer holds no write token, so on a gated instance every submission
+    // 401s. The chrome must not render a control that cannot work — the viewer
+    // would only discover it after typing the note.
+    const gatedEnv = { ...env, CREATE_TOKEN: "sekret-create" };
+    const ctx = createExecutionContext();
+    const createRes = await app.fetch(
+      jsonRequest(
+        "POST",
+        "/api/artifacts",
+        { content: "<p>x</p>", title: "t", favicon: "📊" },
+        { authorization: "Bearer sekret-create" },
+      ),
+      gatedEnv,
+      ctx,
+    );
+    await waitOnExecutionContext(ctx);
+    const { id } = (await createRes.json()) as { id: string };
+
+    const ctx2 = createExecutionContext();
+    const res = await app.fetch(new Request(`${BASE}/a/${id}`), gatedEnv, ctx2);
+    await waitOnExecutionContext(ctx2);
+    const html = await res.text();
+    expect(html).not.toContain('id="oa-feedback-toggle"');
+    expect(html).not.toContain('id="oa-feedback-backdrop"');
+    expect(html).not.toContain("/feedback");
+  });
+
+  // The unlock (encrypted) page is a second, independently-built host shell.
+  // Gating hostShell alone would still ship a live panel + POST on every gated
+  // password-protected artifact, so assert the encrypted path on its own.
+  // The server never decrypts, so a synthetic envelope is enough to route to
+  // unlockShell.
+  const ENVELOPE = {
+    salt: "c2FsdHNhbHRzYWx0c2E=",
+    iv: "aXZpdml2aXZpdml2",
+    iterations: 10_000,
+  };
+
+  type TestEnv = Env & { CREATE_TOKEN?: string };
+
+  const createEncrypted = async (
+    fetchEnv: TestEnv,
+  ): Promise<{ id: string }> => {
+    const ctx = createExecutionContext();
+    const res = await app.fetch(
+      jsonRequest(
+        "POST",
+        "/api/artifacts",
+        {
+          content: "Y2lwaGVydGV4dA==",
+          title: "t",
+          favicon: "🔒",
+          encrypted: ENVELOPE,
+        },
+        fetchEnv.CREATE_TOKEN
+          ? { authorization: `Bearer ${fetchEnv.CREATE_TOKEN}` }
+          : {},
+      ),
+      fetchEnv,
+      ctx,
+    );
+    await waitOnExecutionContext(ctx);
+    expect(res.status).toBe(201);
+    return (await res.json()) as { id: string };
+  };
+
+  const fetchPage = async (id: string, fetchEnv: TestEnv) => {
+    const ctx = createExecutionContext();
+    const res = await app.fetch(new Request(`${BASE}/a/${id}`), fetchEnv, ctx);
+    await waitOnExecutionContext(ctx);
+    return res.text();
+  };
+
+  it("serves no feedback control on a gated ENCRYPTED artifact", async () => {
+    const gatedEnv = { ...env, CREATE_TOKEN: "sekret-create" };
+    const { id } = await createEncrypted(gatedEnv);
+    const html = await fetchPage(id, gatedEnv);
+    expect(html).not.toContain('id="oa-feedback-toggle"');
+    expect(html).not.toContain('id="oa-feedback-backdrop"');
+    expect(html).not.toContain("/feedback");
+  });
+
+  it("serves the feedback control on an open ENCRYPTED artifact", async () => {
+    // The mirror of the gated case: proves the gate is a real condition and
+    // not an unlock-shell path that never renders the control at all.
+    const { id } = await createEncrypted(env);
+    const html = await fetchPage(id, env);
+    expect(html).toContain('id="oa-feedback-toggle"');
+    expect(html).toContain('id="oa-feedback-backdrop"');
+  });
+
+  it("purges a feedback record on the owner's DELETE", async () => {
+    const created = await createArtifact();
+    const post = await exports.default.fetch(
+      jsonRequest("POST", `/api/artifacts/${created.id}/feedback`, {
+        body: "spam",
+      }),
+    );
+    const { id } = (await post.json()) as { id: string };
+
+    const res = await exports.default.fetch(
+      new Request(`${BASE}/api/artifacts/${created.id}/feedback/${id}`, {
+        method: "DELETE",
+        headers: { authorization: `Bearer ${created.writeToken}` },
+      }),
+    );
+    expect(res.status).toBe(200);
+
+    // Gone from every status poll, not merely hidden from pending.
+    for (const status of ["pending", "in_review", "in_progress", "done"]) {
+      const poll = await exports.default.fetch(
+        `${BASE}/api/artifacts/${created.id}/feedback?status=${status}`,
+        { headers: { authorization: `Bearer ${created.writeToken}` } },
+      );
+      expect(((await poll.json()) as { feedback: unknown[] }).feedback).toEqual(
+        [],
+      );
+    }
+  });
+
+  it("DELETE feedback is owner-only", async () => {
+    const created = await createArtifact();
+    const post = await exports.default.fetch(
+      jsonRequest("POST", `/api/artifacts/${created.id}/feedback`, {
+        body: "keep me",
+      }),
+    );
+    const { id } = (await post.json()) as { id: string };
+
+    const res = await exports.default.fetch(
+      new Request(`${BASE}/api/artifacts/${created.id}/feedback/${id}`, {
+        method: "DELETE",
+      }),
+    );
+    expect(res.status).toBe(401);
+
+    const poll = await exports.default.fetch(
+      `${BASE}/api/artifacts/${created.id}/feedback?status=pending`,
+      { headers: { authorization: `Bearer ${created.writeToken}` } },
+    );
+    expect(
+      ((await poll.json()) as { feedback: unknown[] }).feedback,
+    ).toHaveLength(1);
+  });
+
+  it("does not purge another artifact's feedback", async () => {
+    const a = await createArtifact();
+    const b = await createArtifact();
+    const post = await exports.default.fetch(
+      jsonRequest("POST", `/api/artifacts/${b.id}/feedback`, {
+        body: "b's note",
+      }),
+    );
+    const { id } = (await post.json()) as { id: string };
+
+    // a's owner may not reach into b's queue by id.
+    const res = await exports.default.fetch(
+      new Request(`${BASE}/api/artifacts/${a.id}/feedback/${id}`, {
+        method: "DELETE",
+        headers: { authorization: `Bearer ${a.writeToken}` },
+      }),
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("413s an oversized feedback body", async () => {
+    const created = await createArtifact();
+    const res = await exports.default.fetch(
+      jsonRequest("POST", `/api/artifacts/${created.id}/feedback`, {
+        body: "x".repeat(9 * 1024),
+      }),
+    );
+    expect(res.status).toBe(413);
+  });
+
+  it("413s an oversized payload BEFORE parsing it", async () => {
+    // Discriminates the pre-parse content-length guard from validateFeedback:
+    // the body field is tiny and valid, and validateFeedback ignores unknown
+    // keys, so only the guard can reject this. Sizing the guard off the
+    // artifact cap (~6 MiB) instead of the feedback cap would 201 it.
+    const created = await createArtifact();
+    const res = await exports.default.fetch(
+      jsonRequest("POST", `/api/artifacts/${created.id}/feedback`, {
+        body: "ok",
+        junk: "x".repeat(13 * 1024),
+      }),
+    );
+    expect(res.status).toBe(413);
+  });
+
   it("inlines projectRef into the served viewer page", async () => {
     const created = await createArtifact({ projectRef: "src/dashboard" });
     const html = await (

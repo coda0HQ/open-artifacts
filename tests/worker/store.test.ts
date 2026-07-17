@@ -108,6 +108,27 @@ describe("feedback store round-trip", () => {
     expect(versions[0].version).toBe(1);
   });
 
+  it("deleteFeedback removes one row and leaves the rest", async () => {
+    const store = new D1R2Store(env.DB, env.CONTENT);
+    const id = "fb-delete-one";
+    await store.create(id, "hash", INPUT, null);
+    const spam = await store.addFeedback(id, {
+      projectRef: null,
+      body: "spam",
+    });
+    const keep = await store.addFeedback(id, {
+      projectRef: null,
+      body: "legit",
+    });
+
+    await store.deleteFeedback(spam.id);
+
+    expect(await store.getFeedback(spam.id)).toBeNull();
+    const remaining = await store.listFeedback(id);
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0].id).toBe(keep.id);
+  });
+
   it("getFeedback returns null for an unknown id", async () => {
     const store = new D1R2Store(env.DB, env.CONTENT);
     expect(await store.getFeedback("no-such-feedback-id")).toBeNull();

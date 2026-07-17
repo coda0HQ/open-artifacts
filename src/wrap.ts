@@ -473,6 +473,7 @@ function headerHtml(
   url?: string,
   artifactId?: string,
   commentsCount = 0,
+  feedbackEnabled = false,
 ): string {
   // The hosted host always names itself "coda0" and links its own root,
   // ignoring BRAND_URL entirely (same override rule as the landing page); a
@@ -489,12 +490,17 @@ function headerHtml(
   const comments = artifactId
     ? `<button class="oa-cm-toggle" type="button" aria-label="Open comments" aria-expanded="false" aria-controls="oa-cm-drawer"${commentsCount > 0 ? ` data-count="${commentsCount}"` : ""}><span aria-hidden="true">${COMMENT_SVG}</span><span class="oa-cm-count" aria-hidden="true">${commentsCount}</span></button>`
     : "";
-  // The feedback toggle lives in the host chrome next to comments, gated on the
-  // same artifactId (the 404/version pages have none). Only the host can POST
-  // it — the artifact frame is air-gapped (connect-src 'none').
-  const feedbackButton = artifactId
-    ? `<button id="oa-feedback-toggle" type="button" aria-label="Open project-change feedback" aria-haspopup="dialog" aria-expanded="false">${FEEDBACK_SVG}</button>`
-    : "";
+  // The feedback toggle lives in the host chrome next to comments. Only the
+  // host can POST it — the artifact frame is air-gapped (connect-src 'none').
+  // Gated on an artifact id (the 404/version pages have none) AND on the
+  // instance being open: a viewer's browser holds no write token, so on a
+  // CREATE_TOKEN'd instance every viewer submission 401s. Rendering the button
+  // there would promise a channel that cannot deliver — the viewer would only
+  // find out after typing the note.
+  const feedbackButton =
+    artifactId && feedbackEnabled
+      ? `<button id="oa-feedback-toggle" type="button" aria-label="Open project-change feedback" aria-haspopup="dialog" aria-expanded="false">${FEEDBACK_SVG}</button>`
+      : "";
   const picker =
     versions && currentVersion && url
       ? versionPickerHtml(versions, currentVersion, url)
@@ -647,10 +653,10 @@ const LAYOUT_SCRIPT = `
 // Host-chrome project-change (type 2) feedback control. The host page is a
 // normal-origin document (connect-src 'self'), so it is the only party that can
 // POST; the artifact frame is air-gapped (connect-src 'none', opaque origin) and
-// may only postMessage the host to open the panel. projectRef is inlined at
-// serve time so the panel carries it from the start. When no projectRef was
-// inlined, the field is left blank for manual entry (the documented fallback
-// for artifacts created without source-project metadata).
+// carries no control at all. projectRef is inlined at serve time so the panel
+// carries it from the start. When no projectRef was inlined, the field is left
+// blank for manual entry (the documented fallback for artifacts created
+// without source-project metadata).
 const FEEDBACK_SCRIPT = `
 (function(){
   var OA={artifactId:__OA_ARTIFACT_ID__,projectRef:__OA_PROJECT_REF__};
@@ -681,17 +687,6 @@ const FEEDBACK_SCRIPT = `
   backdrop.addEventListener("click",function(e){if(e.target===backdrop)close();});
   document.addEventListener("keydown",function(e){
     if(e.key==="Escape"&&backdrop.hasAttribute("data-open"))close();
-  });
-  // The artifact frame may postMessage the host to open the panel — it has no
-  // other channel (no fetch, no storage). Authenticate by window identity: a
-  // sandboxed opaque-origin frame reports origin "null", so e.origin is
-  // useless as a gate and e.source is the only real one. The message carries
-  // no URL, method, or id — the host builds the request from its own
-  // serve-time id, so this cannot be turned into an open proxy.
-  var oaFrame=document.getElementById("oa-frame");
-  window.addEventListener("message",function(e){
-    if(!oaFrame||e.source!==oaFrame.contentWindow)return;
-    if(e.data&&typeof e.data==="object"&&e.data.__oa_feedback==="open")open();
   });
   form.addEventListener("submit",async function(e){
     e.preventDefault();
@@ -829,6 +824,12 @@ export interface HostShellOptions {
    * feedback form falls back to a manual project-path input.
    */
   projectRef?: string | null;
+  /**
+   * Whether to render the project-change feedback control. False on a gated
+   * (CREATE_TOKEN'd) instance, where a viewer — who holds no write token —
+   * would only ever get a 401 from the POST.
+   */
+  feedbackEnabled?: boolean;
   /** Per-request CSP nonce; stamped on every viewer-injected inline script. */
   nonce: string;
   /** All published versions, inlined into the chrome picker at serve time. */
@@ -1132,6 +1133,7 @@ export function hostShell(options: HostShellOptions): string {
     artifactId,
     frameSrc,
     projectRef,
+    feedbackEnabled = false,
     nonce,
     versions,
     currentVersion,
@@ -1140,8 +1142,11 @@ export function hostShell(options: HostShellOptions): string {
   const ogDescription = description || title;
   const commentsList = options.comments ?? [];
   const drawer = commentsDrawerHtml(artifactId, commentsList);
-  const feedbackPanel = feedbackPanelHtml();
-  const feedbackScriptBody = feedbackScript(artifactId, projectRef ?? null);
+  // Panel and script ride with the toggle: no control, no markup, no fetch.
+  const feedbackPanel = feedbackEnabled ? feedbackPanelHtml() : "";
+  const feedbackScriptBody = feedbackEnabled
+    ? feedbackScript(artifactId, projectRef ?? null)
+    : "";
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -1163,10 +1168,10 @@ export function hostShell(options: HostShellOptions): string {
 <meta name="twitter:title" content="${escapeHtml(title)}">
 <meta name="twitter:description" content="${escapeHtml(ogDescription)}">
 <meta name="twitter:image" content="${escapeHtml(ogImage)}">
-<style>${RESET_CSS}${COMMENTS_CSS}${FEEDBACK_CSS}${HOST_FRAME_CSS}</style>
+<style>${RESET_CSS}${COMMENTS_CSS}${feedbackEnabled ? FEEDBACK_CSS : ""}${HOST_FRAME_CSS}</style>
 </head>
 <body>
-${headerHtml(favicon, title, hostname, brandUrl, versions, currentVersion, url, artifactId, openCommentsCount(commentsList))}
+${headerHtml(favicon, title, hostname, brandUrl, versions, currentVersion, url, artifactId, openCommentsCount(commentsList), feedbackEnabled)}
 <iframe id="oa-frame" src="${escapeHtml(frameSrc)}" sandbox="allow-scripts allow-modals allow-forms allow-popups" title="${escapeHtml(title)}"></iframe>
 ${drawer}
 ${feedbackPanel}
@@ -1178,7 +1183,7 @@ ${commentsDataScript(commentsList)}
 <script nonce="${nonce}">${escapeInlineScript(COMMENTS_SCRIPT)}</script>
 <script nonce="${nonce}">${escapeInlineScript(hostBridgeScript(artifactId))}</script>
 <script nonce="${nonce}">${escapeInlineScript(HOST_UI_SCRIPT)}</script>
-<script nonce="${nonce}">${escapeInlineScript(feedbackScriptBody)}</script>
+${feedbackEnabled ? `<script nonce="${nonce}">${escapeInlineScript(feedbackScriptBody)}</script>` : ""}
 </body>
 </html>
 `;
@@ -1896,6 +1901,12 @@ export interface UnlockShellOptions {
    * feedback form falls back to a manual project-path input.
    */
   projectRef?: string | null;
+  /**
+   * Whether to render the project-change feedback control. False on a gated
+   * (CREATE_TOKEN'd) instance, where a viewer — who holds no write token —
+   * would only ever get a 401 from the POST.
+   */
+  feedbackEnabled?: boolean;
   envelope: EncryptionParams & { ciphertext: string };
   /** Per-request CSP nonce; stamped on every viewer-injected inline <script>
    *  in the unlock shell and threaded into the srcdoc'd frame template so the
@@ -1927,6 +1938,7 @@ export function unlockShell(options: UnlockShellOptions): string {
     artifactId,
     comments,
     projectRef,
+    feedbackEnabled = false,
     envelope,
     nonce,
     versions,
@@ -2074,10 +2086,10 @@ input.focus();
 <meta name="twitter:title" content="${escapeHtml(title)}">
 <meta name="twitter:description" content="${escapeHtml(ogDescription)}">
 <meta name="twitter:image" content="${escapeHtml(ogImage)}">
-<style>${RESET_CSS}${UNLOCK_CSS}${COMMENTS_CSS}${FEEDBACK_CSS}</style>
+<style>${RESET_CSS}${UNLOCK_CSS}${COMMENTS_CSS}${feedbackEnabled ? FEEDBACK_CSS : ""}</style>
 </head>
 <body>
-${headerHtml(favicon, title, hostname, brandUrl, versions, currentVersion, url, artifactId, openCommentsCount(commentsList))}
+${headerHtml(favicon, title, hostname, brandUrl, versions, currentVersion, url, artifactId, openCommentsCount(commentsList), feedbackEnabled)}
 <div class="oa-unlock">
   <form class="oa-card" id="oa-form">
     <div class="oa-emoji">${escapeHtml(favicon)}</div>
@@ -2091,11 +2103,11 @@ ${headerHtml(favicon, title, hostname, brandUrl, versions, currentVersion, url, 
 </div>
 <iframe id="oa-frame" sandbox="allow-scripts allow-modals" title="${escapeHtml(title)}"></iframe>
 ${drawer}
-${feedbackPanelHtml()}
+${feedbackEnabled ? feedbackPanelHtml() : ""}
 ${commentsDataScript(commentsList)}
 <script nonce="${nonce}">window.__oaViewedVersion=${Number(currentVersion ?? 1)};</script>
 <script nonce="${nonce}">${unlockScript}</script>
-<script nonce="${nonce}">${feedbackScript(artifactId, projectRef ?? null)}</script>
+${feedbackEnabled ? `<script nonce="${nonce}">${escapeInlineScript(feedbackScript(artifactId, projectRef ?? null))}</script>` : ""}
 <script nonce="${nonce}">${VERSION_SCRIPT}</script>
 <script nonce="${nonce}">${THEME_SCRIPT}</script>
 <script nonce="${nonce}">${LAYOUT_SCRIPT}</script>

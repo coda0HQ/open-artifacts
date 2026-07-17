@@ -73,6 +73,7 @@ export interface ArtifactStore {
     id: string,
     status: FeedbackStatus,
   ): Promise<FeedbackRecord | null>;
+  deleteFeedback(id: string): Promise<void>;
 }
 
 const SCHEMA = [
@@ -697,6 +698,11 @@ export class D1R2Store implements ArtifactStore {
       .bind(status, id)
       .run();
     return this.getFeedback(id);
+  }
+
+  async deleteFeedback(id: string): Promise<void> {
+    await ensureSchema(this.db);
+    await this.db.prepare("DELETE FROM feedback WHERE id = ?").bind(id).run();
   }
 }
 

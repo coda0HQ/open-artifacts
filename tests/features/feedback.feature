@@ -25,6 +25,21 @@ Feature: Project-change feedback channel (type 2)
     When the host chrome POSTs feedback to /api/artifacts/abc123/feedback
     Then the response status is 201
 
+  # The create token authorizes creating an artifact, not writing to an
+  # existing one. It must not stand in for the artifact's write token here.
+  Scenario: The create token does not authorize feedback on a gated instance
+    Given CREATE_TOKEN is set and the create token is presented as the bearer token
+    When the host chrome POSTs feedback to /api/artifacts/abc123/feedback
+    Then the response status is 403
+
+  # A viewer's browser holds no write token, so on a gated instance every
+  # viewer submission would 401. Ship no control rather than a dead one.
+  Scenario: A gated instance serves no feedback control
+    Given CREATE_TOKEN is set
+    When a viewer GETs /a/abc123
+    Then the host page carries neither the feedback toggle nor the panel
+    And the host page inlines no feedback POST
+
   Scenario: The agent polls pending feedback for an artifact
     Given two pending feedback records exist for artifact "abc123"
     When the owner GETs /api/artifacts/abc123/feedback?status=pending with the write token
@@ -45,6 +60,37 @@ Feature: Project-change feedback channel (type 2)
     Then the record status is "in_progress"
     When the owner POSTs /api/artifacts/abc123/feedback/fb1/ack advancing to "done"
     Then the record status is "done"
+
+  # Submission is unauthenticated on an open instance, so the owner needs a way
+  # to remove spam outright — "done" only hides a row from the pending poll.
+  Scenario: The owner purges a feedback record
+    Given feedback record "fb1" for artifact "abc123" exists
+    When the owner DELETEs /api/artifacts/abc123/feedback/fb1 with the write token
+    Then the response status is 200
+    And the record is gone from every status poll
+
+  # A route the skill cannot reach is not a channel. The agent works the queue
+  # entirely through the CLI, so poll/advance/purge each need a subcommand.
+  Scenario: The agent works the queue from the skill CLI
+    Given pending feedback exists for an artifact whose write token is stored
+    When the agent runs "feedback <id>"
+    Then it prints each pending note with its id, status, createdAt and body
+    When the agent runs "feedback-ack <id> <fid> --status in_progress"
+    Then the record advances to "in_progress"
+    When the agent runs "feedback-rm <id> <fid>"
+    Then the record is deleted outright
+
+  Scenario: A failed purge is reported, not swallowed
+    Given the server rejects the delete with 404
+    When the agent runs "feedback-rm <id> <fid>"
+    Then the CLI exits non-zero and prints the server's error
+    And it does not print a success line
+
+  Scenario: Purging feedback is owner-only
+    Given feedback record "fb1" for artifact "abc123" exists
+    When a request DELETEs /api/artifacts/abc123/feedback/fb1 without a token
+    Then the response status is 401
+    And the record still exists
 
   Scenario: The agent closes feedback without regenerating at the lifecycle end
     Given feedback record "fb1" for artifact "abc123" is in status "in_progress"
