@@ -90,6 +90,33 @@ export interface VersionMeta {
 export const MAX_COMMENT_BODY_BYTES = 8 * 1024;
 export const MAX_COMMENT_AUTHOR_LENGTH = 200;
 
+// A token bucket: `capacity` writes may burst, then throughput settles to
+// `refillPerSecond`. Sizing is a rate bound, not a size bound — the
+// content-length precheck already caps one row; this caps how many rows an
+// unauthenticated client can add.
+export interface RateLimitRule {
+  capacity: number;
+  refillPerSecond: number;
+}
+
+// 30 writes per 10 minutes, per client, per artifact (R5) — the bound on both
+// anonymous write surfaces, /comments and /feedback. Far above what a person
+// types by hand, low enough that a flood stops being free. One rule, but the
+// buckets stay separate: each route namespaces its own key, so chatting in a
+// thread cannot cost a viewer their ability to report a problem. Split this in
+// two the day the two surfaces genuinely want different numbers.
+export const WRITE_RATE_LIMIT: RateLimitRule = {
+  capacity: 30,
+  refillPerSecond: 30 / (10 * 60),
+};
+
+// How long a client is told to wait once its bucket is empty: the time for a
+// single token to accrue. An upper bound on the true wait (a partly-refilled
+// bucket opens sooner), so it never under-promises, and it needs no extra read
+// on the rejection path — the path an abusive client hits most.
+export const retryAfterSeconds = (rule: RateLimitRule): number =>
+  Math.ceil(1 / rule.refillPerSecond);
+
 // Anchor caps. Quote/context are code-point lengths (a selection is measured in
 // characters); the whole-anchor cap is UTF-8 bytes so a multibyte quote that
 // passes the code-point cap can still be rejected before it reaches storage.
