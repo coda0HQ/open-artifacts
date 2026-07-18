@@ -483,6 +483,134 @@ describe("anchored comments", () => {
     };
     expect(list.comments.map((c) => c.body)).toEqual(["nice work"]);
   });
+
+  it("rejects a text anchor on an encrypted PAST version after a plain update", async () => {
+    // The exploit: v1 encrypted, v2 plaintext. The artifact-level flag now
+    // reads plaintext, but v1's ciphertext is still served at ?v=1. A text
+    // anchor claiming anchorVersion 1 would copy v1's plaintext into D1, where
+    // GET /comments serves it to anyone — the ZK guarantee, gone.
+    const envelope = await encrypt("secret revenue $5M", "pw");
+    const created = await createEncrypted(envelope);
+    const put = await exports.default.fetch(
+      jsonRequest(
+        "PUT",
+        `/api/artifacts/${created.id}`,
+        { content: "<h1>now public</h1>" },
+        { authorization: `Bearer ${created.writeToken}` },
+      ),
+    );
+    expect(put.status).toBe(200);
+
+    const leak = await postComment(created.id, {
+      body: "leaky",
+      anchor: {
+        mode: "text",
+        quote: "secret revenue $5M",
+        prefix: "",
+        suffix: "",
+        start: 0,
+        anchorVersion: 1,
+      },
+    });
+    expect(leak.status).toBe(400);
+    const list = (await (await getComments(created.id)).json()) as {
+      comments: unknown[];
+    };
+    expect(list.comments.length).toBe(0);
+  });
+
+  it("accepts an omitted-version text anchor on the plaintext current version after a mixed history", async () => {
+    // validateAnchor fills a missing anchorVersion with CURRENT_ANCHOR_VERSION
+    // (1). The stamp block must override that placeholder with currentVersion
+    // before the encryption guard runs — otherwise a mixed-encryption artifact
+    // (v1 encrypted, v2 plain) would reject a legitimate text anchor on v2
+    // because the guard would check v1. Omitting the field is exactly the
+    // path that would hide a "use parsed.value before stamp" regression.
+    const envelope = await encrypt("secret revenue $5M", "pw");
+    const created = await createEncrypted(envelope);
+    const put = await exports.default.fetch(
+      jsonRequest(
+        "PUT",
+        `/api/artifacts/${created.id}`,
+        { content: "<h1>now public</h1>" },
+        { authorization: `Bearer ${created.writeToken}` },
+      ),
+    );
+    expect(put.status).toBe(200);
+
+    const ok = await postComment(created.id, {
+      body: "annotating the public current version",
+      anchor: {
+        mode: "text",
+        quote: "now public",
+        prefix: "",
+        suffix: "",
+        start: 4,
+        // anchorVersion deliberately omitted
+      },
+    });
+    expect(ok.status).toBe(201);
+    const comment = (await ok.json()) as { anchor: { anchorVersion: number } };
+    expect(comment.anchor.anchorVersion).toBe(2);
+  });
+
+  it("allows a text anchor on a plaintext past version after an encrypted update", async () => {
+    // The mirror case: v1 plaintext, v2 encrypted. A text anchor on v1 leaks
+    // nothing — v1 was never secret — so the guard must NOT block it, or it
+    // over-blocks legitimate annotation. Proves the fix keys on the version,
+    // not merely "was this artifact ever encrypted".
+    const created = await createArtifact({ content: "<h1>public v1</h1>" });
+    const envelope = await encrypt("<h1>secret v2</h1>", "pw");
+    const put = await exports.default.fetch(
+      jsonRequest(
+        "PUT",
+        `/api/artifacts/${created.id}`,
+        {
+          content: envelope.content,
+          encrypted: {
+            salt: envelope.salt,
+            iv: envelope.iv,
+            iterations: envelope.iterations,
+          },
+        },
+        { authorization: `Bearer ${created.writeToken}` },
+      ),
+    );
+    expect(put.status).toBe(200);
+
+    const ok = await postComment(created.id, {
+      body: "annotating the public version",
+      anchor: {
+        mode: "text",
+        quote: "public v1",
+        prefix: "",
+        suffix: "",
+        start: 3,
+        anchorVersion: 1,
+      },
+    });
+    expect(ok.status).toBe(201);
+  });
+
+  it("cannot dodge the guard with an out-of-range anchorVersion", async () => {
+    // anchorVersion is clamped to currentVersion. A forged 999 on an encrypted
+    // artifact must clamp to the (encrypted) current version and still be
+    // refused — the guard has to run against the stamped version, not the claim.
+    const envelope = await encrypt("still secret", "pw");
+    const created = await createEncrypted(envelope);
+    const rejected = await postComment(created.id, {
+      body: "forged",
+      anchor: {
+        mode: "text",
+        quote: "still secret",
+        prefix: "",
+        suffix: "",
+        start: 0,
+        anchorVersion: 999,
+      },
+    });
+    expect(rejected.status).toBe(400);
+  });
 });
 
 describe("DELETE /api/artifacts/:id/comments/:commentId", () => {

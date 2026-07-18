@@ -413,17 +413,6 @@ api.post("/artifacts/:id/comments", async (c) => {
   const parsed = validateComment(body);
   if (!parsed.ok) return c.json({ error: parsed.error }, parsed.status);
 
-  // A text anchor stores a verbatim quote of the artifact body. On an encrypted
-  // artifact the server never holds plaintext, so accepting one would copy
-  // plaintext into D1 and break the zero-knowledge guarantee. Point anchors
-  // (world coordinates) and unanchored comments leak nothing and are allowed.
-  if (parsed.value.anchor?.mode === "text" && record.encrypted) {
-    return c.json(
-      { error: "text anchors are not allowed on encrypted artifacts" },
-      400,
-    );
-  }
-
   // Stamp/clamp anchorVersion to the artifact's version space so a client
   // cannot forge a future version that hides markers for every real viewer
   // (anchorVersion > viewedVersion filters them out). Keep an in-range claim;
@@ -434,6 +423,10 @@ api.post("/artifacts/:id/comments", async (c) => {
   // it has no artifact. Trusting that value would record every version-less
   // API post as v1: a false drift tag, and a marker on versions where the
   // comment never existed.
+  //
+  // This runs before the encryption guard below because the guard must check
+  // the version the anchor actually lands on — the stamped value, not the raw
+  // claim — so a forged out-of-range anchorVersion cannot route around it.
   let input = parsed.value;
   if (input.anchor) {
     const rawAnchor = body.anchor as Record<string, unknown> | null | undefined;
@@ -447,6 +440,30 @@ api.post("/artifacts/:id/comments", async (c) => {
       ...input,
       anchor: { ...input.anchor, anchorVersion: stamped },
     };
+  }
+
+  // A text anchor stores a verbatim quote of the artifact body. On an encrypted
+  // version the server never holds plaintext, so accepting one would copy
+  // plaintext into D1 and break the zero-knowledge guarantee. Point anchors
+  // (world coordinates) and unanchored comments leak nothing and are allowed.
+  //
+  // Check the ANCHORED version's own encryption state, not record.encrypted:
+  // that flag is artifact-level (the current version), so on a mixed-encryption
+  // artifact — v1 encrypted, v2 plaintext — it reads plaintext and would wave
+  // through a quote of v1's still-secret body. getContentMeta reads the R2
+  // object's per-version flag, the authoritative source /raw and the viewer
+  // already use. A missing version fails closed (treated as encrypted).
+  if (input.anchor?.mode === "text") {
+    const meta = await store.getContentMeta(
+      record.id,
+      input.anchor.anchorVersion,
+    );
+    if (meta === null || meta.encrypted) {
+      return c.json(
+        { error: "text anchors are not allowed on encrypted artifacts" },
+        400,
+      );
+    }
   }
 
   // Per-comment delete token, mirroring the artifact write-token idiom: only the
