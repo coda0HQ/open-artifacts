@@ -108,12 +108,17 @@ const SCHEMA = [
     created_at TEXT NOT NULL,
     PRIMARY KEY (artifact_id, version)
   )`,
+  // anchor / delete_token_hash / done must also appear in MIGRATIONS below —
+  // SCHEMA alone never upgrades an existing production DB (#33).
   `CREATE TABLE IF NOT EXISTS comments (
     id TEXT PRIMARY KEY,
     artifact_id TEXT NOT NULL,
     author TEXT,
     body TEXT NOT NULL,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    anchor TEXT,
+    delete_token_hash TEXT,
+    done INTEGER NOT NULL DEFAULT 0
   )`,
   `CREATE INDEX IF NOT EXISTS idx_comments_artifact_created
     ON comments(artifact_id, created_at)`,
@@ -128,9 +133,13 @@ const SCHEMA = [
   `CREATE INDEX IF NOT EXISTS idx_feedback_artifact_status ON feedback(artifact_id, status)`,
 ];
 
-// Columns added after launch; migrate existing DBs in place. Each ALTER
-// errors if the column already exists, which is fine — the column is there.
-// The unique index makes channel binding race-safe: concurrent first
+// Convention (#33): SCHEMA is the full current shape for fresh DBs; MIGRATIONS
+// ALTERs every column added after v1 so existing DBs catch up. New columns
+// must be added to BOTH — SCHEMA-only never reaches production; MIGRATIONS-only
+// leaves fresh installs depending on an ALTER.
+//
+// Each ALTER errors if the column already exists, which is fine — the column
+// is there. The unique index makes channel binding race-safe: concurrent first
 // publishes to one channel can only mint one artifact (SQLite allows any
 // number of NULLs, so channel-less artifacts are unaffected).
 const MIGRATIONS = [
@@ -172,37 +181,48 @@ const isExpectedMigrationError = (error: unknown): boolean =>
 
 // Memoized per database so a second binding (or a fresh test database in the
 // same isolate) never skips its own setup. A failed attempt clears the memo,
-// so a transient D1 error does not poison every subsequent request.
+// so a transient D1 error does not poison every subsequent request — including
+// unexpected migration/backfill failures (#33), which used to warn-and-continue
+// and permanently memoize success for the isolate's life.
 const schemaReady = new WeakMap<D1Database, Promise<unknown>>();
 
-async function ensureSchema(db: D1Database): Promise<unknown> {
+type EnsureSchemaOptions = {
+  // Test-only override: run these instead of MIGRATIONS (skips BACKFILL).
+  migrations?: readonly string[];
+};
+
+async function ensureSchema(
+  db: D1Database,
+  options?: EnsureSchemaOptions,
+): Promise<unknown> {
   const pending = schemaReady.get(db);
   if (pending) return pending;
+  const migrations = options?.migrations ?? MIGRATIONS;
+  const runBackfill = options?.migrations === undefined;
   const run = async () => {
     await db.batch(SCHEMA.map((sql) => db.prepare(sql)));
     // Statements run via prepare(), not exec(): exec() splits its input on
     // newlines and rejects multi-line statements like BACKFILL. Sequential,
     // not parallel: the unique index depends on the channel_hash ALTER having
-    // run first on a pre-channel database. Failures don't block requests, but
-    // only the expected ones — column already added, or an index blocked by
-    // legacy duplicate rows (findByChannel orders those deterministically) —
-    // stay silent.
-    for (const sql of MIGRATIONS) {
-      await db
-        .prepare(sql)
-        .run()
-        .catch((error) => {
-          if (!isExpectedMigrationError(error)) {
-            console.warn("migration failed, continuing:", sql, error);
-          }
-        });
+    // run first on a pre-channel database. Expected failures (column already
+    // added, or an index blocked by legacy duplicate rows) stay silent;
+    // anything else rejects so the memo clears and the next request retries.
+    for (const sql of migrations) {
+      try {
+        await db.prepare(sql).run();
+      } catch (error) {
+        if (!isExpectedMigrationError(error)) {
+          console.warn("migration failed:", sql, error);
+          throw error;
+        }
+      }
     }
     // Backfill historical version rows that got empty defaults from the
-    // ALTER above. No-op once rows are populated.
-    await db
-      .prepare(BACKFILL)
-      .run()
-      .catch((error) => console.warn("version backfill failed:", error));
+    // ALTER above. No-op once rows are populated. A real failure must reject
+    // so we do not memoize success and skip the backfill forever (#33).
+    if (runBackfill) {
+      await db.prepare(BACKFILL).run();
+    }
   };
   const attempt = run().catch((error) => {
     schemaReady.delete(db);
@@ -210,6 +230,19 @@ async function ensureSchema(db: D1Database): Promise<unknown> {
   });
   schemaReady.set(db, attempt);
   return attempt;
+}
+
+/** @internal Test hook — production callers go through D1R2Store. */
+export async function ensureSchemaForTests(
+  db: D1Database,
+  options?: EnsureSchemaOptions,
+): Promise<unknown> {
+  return ensureSchema(db, options);
+}
+
+/** @internal Clears the per-DB schema memo between migration tests. */
+export function resetSchemaMemoForTests(db: D1Database): void {
+  schemaReady.delete(db);
 }
 
 interface ArtifactRow {
