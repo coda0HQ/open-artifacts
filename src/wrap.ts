@@ -59,24 +59,23 @@ function scriptSrcForNonce(selfSrc: string, nonce: string): string {
 }
 
 // Web fonts + runtime libraries are an opt-in per-deploy surface (env var
-// OPEN_ARTIFACTS_WEB_FONTS). When enabled, the sandbox gains allow-same-origin
-// so the browser can cache fonts, font-src widens to 'self' plus a bounded
-// allowlist of font CDNs (Fontshare + Google Fonts, the two that serve woff2
-// over a stable CDN for Awwwards-listed families), style-src gains 'self' plus
-// the Google Fonts CSS host (so the same-origin /fonts/<slug>.css shim and
-// Google Fonts @import load). Runtime libraries (mermaid) are self-hosted:
-// the vendored bundle is served same-origin from /vendor/mermaid.runtime.js
-// (a static asset under public/), so script-src stays 'self' + nonce with no
-// external script host. The trade-off: artifacts lose the opaque-origin
-// guarantee and can read the host origin's localStorage/cookies, and an
-// artifact can pull passive font bytes from the allowlisted CDNs (fonts are
-// non-executable, so the allowlist has no code-execution surface). Default
-// (webFonts=false) keeps the strict opaque-origin sandbox and font-src of a
-// self-hosted deploy.
-// fontHosts is the bare CDN host list reused by the frameSandbox+origin path
-// (opaque-origin frames cannot use CSP 'self', so the real origin is swapped
-// in for 'self' and the CDN hosts are appended verbatim — see
-// contentSecurityPolicy).
+// OPEN_ARTIFACTS_WEB_FONTS). When enabled, font-src widens to 'self' plus a
+// bounded allowlist of font CDNs (Fontshare + Google Fonts, the two that serve
+// woff2 over a stable CDN for Awwwards-listed families), and style-src gains
+// 'self' plus the Google Fonts CSS host (so the same-origin /fonts/<slug>.css
+// shim and Google Fonts @import load). Runtime libraries (mermaid) are
+// self-hosted: the vendored bundle is served same-origin from
+// /vendor/mermaid.runtime.js (a static asset under public/), so script-src
+// stays 'self' + nonce with no external script host. The trade-off is narrow:
+// an artifact can pull passive font bytes from the allowlisted CDNs (fonts are
+// non-executable, so the allowlist has no code-execution surface). The sandbox
+// stays opaque either way — the opt-in never grants allow-same-origin (R1), so
+// the air-gap to the host page holds. Default (webFonts=false) keeps font-src
+// data:-only, the strict form for a self-hosted deploy.
+// fontHosts is the bare CDN host list reused by the opaque-frame path: an
+// opaque-origin frame cannot use CSP 'self', so the caller passes the real
+// origin (swapped in for 'self') and the CDN hosts are appended verbatim —
+// see contentSecurityPolicy.
 const WEB_FONT_CSP = {
   fontSrc: "'self' data: cdn.fontshare.com fonts.gstatic.com",
   styleSrc: "'self' 'unsafe-inline' fonts.googleapis.com",
@@ -85,27 +84,20 @@ const WEB_FONT_CSP = {
 export function contentSecurityPolicy(options: {
   sandbox: boolean;
   webFonts?: boolean;
-  // Forces a strict sandbox (no allow-same-origin) even when webFonts is on.
-  // The artifact frame (GET /a/:id/frame) must never become same-origin with
-  // the privileged host page (R1) — allow-same-origin on a sandboxed frame
-  // grants it the response URL's origin, which would let it read the host
-  // page's localStorage/cookies across the air-gap.
-  frameSandbox?: boolean;
-  // Absolute origin of the response URL (e.g. https://coda0.com). Required for
-  // frameSandbox+webFonts: an opaque-origin document's CSP 'self' does not
-  // match the worker host, so the same-origin /fonts/<slug> proxy would be
-  // blocked. Passing the real origin lets those subresources load as
-  // cross-origin-from-opaque while the sandbox token stays strict.
+  // Absolute origin of the response URL (e.g. https://coda0.com). A sandboxed
+  // document has an opaque origin, so its CSP 'self' matches nothing and the
+  // same-origin /fonts/<slug> proxy would be blocked; passing the real origin
+  // lets those subresources load as cross-origin-from-opaque. Only the artifact
+  // frame passes it — /raw serves non-frame content under 'self'.
   origin?: string;
   // Per-request CSP nonce; stamped on every viewer-injected inline <script>
   // and emitted in script-src so 'unsafe-inline' can be dropped (issue #11).
   nonce: string;
 }): string {
   const webFonts = options.webFonts === true;
-  const opaqueFrame = options.sandbox && options.frameSandbox === true;
-  // Prefer an explicit origin for opaque frames; fall back to 'self' only for
-  // non-opaque sandboxes (legacy webFonts+allow-same-origin path).
-  const selfSrc = opaqueFrame && options.origin ? options.origin : "'self'";
+  // Opaque-origin frames can't use 'self'; the caller passes the real origin.
+  // Only the frame does, so /raw (no origin) stays on 'self' as before.
+  const selfSrc = options.origin ?? "'self'";
   const directives = [
     "default-src 'none'",
     // script-src is the same nonce-only form whether or not web fonts are on:
@@ -121,9 +113,13 @@ export function contentSecurityPolicy(options: {
     "base-uri 'none'",
   ];
   if (options.sandbox) {
-    const allowSameOrigin = webFonts && options.frameSandbox !== true;
+    // Never allow-same-origin. A sandboxed artifact frame must keep its opaque
+    // origin so it cannot reach the privileged host page's storage across the
+    // air-gap (R1), and that holds unconditionally — it is not a per-call
+    // choice a future route could forget. Font caching does not need it: fonts
+    // load via the CDN allowlist and the origin above, not same-origin access.
     directives.unshift(
-      `sandbox allow-scripts allow-modals allow-forms allow-popups${allowSameOrigin ? " allow-same-origin" : ""}`,
+      "sandbox allow-scripts allow-modals allow-forms allow-popups",
     );
   }
   return directives.join("; ");
@@ -133,7 +129,6 @@ export function userContentHeaders(options: {
   sandbox: boolean;
   contentType: string;
   webFonts?: boolean;
-  frameSandbox?: boolean;
   origin?: string;
   nonce: string;
 }): Headers {
@@ -142,7 +137,6 @@ export function userContentHeaders(options: {
     "content-security-policy": contentSecurityPolicy({
       sandbox: options.sandbox,
       webFonts: options.webFonts,
-      frameSandbox: options.frameSandbox,
       origin: options.origin,
       nonce: options.nonce,
     }),
