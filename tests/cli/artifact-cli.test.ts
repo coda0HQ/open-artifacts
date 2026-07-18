@@ -85,6 +85,7 @@ interface ManifestState {
 interface CredentialsState {
   tokens?: Record<string, string>;
   channels?: Record<string, string>;
+  passwords?: Record<string, string>;
   namedPasswords?: Record<string, string>;
 }
 
@@ -232,6 +233,57 @@ function manifest(local = false): ManifestState {
 function credentials(): CredentialsState {
   const path = join(projectDir, ".artifacts/credentials.json");
   return existsSync(path) ? readJson<CredentialsState>(path) : {};
+}
+
+const toB64 = (buf: ArrayBuffer | Uint8Array): string => {
+  const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+  return Buffer.from(bytes).toString("base64");
+};
+
+// Build a /raw encrypted envelope the migrate path can decrypt. Uses a low
+// iteration count so the suite stays fast; decryptContent trusts the payload.
+async function encryptLegacyRaw(
+  plaintext: string,
+  password: string,
+  iterations = 10_000,
+): Promise<{
+  alg: string;
+  kdf: string;
+  iterations: number;
+  salt: string;
+  iv: string;
+  ciphertext: string;
+}> {
+  const enc = new TextEncoder();
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const baseKey = await crypto.subtle.importKey(
+    "raw",
+    enc.encode(password),
+    "PBKDF2",
+    false,
+    ["deriveKey"],
+  );
+  const key = await crypto.subtle.deriveKey(
+    { name: "PBKDF2", hash: "SHA-256", salt, iterations },
+    baseKey,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt"],
+  );
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    key,
+    enc.encode(plaintext),
+  );
+  return {
+    alg: "AES-GCM",
+    kdf: "PBKDF2-SHA256",
+    iterations,
+    salt: toB64(salt),
+    iv: toB64(iv),
+    ciphertext: toB64(ciphertext),
+  };
 }
 
 function validCanvasBody(): string {
@@ -2046,6 +2098,34 @@ const authored = 1;
     expect(content).not.toContain("dataset.legacy");
   });
 
+  it("reaches the encrypted-migrate path without a dangling credentials reference", async () => {
+    // The encrypted branch reads credentials.passwords[id] to recover a stored
+    // password. That read must not throw ReferenceError — the failure a dropped
+    // `const credentials` binding causes, and which only the encrypted path (no
+    // --password flag) hits, so the other migrate tests never exercised it.
+    seedLegacyManifest({ encrypted: true });
+    nextRaw = {
+      contentType: "application/json",
+      body: JSON.stringify({
+        alg: "AES-GCM",
+        ciphertext: "Zm9v",
+        salt: "c2FsdA==",
+        iv: "aXY=",
+        iterations: 10_000,
+      }),
+    };
+
+    // No --password and none stored, so it must stop with the intended message,
+    // not crash before reaching it.
+    const result = await run(["migrate", "testid123456"], {
+      expectFailure: true,
+    });
+    expect(result.stderr).toContain(
+      "encrypted legacy artifact requires --password",
+    );
+    expect(result.stderr).not.toMatch(/credentials is not defined/);
+  });
+
   it("updates Recipe autoUpdate metadata with the operational toggle", async () => {
     const built = writeRecipe();
     await run(["create", built.recipePath]);
@@ -2155,6 +2235,57 @@ describe("credentials read-modify-write is re-read across the network", () => {
     const after = credentials();
     expect(after.tokens?.testid123456).toBeUndefined();
     expect(after.tokens?.sibling00000).toBeUndefined();
+  });
+
+  it("update does not clobber a token written during its password write-back", async () => {
+    // update only mutates credentials when a password is in play (encrypted
+    // Recipe). That is the path that previously wrote a pre-network snapshot.
+    const { recipePath } = writeRecipe("secret-upd", {
+      local: true,
+      encrypted: true,
+    });
+    await run(["create", recipePath], {
+      env: { OPEN_ARTIFACTS_PASSWORD_REPORT_PASSWORD: "correct horse" },
+    });
+
+    const concurrent = `wt_${"y".repeat(43)}`;
+    injectTokenMidRequest("concurrent99", concurrent);
+    await run(["update", "testid123456", recipePath], {
+      env: { OPEN_ARTIFACTS_PASSWORD_REPORT_PASSWORD: "correct horse" },
+    });
+
+    expect(credentials().tokens?.concurrent99).toBe(concurrent);
+  });
+
+  it("migrates an encrypted legacy artifact using the stored password", async () => {
+    // Regression for the #38 review bug: migrate dropped the `credentials`
+    // binding but still read credentials.passwords[id] after the GET, which
+    // threw ReferenceError on every encrypted migrate. Plain-text migrate
+    // tests never hit that line.
+    const password = "legacy-secret";
+    const plaintext =
+      '<title>Secret</title><style>:root{--accent:blue}:root[data-theme="dark"]{--accent:cyan}main{max-width:72ch;margin-inline:auto;padding:2rem}</style><main><h1>Secret</h1></main>';
+    const envelope = await encryptLegacyRaw(plaintext, password);
+    seedLegacyManifest({ encrypted: true, title: "Secret" });
+    writeJson(join(projectDir, ".artifacts/credentials.json"), {
+      tokens: { testid123456: `wt_${"x".repeat(43)}` },
+      passwords: { testid123456: password },
+    });
+    nextRaw = {
+      contentType: "application/json",
+      body: JSON.stringify(envelope),
+    };
+
+    const result = await run(["migrate", "testid123456"]);
+
+    expect(result.stderr).not.toMatch(
+      /credentials is not defined|ReferenceError/i,
+    );
+    expect(result.stdout.trim()).toMatch(/\.artifacts\/recipes\.local\//);
+    expect(credentials().namedPasswords?.[`artifact-testid123456`]).toBe(
+      password,
+    );
+    expect(existsSync(join(projectDir, result.stdout.trim()))).toBe(true);
   });
 });
 

@@ -1223,7 +1223,12 @@ async function commandMigrate(id, flags) {
   let source = text;
   let password = null;
   if (encrypted) {
-    password = flags.password ?? credentials.passwords[id];
+    // Re-read here — do not close over a pre-network credentials snapshot.
+    // The earlier load was dropped so migrate's write-back goes through
+    // mutateCredentials; this password lookup is post-GET and needs a fresh
+    // read (or --password). A dangling `credentials` binding here crashed
+    // every encrypted migrate (#38 review).
+    password = flags.password ?? loadCredentials().passwords[id];
     if (!password) {
       fail("encrypted legacy artifact requires --password for migration");
     }
