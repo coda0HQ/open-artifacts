@@ -25,10 +25,27 @@ Feature: Multi-user interaction on a shared artifact
     When a POST /api/artifacts/:id/comments sends a body over the size limit
     Then the response status is 413
 
-  Scenario: Listing comments returns the thread in chronological order
+  # "oldest-first by created_at" was the old wording, and the wording was the
+  # bug: created_at is only millisecond-precise, so comments posted inside one
+  # millisecond tie on it and fall through to the tiebreak. Posting order is
+  # what a reader expects; rowid — SQLite's monotonic insert counter — is what
+  # delivers it. Same fix the feedback queue took.
+
+  Scenario: Listing comments returns the thread in posting order
     Given an artifact has three comments posted in sequence
     When a viewer GETs /api/artifacts/:id/comments
-    Then the comments are returned oldest-first by created_at
+    Then the comments are returned oldest-first in posting order
+
+  Scenario: Comments posted within one millisecond keep their posting order
+    Given two comments posted to an artifact in the same millisecond
+    When a viewer GETs the thread
+    Then the earlier one is listed first
+
+  Scenario: The 100-comment cap drops the oldest, not an arbitrary hundred
+    Given 105 comments posted to an artifact within one millisecond
+    When a viewer GETs the thread
+    Then the 100 most recently posted are returned
+    And the 5 oldest are the ones dropped
 
   Scenario: The artifact body remains sandboxed
     Given a comments drawer is rendered around the artifact

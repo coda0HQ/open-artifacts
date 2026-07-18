@@ -22,15 +22,50 @@ describe("D1R2Store comments", () => {
     await store.addComment(id, { author: "A", body: "first", anchor: null });
     await store.addComment(id, { author: null, body: "second", anchor: null });
     const list = await store.listComments(id);
-    // Assert membership + fields, not exact order: two comments written in the
-    // same millisecond tie-break on the random id (ORDER BY created_at, id), so
-    // sub-millisecond ordering is not a testable guarantee.
-    const byBody = new Map(list.map((c) => [c.body, c]));
-    expect([...byBody.keys()].sort()).toEqual(["first", "second"]);
-    expect(byBody.get("first")?.author).toBe("A");
-    expect(byBody.get("second")?.author).toBeNull();
+    // Posting order, asserted directly. These two land in the same millisecond,
+    // so created_at ties and the tiebreak alone decides the answer — which is
+    // the case worth pinning, not one to assert around.
+    expect(list.map((c) => c.body)).toEqual(["first", "second"]);
+    expect(list[0]?.author).toBe("A");
+    expect(list[1]?.author).toBeNull();
     expect(list.every((c) => c.artifactId === id)).toBe(true);
     expect(list.every((c) => c.id.length > 0)).toBe(true);
+  });
+
+  // Real ids are random, so a same-millisecond thread can come back in any
+  // order — which makes addComment useless for pinning this: the clock usually
+  // ticks mid-loop and hides the tie. These write created_at by hand so every
+  // row shares one, and hand out ids that run *opposite* to insertion, which is
+  // simply the worst of the orders a random id could have produced. Insertion
+  // order must survive that, so the tiebreak cannot be the id.
+  async function seedSameMillisecond(
+    id: string,
+    count: number,
+  ): Promise<string[]> {
+    const stamp = "2020-01-01T00:00:00.000Z";
+    for (let i = 0; i < count; i++) {
+      const descending = String(count - 1 - i).padStart(4, "0");
+      // Namespace the comment id by artifact: this file's per-file storage
+      // isolation keeps earlier tests' rows, so a bare "z0000" would collide.
+      await env.DB.prepare(
+        `INSERT INTO comments (id, artifact_id, author, body, anchor, delete_token_hash, created_at)
+         VALUES (?, ?, null, ?, null, null, ?)`,
+      )
+        .bind(`${id}-z${descending}`, id, `b${i}`, stamp)
+        .run();
+    }
+    return Array.from({ length: count }, (_, i) => `b${i}`);
+  }
+
+  it("keeps posting order for a burst written inside one millisecond", async () => {
+    const store = new D1R2Store(env.DB, env.CONTENT);
+    // Storage isolation in this pool is per file, not per test, so every test
+    // here needs its own artifact id or its rows bleed into the next one's.
+    const id = "cmstore0010";
+    await store.create(id, "hash", artifact, null);
+    const expected = await seedSameMillisecond(id, 20);
+    const list = await store.listComments(id);
+    expect(list.map((c) => c.body)).toEqual(expected);
   });
 
   it("keeps separate threads per artifact", async () => {
@@ -112,12 +147,29 @@ describe("D1R2Store comments", () => {
     expect(await store.setCommentDone("missing-id", true)).toBe(false);
   });
 
+  it("drops the oldest when a same-millisecond burst overflows the cap", async () => {
+    const store = new D1R2Store(env.DB, env.CONTENT);
+    const id = "cmstore0011";
+    await store.create(id, "hash", artifact, null);
+    // 105 rows in one millisecond, ids running opposite to posting order. The
+    // cap claims to keep the *newest* 100; under a random tiebreak "newest" is
+    // whatever the ids happen to sort to, so the 5 dropped would be arbitrary.
+    // With rowid it must be exactly the 5 oldest.
+    const bodies = await seedSameMillisecond(id, 105);
+    const list = await store.listComments(id);
+    expect(list.length).toBe(100);
+    expect(list.map((c) => c.body)).toEqual(bodies.slice(5));
+    for (const dropped of bodies.slice(0, 5)) {
+      expect(list.map((c) => c.body)).not.toContain(dropped);
+    }
+  });
+
   it("keeps the newest 100 comments, still ordered oldest-first", async () => {
     const store = new D1R2Store(env.DB, env.CONTENT);
     const id = "cmstore0007";
     await store.create(id, "hash", artifact, null);
-    // Stagger created_at so LIMIT semantics are deterministic (same-ms ties
-    // would only order by id).
+    // Distinct timestamps here — this pins the LIMIT window itself. The
+    // same-millisecond case, where the tiebreak is what answers, is above.
     for (let i = 0; i < 105; i++) {
       const ts = new Date(Date.UTC(2020, 0, 1, 0, 0, i)).toISOString();
       await env.DB.prepare(
