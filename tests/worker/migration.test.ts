@@ -6,15 +6,12 @@ const BASE = "http://artifacts.test";
 
 async function dropAllTables(): Promise<void> {
   // Order: dependents first. IF EXISTS so a blank isolate is fine.
-  for (const table of ["comments", "feedback", "versions", "artifacts"]) {
+  for (const table of ["comments", "versions", "artifacts"]) {
     await env.DB.prepare(`DROP TABLE IF EXISTS ${table}`).run();
   }
   await env.DB.prepare("DROP INDEX IF EXISTS idx_artifacts_channel_hash").run();
   await env.DB.prepare(
     "DROP INDEX IF EXISTS idx_comments_artifact_created",
-  ).run();
-  await env.DB.prepare(
-    "DROP INDEX IF EXISTS idx_feedback_artifact_status",
   ).run();
   resetSchemaMemoForTests(env.DB);
 }
@@ -102,6 +99,42 @@ async function seedLegacyCommentsDatabase(): Promise<void> {
   ).run();
 }
 
+// The shape a deployed DB carries from the removed feedback channel: a
+// project_ref column on artifacts and a feedback table with its index. The
+// removal migration must shed all three.
+async function seedRemovedFeedbackDatabase(): Promise<void> {
+  await dropAllTables();
+  await env.DB.prepare(
+    `CREATE TABLE artifacts (
+      id TEXT PRIMARY KEY,
+      token_hash TEXT NOT NULL,
+      channel_hash TEXT,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      favicon TEXT NOT NULL,
+      format TEXT NOT NULL,
+      encrypted INTEGER NOT NULL DEFAULT 0,
+      current_version INTEGER NOT NULL,
+      project_ref TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )`,
+  ).run();
+  await env.DB.prepare(
+    `CREATE TABLE feedback (
+      id TEXT PRIMARY KEY,
+      artifact_id TEXT NOT NULL,
+      project_ref TEXT,
+      body TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TEXT NOT NULL
+    )`,
+  ).run();
+  await env.DB.prepare(
+    `CREATE INDEX idx_feedback_artifact_status ON feedback(artifact_id, status)`,
+  ).run();
+}
+
 describe("in-place schema migration", () => {
   it("backfills per-version metadata from the parent artifact", async () => {
     const id = "legacyid0001";
@@ -164,5 +197,27 @@ describe("in-place schema migration", () => {
     for (const required of ["anchor", "delete_token_hash", "done"]) {
       expect(columns).toContain(required);
     }
+  });
+
+  it("drops the feedback table and project_ref column from a legacy database", async () => {
+    await seedRemovedFeedbackDatabase();
+    expect(await columnNames("feedback")).not.toEqual([]);
+    expect(await columnNames("artifacts")).toContain("project_ref");
+
+    await ensureSchemaForTests(env.DB);
+
+    // Table gone (no columns), column gone, comments untouched.
+    expect(await columnNames("feedback")).toEqual([]);
+    expect(await columnNames("artifacts")).not.toContain("project_ref");
+    expect(await columnNames("artifacts")).toContain("channel_hash");
+
+    // Idempotent: a second pass re-runs DROP COLUMN against the now-absent
+    // column and DROP …IF EXISTS against the gone table. All are tolerated
+    // silently — if the DROP COLUMN's "no such column" were not, this would
+    // reject and clear the memo, and it does not throw here.
+    resetSchemaMemoForTests(env.DB);
+    await ensureSchemaForTests(env.DB);
+    expect(await columnNames("feedback")).toEqual([]);
+    expect(await columnNames("artifacts")).not.toContain("project_ref");
   });
 });
