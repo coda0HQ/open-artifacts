@@ -4,15 +4,6 @@ export const MAX_CONTENT_BYTES = 4 * 1024 * 1024;
 export const MAX_TITLE_LENGTH = 200;
 export const MAX_DESCRIPTION_LENGTH = 1000;
 export const MAX_LABEL_LENGTH = 60;
-export const MAX_PROJECT_REF_LENGTH = 500;
-export const MAX_FEEDBACK_BODY_BYTES = 8 * 1024;
-export const FEEDBACK_STATUSES = [
-  "pending",
-  "in_review",
-  "in_progress",
-  "done",
-] as const;
-export type FeedbackStatus = (typeof FEEDBACK_STATUSES)[number];
 export const MIN_KDF_ITERATIONS = 1_000;
 export const MAX_KDF_ITERATIONS = 10_000_000;
 
@@ -30,7 +21,6 @@ export interface CreateInput {
   favicon: string;
   label: string | null;
   encrypted: EncryptionParams | null;
-  projectRef: string | null;
 }
 
 export interface UpdateInput {
@@ -43,21 +33,6 @@ export interface UpdateInput {
   encrypted: EncryptionParams | null;
   baseVersion: number | null;
   force: boolean;
-  projectRef: string | null;
-}
-
-export interface FeedbackInput {
-  projectRef: string | null;
-  body: string;
-}
-
-export interface FeedbackRecord {
-  id: string;
-  artifactId: string;
-  projectRef: string | null;
-  body: string;
-  status: FeedbackStatus;
-  createdAt: string;
 }
 
 export interface ArtifactMeta {
@@ -68,7 +43,6 @@ export interface ArtifactMeta {
   format: ArtifactFormat;
   encrypted: boolean;
   currentVersion: number;
-  projectRef: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -203,22 +177,13 @@ interface CommonFields {
   description: string | null;
   title: string | null;
   favicon: string | null;
-  projectRef: string | null;
 }
 
 function validateCommon(
   body: Record<string, unknown>,
 ): Validated<CommonFields> {
-  const {
-    content,
-    format,
-    encrypted,
-    label,
-    description,
-    title,
-    favicon,
-    projectRef,
-  } = body;
+  const { content, format, encrypted, label, description, title, favicon } =
+    body;
 
   if (typeof content !== "string" || content.length === 0) {
     return invalid("content is required and must be a non-empty string");
@@ -281,17 +246,6 @@ function validateCommon(
     return invalid("favicon must be one or two emoji");
   }
 
-  if (projectRef !== undefined && projectRef !== null) {
-    if (
-      typeof projectRef !== "string" ||
-      projectRef.length > MAX_PROJECT_REF_LENGTH
-    ) {
-      return invalid(
-        `projectRef must be a string of at most ${MAX_PROJECT_REF_LENGTH} characters`,
-      );
-    }
-  }
-
   return {
     ok: true,
     value: {
@@ -302,7 +256,6 @@ function validateCommon(
       description: (description as string | undefined) ?? null,
       title: (title as string | undefined) ?? null,
       favicon: (favicon as string | undefined) ?? null,
-      projectRef: (projectRef as string | undefined) ?? null,
     },
   };
 }
@@ -337,7 +290,6 @@ export function validateCreate(
       favicon,
       label,
       encrypted,
-      projectRef: common.value.projectRef,
     },
   };
 }
@@ -376,56 +328,8 @@ export function validateUpdate(
       encrypted: common.value.encrypted,
       baseVersion: parsedBase,
       force: force === true,
-      projectRef: common.value.projectRef,
     },
   };
-}
-
-export function validateFeedback(
-  body: Record<string, unknown>,
-): Validated<FeedbackInput> {
-  const { projectRef, body: feedbackBody } = body;
-
-  if (typeof feedbackBody !== "string" || feedbackBody.length === 0) {
-    return invalid("body is required and must be a non-empty string");
-  }
-  if (contentByteLength(feedbackBody) > MAX_FEEDBACK_BODY_BYTES) {
-    return invalid(
-      `feedback body exceeds the ${MAX_FEEDBACK_BODY_BYTES} byte limit`,
-      413,
-    );
-  }
-
-  if (projectRef !== undefined && projectRef !== null) {
-    if (
-      typeof projectRef !== "string" ||
-      projectRef.length > MAX_PROJECT_REF_LENGTH
-    ) {
-      return invalid(
-        `projectRef must be a string of at most ${MAX_PROJECT_REF_LENGTH} characters`,
-      );
-    }
-  }
-
-  return {
-    ok: true,
-    value: {
-      projectRef: (projectRef as string | undefined) ?? null,
-      body: feedbackBody,
-    },
-  };
-}
-
-export function validateFeedbackStatus(
-  raw: unknown,
-): Validated<FeedbackStatus> {
-  if (
-    typeof raw !== "string" ||
-    !FEEDBACK_STATUSES.includes(raw as FeedbackStatus)
-  ) {
-    return invalid(`status must be one of ${FEEDBACK_STATUSES.join(", ")}`);
-  }
-  return { ok: true, value: raw as FeedbackStatus };
 }
 
 // Anchor validation, mirroring validateEncryption's shape. Point coordinates
