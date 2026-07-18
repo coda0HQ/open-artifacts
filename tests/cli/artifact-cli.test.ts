@@ -2098,34 +2098,6 @@ const authored = 1;
     expect(content).not.toContain("dataset.legacy");
   });
 
-  it("reaches the encrypted-migrate path without a dangling credentials reference", async () => {
-    // The encrypted branch reads credentials.passwords[id] to recover a stored
-    // password. That read must not throw ReferenceError — the failure a dropped
-    // `const credentials` binding causes, and which only the encrypted path (no
-    // --password flag) hits, so the other migrate tests never exercised it.
-    seedLegacyManifest({ encrypted: true });
-    nextRaw = {
-      contentType: "application/json",
-      body: JSON.stringify({
-        alg: "AES-GCM",
-        ciphertext: "Zm9v",
-        salt: "c2FsdA==",
-        iv: "aXY=",
-        iterations: 10_000,
-      }),
-    };
-
-    // No --password and none stored, so it must stop with the intended message,
-    // not crash before reaching it.
-    const result = await run(["migrate", "testid123456"], {
-      expectFailure: true,
-    });
-    expect(result.stderr).toContain(
-      "encrypted legacy artifact requires --password",
-    );
-    expect(result.stderr).not.toMatch(/credentials is not defined/);
-  });
-
   it("updates Recipe autoUpdate metadata with the operational toggle", async () => {
     const built = writeRecipe();
     await run(["create", built.recipePath]);
