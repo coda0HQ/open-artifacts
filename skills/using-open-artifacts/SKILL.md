@@ -397,35 +397,3 @@ content as published.
 itself (`text/plain`); for an encrypted artifact it is a JSON ciphertext
 envelope — run `node artifact.mjs show <id>` instead, which decrypts locally
 using the password stored at create time. Viewer URLs also accept `?v=N`.
-
-## Project-change feedback
-
-A viewer can send a note asking for a change to the **source project** behind
-an artifact (not to the page's wording — that is a comment). The viewer submits
-it from the host chrome; it is stored as an independent record and never
-becomes a new artifact version. This is a pull channel: nothing notifies you,
-so poll it.
-
-```bash
-node artifact.mjs feedback <id>                 # pending notes, oldest first
-node artifact.mjs feedback <id> --status done   # a different status
-node artifact.mjs feedback-ack <id> <fid> --status in_progress
-node artifact.mjs feedback-rm <id> <fid>        # delete spam outright
-```
-
-Each poll line is `<feedback-id>  [status]  <createdAt>`, then the optional
-source-project path and the note body.
-
-Work a note like this: `feedback-ack ... --status in_progress` when you start
-editing the project, then make the change in the **project files**, then
-re-publish with `update` if the artifact's content is affected, then
-`feedback-ack ... --status done`. Advancing to `done` is what drops it out of
-the pending poll — it does not regenerate anything by itself, and closing a
-note without a regen is a valid outcome (say so in the project, not the page).
-
-All of these are owner-only and use the stored write token. Submission is open
-to anonymous viewers on an instance with no `CREATE_TOKEN`, so a public
-artifact's queue can collect spam — `feedback-rm` is how you drop it, since
-`done` only hides a note from the pending poll. On a `CREATE_TOKEN`-gated
-instance viewers hold no token, so the control is not rendered at all and the
-queue stays empty.

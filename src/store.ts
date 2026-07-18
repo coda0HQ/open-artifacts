@@ -6,9 +6,6 @@ import type {
   CommentMeta,
   CreateInput,
   EncryptionParams,
-  FeedbackInput,
-  FeedbackRecord,
-  FeedbackStatus,
   UpdateInput,
   VersionMeta,
 } from "./domain";
@@ -60,25 +57,7 @@ export interface ArtifactStore {
   ): Promise<{ artifactId: string; deleteTokenHash: string | null } | null>;
   setCommentDone(commentId: string, done: boolean): Promise<boolean>;
   deleteComment(commentId: string): Promise<void>;
-  addFeedback(
-    artifactId: string,
-    input: FeedbackInput,
-  ): Promise<FeedbackRecord>;
-  listFeedback(
-    artifactId: string,
-    status?: FeedbackStatus,
-  ): Promise<FeedbackRecord[]>;
-  getFeedback(id: string): Promise<FeedbackRecord | null>;
-  updateFeedbackStatus(
-    id: string,
-    status: FeedbackStatus,
-  ): Promise<FeedbackRecord | null>;
-  deleteFeedback(id: string): Promise<void>;
 }
-
-// Max feedback rows one poll returns. Exported so the CLI can tell the agent
-// when a page is full and more may be waiting behind it.
-export const FEEDBACK_PAGE_LIMIT = 100;
 
 const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS artifacts (
@@ -91,7 +70,6 @@ const SCHEMA = [
     format TEXT NOT NULL,
     encrypted INTEGER NOT NULL DEFAULT 0,
     current_version INTEGER NOT NULL,
-    project_ref TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   )`,
@@ -122,29 +100,21 @@ const SCHEMA = [
   )`,
   `CREATE INDEX IF NOT EXISTS idx_comments_artifact_created
     ON comments(artifact_id, created_at)`,
-  `CREATE TABLE IF NOT EXISTS feedback (
-    id TEXT PRIMARY KEY,
-    artifact_id TEXT NOT NULL,
-    project_ref TEXT,
-    body TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'pending',
-    created_at TEXT NOT NULL
-  )`,
-  `CREATE INDEX IF NOT EXISTS idx_feedback_artifact_status ON feedback(artifact_id, status)`,
 ];
 
 // Convention (#33): SCHEMA is the full current shape for fresh DBs; MIGRATIONS
-// ALTERs every column added after v1 so existing DBs catch up. New columns
-// must be added to BOTH — SCHEMA-only never reaches production; MIGRATIONS-only
-// leaves fresh installs depending on an ALTER.
+// upgrades existing DBs to catch up. A column added after v1 must appear in
+// BOTH — SCHEMA-only never reaches production; MIGRATIONS-only leaves fresh
+// installs depending on an ALTER. MIGRATIONS also carries *removals*: when a
+// column/table is dropped from SCHEMA, a DROP is appended here so deployed DBs
+// shed it (fresh DBs never had it — see the error tolerance below).
 //
-// Each ALTER errors if the column already exists, which is fine — the column
-// is there. The unique index makes channel binding race-safe: concurrent first
+// Each ADD errors if the column already exists, which is fine — the column is
+// there. The unique index makes channel binding race-safe: concurrent first
 // publishes to one channel can only mint one artifact (SQLite allows any
 // number of NULLs, so channel-less artifacts are unaffected).
 const MIGRATIONS = [
   `ALTER TABLE artifacts ADD COLUMN channel_hash TEXT`,
-  `ALTER TABLE artifacts ADD COLUMN project_ref TEXT`,
   `ALTER TABLE versions ADD COLUMN title TEXT NOT NULL DEFAULT ''`,
   `ALTER TABLE versions ADD COLUMN description TEXT NOT NULL DEFAULT ''`,
   `ALTER TABLE versions ADD COLUMN favicon TEXT NOT NULL DEFAULT ''`,
@@ -157,6 +127,13 @@ const MIGRATIONS = [
   `ALTER TABLE comments ADD COLUMN delete_token_hash TEXT`,
   // Soft "done" / resolved flag — open toggle for all viewers (not delete).
   `ALTER TABLE comments ADD COLUMN done INTEGER NOT NULL DEFAULT 0`,
+  // Feedback channel removed: drop its table/index and the artifacts.project_ref
+  // column it fed. IF EXISTS makes the table/index drops idempotent no-ops; the
+  // column drop throws "no such column" once gone and on fresh DBs, which the
+  // error tolerance treats as expected.
+  `DROP INDEX IF EXISTS idx_feedback_artifact_status`,
+  `DROP TABLE IF EXISTS feedback`,
+  `ALTER TABLE artifacts DROP COLUMN project_ref`,
 ];
 
 // After the ALTERs above add columns to existing rows with empty defaults,
@@ -172,12 +149,20 @@ SET title = (SELECT title FROM artifacts WHERE artifacts.id = versions.artifact_
 WHERE title = '' AND favicon = ''
 `;
 
-// "duplicate column name": the ALTER already ran on this database.
+// "duplicate column name": an ADD already ran on this database.
 // "UNIQUE constraint failed": the index cannot cover legacy duplicate rows.
+// "no such column" on a DROP COLUMN: the column is already gone — every re-run
+//   after the first, and every fresh DB where SCHEMA never defined it. Scoped
+//   to DROP COLUMN by inspecting the statement, so an unrelated "no such
+//   column" from a future migration still surfaces instead of being swallowed.
 // Anything else is a genuine failure worth surfacing in the logs.
-const isExpectedMigrationError = (error: unknown): boolean =>
-  error instanceof Error &&
-  /duplicate column name|UNIQUE constraint failed/.test(error.message);
+const isExpectedMigrationError = (error: unknown, sql: string): boolean => {
+  if (!(error instanceof Error)) return false;
+  if (/\bdrop column\b/i.test(sql) && /no such column/.test(error.message)) {
+    return true;
+  }
+  return /duplicate column name|UNIQUE constraint failed/.test(error.message);
+};
 
 // Memoized per database so a second binding (or a fresh test database in the
 // same isolate) never skips its own setup. A failed attempt clears the memo,
@@ -211,7 +196,7 @@ async function ensureSchema(
       try {
         await db.prepare(sql).run();
       } catch (error) {
-        if (!isExpectedMigrationError(error)) {
+        if (!isExpectedMigrationError(error, sql)) {
           console.warn("migration failed:", sql, error);
           throw error;
         }
@@ -255,29 +240,8 @@ interface ArtifactRow {
   format: string;
   encrypted: number;
   current_version: number;
-  project_ref: string | null;
   created_at: string;
   updated_at: string;
-}
-
-interface FeedbackRow {
-  id: string;
-  artifact_id: string;
-  project_ref: string | null;
-  body: string;
-  status: string;
-  created_at: string;
-}
-
-function toFeedbackRecord(row: FeedbackRow): FeedbackRecord {
-  return {
-    id: row.id,
-    artifactId: row.artifact_id,
-    projectRef: row.project_ref,
-    body: row.body,
-    status: row.status as FeedbackStatus,
-    createdAt: row.created_at,
-  };
 }
 
 function toRecord(row: ArtifactRow): ArtifactRecord {
@@ -291,7 +255,6 @@ function toRecord(row: ArtifactRow): ArtifactRecord {
     format: row.format as ArtifactFormat,
     encrypted: row.encrypted === 1,
     currentVersion: row.current_version,
-    projectRef: row.project_ref,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -348,8 +311,8 @@ export class D1R2Store implements ArtifactStore {
     const insert = this.db.batch([
       this.db
         .prepare(
-          `INSERT INTO artifacts (id, token_hash, channel_hash, title, description, favicon, format, encrypted, current_version, project_ref, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
+          `INSERT INTO artifacts (id, token_hash, channel_hash, title, description, favicon, format, encrypted, current_version, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
         )
         .bind(
           id,
@@ -360,7 +323,6 @@ export class D1R2Store implements ArtifactStore {
           input.favicon,
           input.format,
           input.encrypted ? 1 : 0,
-          input.projectRef,
           now,
           now,
         ),
@@ -398,7 +360,6 @@ export class D1R2Store implements ArtifactStore {
       format: input.format,
       encrypted: input.encrypted !== null,
       currentVersion: 1,
-      projectRef: input.projectRef,
       createdAt: now,
       updatedAt: now,
     };
@@ -508,7 +469,7 @@ export class D1R2Store implements ArtifactStore {
     const claimed = await this.db
       .prepare(
         `UPDATE artifacts
-         SET title = ?, description = ?, favicon = ?, format = ?, encrypted = ?, current_version = ?, project_ref = ?, updated_at = ?
+         SET title = ?, description = ?, favicon = ?, format = ?, encrypted = ?, current_version = ?, updated_at = ?
          WHERE id = ? AND current_version = ?`,
       )
       .bind(
@@ -518,7 +479,6 @@ export class D1R2Store implements ArtifactStore {
         input.format ?? record.format,
         input.encrypted ? 1 : 0,
         version,
-        input.projectRef ?? record.projectRef,
         now,
         record.id,
         record.currentVersion,
@@ -581,7 +541,6 @@ export class D1R2Store implements ArtifactStore {
       this.db.prepare("DELETE FROM versions WHERE artifact_id = ?").bind(id),
       this.db.prepare("DELETE FROM artifacts WHERE id = ?").bind(id),
       this.db.prepare("DELETE FROM comments WHERE artifact_id = ?").bind(id),
-      this.db.prepare("DELETE FROM feedback WHERE artifact_id = ?").bind(id),
     ]);
   }
 
@@ -674,96 +633,6 @@ export class D1R2Store implements ArtifactStore {
       .prepare("DELETE FROM comments WHERE id = ?")
       .bind(commentId)
       .run();
-  }
-
-  async addFeedback(
-    artifactId: string,
-    input: FeedbackInput,
-  ): Promise<FeedbackRecord> {
-    await ensureSchema(this.db);
-    const id = generateId();
-    const now = new Date().toISOString();
-    await this.db
-      .prepare(
-        `INSERT INTO feedback (id, artifact_id, project_ref, body, status, created_at)
-         VALUES (?, ?, ?, ?, 'pending', ?)`,
-      )
-      .bind(id, artifactId, input.projectRef, input.body, now)
-      .run();
-    return {
-      id,
-      artifactId,
-      projectRef: input.projectRef,
-      body: input.body,
-      status: "pending",
-      createdAt: now,
-    };
-  }
-
-  // Bound the poll response, mirroring listComments' cap. Submission is
-  // unauthenticated on an open instance, so an artifact's queue can be flooded
-  // with 12 KiB rows; without a cap the owner's poll would try to load all of
-  // them into one JSON response and fall over exactly when the owner needs it
-  // to find the spam ids to purge.
-  //
-  // Unlike comments this keeps the OLDEST window (ASC LIMIT), which is safe
-  // here for the reason it is not there: a feedback row leaves the status
-  // filter once it is acked or purged, so draining the queue advances the
-  // window. Comments are never removed from their list, so an ASC LIMIT would
-  // freeze on the first 100 forever.
-  //
-  // Tie-break on rowid, not id: created_at is only millisecond-precise, so a
-  // burst of submissions shares a timestamp, and ids are random (generateId)
-  // — ordering by them would shuffle same-millisecond rows and make both
-  // "oldest first" and which 100 the cap returns nondeterministic. rowid is
-  // SQLite's monotonic insert counter, so it is the real arrival order.
-  async listFeedback(
-    artifactId: string,
-    status?: FeedbackStatus,
-  ): Promise<FeedbackRecord[]> {
-    await ensureSchema(this.db);
-    const stmt =
-      status === undefined
-        ? this.db.prepare(
-            `SELECT * FROM feedback WHERE artifact_id = ?
-             ORDER BY created_at ASC, rowid ASC LIMIT ${FEEDBACK_PAGE_LIMIT}`,
-          )
-        : this.db.prepare(
-            `SELECT * FROM feedback WHERE artifact_id = ? AND status = ?
-             ORDER BY created_at ASC, rowid ASC LIMIT ${FEEDBACK_PAGE_LIMIT}`,
-          );
-    const bound =
-      status === undefined
-        ? stmt.bind(artifactId)
-        : stmt.bind(artifactId, status);
-    const { results } = await bound.all<FeedbackRow>();
-    return results.map(toFeedbackRecord);
-  }
-
-  async getFeedback(id: string): Promise<FeedbackRecord | null> {
-    await ensureSchema(this.db);
-    const row = await this.db
-      .prepare("SELECT * FROM feedback WHERE id = ?")
-      .bind(id)
-      .first<FeedbackRow>();
-    return row ? toFeedbackRecord(row) : null;
-  }
-
-  async updateFeedbackStatus(
-    id: string,
-    status: FeedbackStatus,
-  ): Promise<FeedbackRecord | null> {
-    await ensureSchema(this.db);
-    await this.db
-      .prepare("UPDATE feedback SET status = ? WHERE id = ?")
-      .bind(status, id)
-      .run();
-    return this.getFeedback(id);
-  }
-
-  async deleteFeedback(id: string): Promise<void> {
-    await ensureSchema(this.db);
-    await this.db.prepare("DELETE FROM feedback WHERE id = ?").bind(id).run();
   }
 }
 
