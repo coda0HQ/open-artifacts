@@ -150,7 +150,6 @@ WHERE title = '' AND favicon = ''
 `;
 
 // "duplicate column name": an ADD already ran on this database.
-// "duplicate column name": an ADD already ran on this database.
 // "UNIQUE constraint failed": the index cannot cover legacy duplicate rows.
 // "no such column" on a DROP COLUMN: the column is already gone — every re-run
 //   after the first, and every fresh DB where SCHEMA never defined it. Scoped
