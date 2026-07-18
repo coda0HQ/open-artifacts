@@ -150,15 +150,20 @@ WHERE title = '' AND favicon = ''
 `;
 
 // "duplicate column name": an ADD already ran on this database.
+// "duplicate column name": an ADD already ran on this database.
 // "UNIQUE constraint failed": the index cannot cover legacy duplicate rows.
-// "no such column": a DROP COLUMN whose column is already gone (every re-run
-//   after the first, and every fresh DB, where SCHEMA never defined it).
+// "no such column" on a DROP COLUMN: the column is already gone — every re-run
+//   after the first, and every fresh DB where SCHEMA never defined it. Scoped
+//   to DROP COLUMN by inspecting the statement, so an unrelated "no such
+//   column" from a future migration still surfaces instead of being swallowed.
 // Anything else is a genuine failure worth surfacing in the logs.
-const isExpectedMigrationError = (error: unknown): boolean =>
-  error instanceof Error &&
-  /duplicate column name|UNIQUE constraint failed|no such column/.test(
-    error.message,
-  );
+const isExpectedMigrationError = (error: unknown, sql: string): boolean => {
+  if (!(error instanceof Error)) return false;
+  if (/\bdrop column\b/i.test(sql) && /no such column/.test(error.message)) {
+    return true;
+  }
+  return /duplicate column name|UNIQUE constraint failed/.test(error.message);
+};
 
 // Memoized per database so a second binding (or a fresh test database in the
 // same isolate) never skips its own setup. A failed attempt clears the memo,
@@ -192,7 +197,7 @@ async function ensureSchema(
       try {
         await db.prepare(sql).run();
       } catch (error) {
-        if (!isExpectedMigrationError(error)) {
+        if (!isExpectedMigrationError(error, sql)) {
           console.warn("migration failed:", sql, error);
           throw error;
         }

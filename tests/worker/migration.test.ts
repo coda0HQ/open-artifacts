@@ -220,4 +220,17 @@ describe("in-place schema migration", () => {
     expect(await columnNames("feedback")).toEqual([]);
     expect(await columnNames("artifacts")).not.toContain("project_ref");
   });
+
+  it("still surfaces a 'no such column' that is NOT a DROP COLUMN", async () => {
+    // The DROP COLUMN idempotency tolerance is scoped to DROP COLUMN statements.
+    // A different migration that references a missing column must still reject
+    // (clear the memo, warn) rather than be silently swallowed.
+    await ensureSchemaForTests(env.DB);
+    resetSchemaMemoForTests(env.DB);
+    await expect(
+      ensureSchemaForTests(env.DB, {
+        migrations: ["UPDATE artifacts SET no_such_col = 1"],
+      }),
+    ).rejects.toThrow(/no such column/);
+  });
 });
