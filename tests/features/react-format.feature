@@ -33,3 +33,10 @@ Feature: React/JSX artifact format
     Given a create request with format "react"
     When the API validates it
     Then the format is accepted
+
+  Scenario: Encrypted react artifacts neutralize a literal </script in the bundle
+    Given a password-protected react artifact whose bundle contains a literal "</script"
+    When the viewer decrypts and splices the bundle into the frame's inline script
+    Then the "</script" is escaped to "<\/script" so the inline script is not broken
+    And the escape mirrors the plain path's escapeInlineScript
+    And the html and markdown decrypt paths are unchanged

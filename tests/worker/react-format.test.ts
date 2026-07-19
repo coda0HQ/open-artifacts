@@ -1,6 +1,6 @@
 import { exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
-import { frameDocument } from "../../src/wrap";
+import { frameDocument, unlockShell } from "../../src/wrap";
 
 const BASE = "http://artifacts.test";
 
@@ -108,5 +108,94 @@ describe("React/JSX artifact format", () => {
       `<script nonce="test-nonce">${REACT_BUNDLE}</script>`,
     );
     expect(doc).not.toMatch(/<script[^>]*\bsrc=/);
+  });
+});
+
+// A react bundle can carry a literal "</script" inside a string; the plain
+// serve path neutralizes it via escapeInlineScript, but the ENCRYPTED path
+// splices the decrypted bundle into the frame's inline <script> client-side, so
+// it must apply the same escape. These tests exercise the actual emitted
+// unlock-shell client code (extracting and running its escScript helper) so the
+// template-literal escaping is verified, not eyeballed.
+describe("React/JSX encrypted serve path", () => {
+  const ENVELOPE = {
+    salt: "AAAA",
+    iv: "AAAA",
+    iterations: 10000,
+    ciphertext: "AAAA",
+  };
+
+  function makeUnlock(format: "react" | "html" | "markdown"): string {
+    return unlockShell({
+      title: "Encrypted",
+      description: "",
+      favicon: "⚛️",
+      format,
+      url: "http://artifacts.test/a/abc123456789",
+      ogImage: "http://artifacts.test/og/abc123456789",
+      hostname: "artifacts.test",
+      artifactId: "abc123456789",
+      nonce: "test-nonce",
+      envelope: ENVELOPE,
+    });
+  }
+
+  // Pull the client escScript helper out of the emitted unlock shell and run it,
+  // so the assertion is on the ACTUAL shipped escaping (correct template-literal
+  // levels), not a reimplementation.
+  function extractEscScript(html: string): (s: string) => string {
+    const src = html.match(/function escScript\(s\)\{[^}]*\}/)?.[0];
+    if (!src) throw new Error("escScript helper not found in unlock shell");
+    return new Function(`${src}\nreturn escScript;`)() as (s: string) => string;
+  }
+
+  it("neutralizes </script in the decrypted react bundle", () => {
+    const escScript = extractEscScript(makeUnlock("react"));
+    // The escape mirrors the server-side escapeInlineScript exactly:
+    // "</script" (case-insensitive) -> "<\\/script".
+    expect(escScript('var s = "</script>";')).toBe('var s = "<\\/script>";');
+    expect(escScript("a</SCRIPT b")).toBe("a<\\/script b");
+    expect(escScript("no closing tag")).toBe("no closing tag");
+
+    // Simulate the react client splice into the real frame template: after the
+    // escape, the bundle region carries no raw "</script" that could break out.
+    const template = frameDocument({
+      format: "react",
+      content: "__OA_CONTENT_SLOT__",
+      nonce: "test-nonce",
+    });
+    const bundle = 'var s="</script>";console.log(s);';
+    const escaped = escScript(bundle);
+    const doc = template.split("__OA_CONTENT_SLOT__").join(escaped);
+    expect(escaped).not.toMatch(/<\/script/i);
+    expect(escaped).toContain("<\\/script");
+    expect(doc).toContain('<script nonce="test-nonce">');
+  });
+
+  it("wires escScript into the react branch only", () => {
+    const unlock = makeUnlock("react");
+    // React branch escapes the bundle; html keeps stampNonce; markdown keeps
+    // jsonEmbed. escScript is applied to nothing else.
+    expect(unlock).toContain('OA.format==="react"');
+    expect(unlock).toContain("escScript(content)");
+    expect(unlock).toContain("jsonEmbed(content)");
+    expect(unlock).toMatch(
+      /stampNonce\(OA\.template\.split\(OA\.slot\)\.join\(content\)\)/,
+    );
+    // escScript is only ever called in the react branch.
+    expect(unlock.match(/escScript\(content\)/g) ?? []).toHaveLength(1);
+  });
+
+  it("does not escape </script on the html or markdown paths", () => {
+    // The unlock client code is format-agnostic (branches on runtime OA.format),
+    // so html/markdown recipes ship the same branches; assert their splices are
+    // unchanged and never route through escScript.
+    for (const format of ["html", "markdown"] as const) {
+      const unlock = makeUnlock(format);
+      expect(unlock).toContain("jsonEmbed(content)");
+      expect(unlock).toMatch(
+        /stampNonce\(OA\.template\.split\(OA\.slot\)\.join\(content\)\)/,
+      );
+    }
   });
 });
