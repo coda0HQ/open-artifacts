@@ -64,7 +64,8 @@ current working directory — the resolver runs `resolve(recipeDir, path)`, so
 the CLI from. Paths must be project-relative (no absolute paths, no `//` or
 scheme-prefixed URLs), ordered, unique, and must resolve inside the project
 root. Symlinks cannot escape the root. HTML Recipes require at least one theme
-fragment. Markdown Recipes accept body fragments only.
+fragment. Markdown Recipes accept body fragments only. React Recipes accept
+exactly one body fragment — the JSX/TSX entry (see "React/JSX format" below).
 
 `document.theme` is an optional label for the design direction (shown in the
 recipe comment, no runtime effect). HTML theme comes from theme fragments and
@@ -85,6 +86,42 @@ The builder runs two local passes:
 Both strategies produce one final payload and one publish request. Builds have
 no timestamps or random values. The Manifest records SHA-256 hashes for the
 normalized Recipe, ordered inputs, and final output.
+
+## React/JSX format
+
+`"format": "react"` publishes a React component. Set `artifact.format` to
+`"react"` and give `document.fragments.body` **exactly one** JSX/TSX entry that
+**default-exports** a component; no theme, styles, or scripts fragments (put the
+whole component — markup, styles via inline `style`/CSS variables, and behavior —
+in that one file, importing helpers from it). `artifact.title` is required (a
+compiled bundle has no extractable title).
+
+```json
+{
+  "artifact": { "title": "React counter", "favicon": "⚛️", "format": "react", "...": "..." },
+  "document": { "language": "en", "theme": null,
+    "fragments": { "theme": [], "styles": [], "body": ["fragments/App.jsx"], "scripts": [] } }
+}
+```
+
+At build time the skill **precompiles the JSX with esbuild** and bundles React +
+ReactDOM + the component into **one self-contained IIFE** (production React,
+minified, deterministic). The viewer inlines that bundle as a nonce'd
+`<script>` next to a `<div id="oa-root">` mount node, so it renders under the
+**same strict CSP as every other format** — nonce-only `script-src`, no
+`'unsafe-eval'`, no external script host. Nothing is fetched at runtime; the
+stored artifact is fully self-contained.
+
+The component reads the viewer's design tokens (`--oa-fg`, `--oa-accent`, …, set
+in both light and dark) via inline styles or `var(...)`, so it themes itself
+with no separate stylesheet. See `examples/recipes/react/`.
+
+**In-browser transforms are rejected.** A recipe that ships a runtime JSX
+transform (Babel standalone, `<script type="text/babel">`) fails the build with
+a *precompile JSX* error: that path needs `'unsafe-eval'` and an external script
+host, both blocked by the viewer CSP. Author plain JSX; the skill compiles it.
+React format requires the build-time tooling (`esbuild`, `react`, `react-dom`)
+to be resolvable where the skill runs.
 
 ## Security and validation
 

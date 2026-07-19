@@ -650,6 +650,13 @@ function frameMetaCsp(nonce: string): string {
 // enters the sandboxed, opaque-origin document.
 export function frameDocument(options: FrameDocumentOptions): string {
   const { format, content, nonce, stampCsp } = options;
+  // A react artifact's content is a precompiled, self-contained IIFE (React +
+  // ReactDOM + the component, bundled by the skill). It mounts itself into
+  // #oa-root, so the frame emits the mount node plus the bundle as a single
+  // nonce'd inline <script> — it runs under the same nonce-only script-src (no
+  // 'unsafe-eval', no external host) that every viewer-injected script uses, so
+  // the CSP is unchanged. escapeInlineScript neutralizes any "</script" the
+  // bundle might carry in a string literal.
   const body =
     format === "markdown"
       ? `<main class="oa-md" id="oa-content"></main>
@@ -657,7 +664,10 @@ export function frameDocument(options: FrameDocumentOptions): string {
 <script nonce="${nonce}">
 document.getElementById("oa-content").innerHTML=marked.parse(${jsonForInlineScript(content)});
 </script>`
-      : stampNonceOnUserScripts(content, nonce);
+      : format === "react"
+        ? `<div id="oa-root"></div>
+<script nonce="${nonce}">${escapeInlineScript(content)}</script>`
+        : stampNonceOnUserScripts(content, nonce);
   const cspMeta = stampCsp
     ? `<meta http-equiv="Content-Security-Policy" content="${frameMetaCsp(nonce)}">\n`
     : "";

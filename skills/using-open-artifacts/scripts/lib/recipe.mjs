@@ -121,8 +121,8 @@ function parseArtifact(raw) {
     "artifact",
   );
   const format = raw.format ?? "html";
-  if (format !== "html" && format !== "markdown") {
-    fail('artifact.format must be "html" or "markdown"');
+  if (format !== "html" && format !== "markdown" && format !== "react") {
+    fail('artifact.format must be "html", "markdown", or "react"');
   }
   const level = raw.level ?? null;
   if (level !== null && ![1, 2, 3].includes(level)) {

@@ -1,4 +1,4 @@
-export type ArtifactFormat = "html" | "markdown";
+export type ArtifactFormat = "html" | "markdown" | "react";
 
 export const MAX_CONTENT_BYTES = 4 * 1024 * 1024;
 export const MAX_TITLE_LENGTH = 200;
@@ -141,6 +141,9 @@ export function extractTitle(
     const title = match?.[1].trim();
     return title ? title : null;
   }
+  // A react artifact's content is a compiled JS bundle, not prose — there is no
+  // title to extract, so the recipe must supply artifact.title.
+  if (format === "react") return null;
   const heading = content.match(/^#\s+(.+)$/m);
   const title = heading?.[1].trim();
   return title ? title : null;
@@ -194,8 +197,8 @@ function validateCommon(
 
   let parsedFormat: ArtifactFormat = "html";
   if (format !== undefined) {
-    if (format !== "html" && format !== "markdown") {
-      return invalid('format must be "html" or "markdown"');
+    if (format !== "html" && format !== "markdown" && format !== "react") {
+      return invalid('format must be "html", "markdown", or "react"');
     }
     parsedFormat = format;
   }
