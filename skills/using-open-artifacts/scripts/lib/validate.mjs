@@ -3,9 +3,11 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { checkContrast } from "./contrast.mjs";
+// The builder's output gate must match the service cap, or a passing build
+// would be 413'd on publish. MAX_CONTENT_BYTES is the shared, override-aware cap
+// (see limits.mjs); it is re-exported below for artifact.mjs's pre-upload check.
+import { MAX_CONTENT_BYTES } from "./limits.mjs";
 import { readFragment } from "./recipe.mjs";
-
-const MAX_CONTENT_BYTES = 4 * 1024 * 1024;
 
 const VENDOR_DIR = join(
   dirname(fileURLToPath(import.meta.url)),

@@ -7,6 +7,7 @@ import {
   statSync,
 } from "node:fs";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import { MAX_CONTENT_BYTES } from "./limits.mjs";
 
 const RECIPE_KEYS = new Set([
   "$schema",
@@ -36,8 +37,11 @@ const BUILD_KEYS = new Set(["strategy"]);
 
 export const BUILD_LIMITS = Object.freeze({
   maxFragments: 128,
-  maxFragmentBytes: 4 * 1024 * 1024,
-  maxAggregateBytes: 8 * 1024 * 1024,
+  // Track the content cap so a raised MAX_CONTENT_MIB lifts the builder's input
+  // guards end-to-end: a single fragment may be as large as the whole cap, and
+  // the aggregate holds twice that (the 4 MiB / 8 MiB defaults, preserved).
+  maxFragmentBytes: MAX_CONTENT_BYTES,
+  maxAggregateBytes: 2 * MAX_CONTENT_BYTES,
   stagedFragments: 24,
   stagedAggregateBytes: 512 * 1024,
   stagedFrames: 8,
@@ -411,7 +415,9 @@ export function loadRecipe(recipePath, options = {}) {
       seen.add(resolved.real);
       const size = statSync(resolved.real).size;
       if (size > BUILD_LIMITS.maxFragmentBytes) {
-        fail(`fragment exceeds 4 MiB: ${fragmentPath}`);
+        fail(
+          `fragment exceeds ${BUILD_LIMITS.maxFragmentBytes / (1024 * 1024)} MiB: ${fragmentPath}`,
+        );
       }
       descriptors.push({ slot, source: fragmentPath, size, ...resolved });
     }
@@ -465,7 +471,9 @@ export function loadRecipe(recipePath, options = {}) {
     0,
   );
   if (aggregateBytes > BUILD_LIMITS.maxAggregateBytes) {
-    fail("aggregate fragment size exceeds 8 MiB");
+    fail(
+      `aggregate fragment size exceeds ${BUILD_LIMITS.maxAggregateBytes / (1024 * 1024)} MiB`,
+    );
   }
 
   return {

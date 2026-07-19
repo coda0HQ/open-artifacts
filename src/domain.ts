@@ -181,6 +181,7 @@ interface CommonFields {
 
 function validateCommon(
   body: Record<string, unknown>,
+  maxContentBytes: number = MAX_CONTENT_BYTES,
 ): Validated<CommonFields> {
   const { content, format, encrypted, label, description, title, favicon } =
     body;
@@ -188,8 +189,8 @@ function validateCommon(
   if (typeof content !== "string" || content.length === 0) {
     return invalid("content is required and must be a non-empty string");
   }
-  if (contentByteLength(content) > MAX_CONTENT_BYTES) {
-    return invalid(`content exceeds the ${MAX_CONTENT_BYTES} byte limit`, 413);
+  if (contentByteLength(content) > maxContentBytes) {
+    return invalid(`content exceeds the ${maxContentBytes} byte limit`, 413);
   }
 
   let parsedFormat: ArtifactFormat = "html";
@@ -262,8 +263,9 @@ function validateCommon(
 
 export function validateCreate(
   body: Record<string, unknown>,
+  maxContentBytes: number = MAX_CONTENT_BYTES,
 ): Validated<CreateInput> {
-  const common = validateCommon(body);
+  const common = validateCommon(body, maxContentBytes);
   if (!common.ok) return common;
   const { content, format, encrypted, label, description } = common.value;
 
@@ -296,8 +298,9 @@ export function validateCreate(
 
 export function validateUpdate(
   body: Record<string, unknown>,
+  maxContentBytes: number = MAX_CONTENT_BYTES,
 ): Validated<UpdateInput> {
-  const common = validateCommon(body);
+  const common = validateCommon(body, maxContentBytes);
   if (!common.ok) return common;
 
   const { baseVersion, force } = body;

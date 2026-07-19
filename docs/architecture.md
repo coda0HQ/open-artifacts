@@ -224,6 +224,12 @@ CI/plain git are out of scope for v1 (documented).
 ## Limits
 
 - Content cap 4 MiB (post-base64 for encrypted) — fits free-tier envelope.
+  Overridable per instance via the `MAX_CONTENT_MIB` env var (default 4;
+  non-numeric or `<= 0` falls back to 4). Both the Worker (`resolveMaxContentBytes`
+  in `src/api.ts`) and the skill builder's output gate read it. Raising it far
+  past a few MiB is at the operator's own risk: the request body is buffered by
+  `c.req.json()` and held as a JS string, so the real ceiling is the Cloudflare
+  Worker request-body / memory limit, not app code (R2/D1 do not constrain it).
 - No per-request rate limiting is implemented; the optional `CREATE_TOKEN`
   bearer gate is the only abuse guard. (Cloudflare's edge-level protections
   sit in front of the Worker but are not configured by this project.)

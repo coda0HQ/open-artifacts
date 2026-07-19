@@ -75,6 +75,28 @@ Then route the domain to the Worker (Cloudflare dashboard → the Worker →
 Settings → Domains & Routes → add a custom domain). Leave `PUBLIC_URL` unset
 to keep the request-origin behavior.
 
+## Raising the content cap (paid plans)
+
+The content cap defaults to **4 MiB** — a deliberate free-tier envelope. On a
+paid Cloudflare plan you can raise it by setting `MAX_CONTENT_MIB` (an integer
+number of MiB) on the Worker:
+
+Set it as a Worker var (not a secret — it is not sensitive):
+
+```jsonc
+// wrangler.jsonc
+{ "vars": { "MAX_CONTENT_MIB": "12" } }
+```
+
+Or via the Cloudflare dashboard (Worker → Settings → Variables). Unset,
+non-numeric (including partials like `12abc`), or `<= 0` keeps the 4 MiB
+default. Set the **same** value in the client environment (`MAX_CONTENT_MIB=12`)
+so the skill builder's output gate matches the service — otherwise a build the
+CLI accepts could be rejected on publish. Raising it far past a few MiB is at
+your own risk: the request body is buffered in Worker memory, so the real
+ceiling is the Cloudflare Worker request-body / memory limit, not storage (R2
+is effectively unbounded).
+
 ## Trust model summary
 
 | Content sensitivity | Recommended mode |
