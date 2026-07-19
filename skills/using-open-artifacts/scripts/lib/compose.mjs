@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { bundleReactComponent } from "./react-build.mjs";
 import { BUILD_LIMITS, readFragment, sha256 } from "./recipe.mjs";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
@@ -162,6 +163,15 @@ export function composeRecipe(loaded, options = {}) {
   let content;
   if (artifact.format === "markdown") {
     content = `${bodySource.trimEnd()}\n`;
+  } else if (artifact.format === "react") {
+    // The body slot holds one JSX/TSX entry (the default-export component).
+    // esbuild precompiles + bundles it into a self-contained IIFE; validate.mjs
+    // enforces the single-entry, body-only shape. bodySource is the raw source,
+    // used both to reject in-browser transforms and as the input hash.
+    const entry = loaded.descriptors.find(
+      (descriptor) => descriptor.slot === "body",
+    );
+    content = bundleReactComponent(entry.real, bodySource);
   } else {
     const title = artifact.title ?? "";
     const tokens = readFileSync(

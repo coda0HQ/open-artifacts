@@ -650,6 +650,13 @@ function frameMetaCsp(nonce: string): string {
 // enters the sandboxed, opaque-origin document.
 export function frameDocument(options: FrameDocumentOptions): string {
   const { format, content, nonce, stampCsp } = options;
+  // A react artifact's content is a precompiled, self-contained IIFE (React +
+  // ReactDOM + the component, bundled by the skill). It mounts itself into
+  // #oa-root, so the frame emits the mount node plus the bundle as a single
+  // nonce'd inline <script> — it runs under the same nonce-only script-src (no
+  // 'unsafe-eval', no external host) that every viewer-injected script uses, so
+  // the CSP is unchanged. escapeInlineScript neutralizes any "</script" the
+  // bundle might carry in a string literal.
   const body =
     format === "markdown"
       ? `<main class="oa-md" id="oa-content"></main>
@@ -657,7 +664,10 @@ export function frameDocument(options: FrameDocumentOptions): string {
 <script nonce="${nonce}">
 document.getElementById("oa-content").innerHTML=marked.parse(${jsonForInlineScript(content)});
 </script>`
-      : stampNonceOnUserScripts(content, nonce);
+      : format === "react"
+        ? `<div id="oa-root"></div>
+<script nonce="${nonce}">${escapeInlineScript(content)}</script>`
+        : stampNonceOnUserScripts(content, nonce);
   const cspMeta = stampCsp
     ? `<meta http-equiv="Content-Security-Policy" content="${frameMetaCsp(nonce)}">\n`
     : "";
@@ -1783,6 +1793,13 @@ const OA = {
 };
 function fromB64(s){return Uint8Array.from(atob(s),function(c){return c.charCodeAt(0)})}
 function jsonEmbed(s){return JSON.stringify(s).replace(/</g,"\\\\u003c")}
+// React content is a JS bundle spliced into the frame inline script body, so a
+// literal script-closing sequence in it would prematurely end that block.
+// Neutralize it the same way the server-side escapeInlineScript does on the
+// plain (unencrypted) react path. Only react needs this: html content carries
+// real user-script closing tags stampNonce must leave intact. (This comment
+// avoids the raw close-tag token so it can live inside this inline script.)
+function escScript(s){return s.replace(/<\\/script/gi,"<\\\\/script")}
 // The srcdoc iframe inherits the parent CSP, which is nonce-only with no
 // 'unsafe-inline'. Decrypted HTML artifact content carries bare user script
 // tags; stamp the per-request nonce onto every opening one that does not
@@ -1860,6 +1877,8 @@ form.addEventListener("submit",async function(event){
     const content=await decrypt(input.value);
     const doc=OA.format==="markdown"
       ? OA.template.split(JSON.stringify(OA.slot)).join(jsonEmbed(content))
+      : OA.format==="react"
+      ? OA.template.split(OA.slot).join(escScript(content))
       : stampNonce(OA.template.split(OA.slot).join(content));
     const frame=document.getElementById("oa-frame");
     frame.srcdoc=doc;

@@ -60,6 +60,9 @@ function extractTitle(content, format) {
   if (format === "markdown") {
     return content.match(/^#\s+(.+)$/m)?.[1].trim() ?? null;
   }
+  // A react artifact's content is a compiled JS bundle: no title to extract, so
+  // the recipe must supply artifact.title.
+  if (format === "react") return null;
   return content.match(/<title\b[^>]*>([^<]+)<\/title>/i)?.[1].trim() ?? null;
 }
 
@@ -1034,6 +1037,43 @@ function validateTheme(loaded) {
   }
 }
 
+// React recipes ship one JSX/TSX entry (the default-export component); the
+// builder precompiles + inlines React into a self-contained IIFE, so the html
+// body-fragment gates (inline <script>/<style>, external-request scan) do not
+// apply to the compiled bytes. This branch keeps the invariants that DO matter
+// for the published bundle: the body-only single-entry shape, and a bundle that
+// evaluates no code at runtime and loads no external script. The no-'unsafe-eval'
+// and no-external-host CSP is unchanged from every other format.
+function validateReact(loaded, composed) {
+  const fragments = loaded.recipe.document.fragments;
+  if (
+    fragments.theme.length > 0 ||
+    fragments.styles.length > 0 ||
+    fragments.scripts.length > 0
+  ) {
+    fail(
+      "react recipes only support body fragments — put the whole component, " +
+        "styles and behavior included, in one JSX/TSX entry",
+    );
+  }
+  const bodyCount = loaded.descriptors.filter(
+    (descriptor) => descriptor.slot === "body",
+  ).length;
+  if (bodyCount !== 1) {
+    fail(
+      "react recipes require exactly one body fragment: the default-export " +
+        "component entry (import any helpers from it)",
+    );
+  }
+  const bundle = composed.publishContent;
+  if (/\beval\s*\(/.test(bundle) || /\bnew\s+Function\s*\(/.test(bundle)) {
+    fail("react bundle must not contain eval or new Function");
+  }
+  if (/<script\b[^>]*\bsrc\s*=\s*["']https?:\/\//i.test(bundle)) {
+    fail("react bundle must not load an external script");
+  }
+}
+
 export function validateBuild(loaded, composed) {
   const { artifact } = loaded.recipe;
   validateTheme(loaded);
@@ -1051,6 +1091,8 @@ export function validateBuild(loaded, composed) {
     ) {
       fail("Markdown recipes only support body fragments");
     }
+  } else if (artifact.format === "react") {
+    validateReact(loaded, composed);
   } else {
     if (/<\/style/i.test(composed.authoredStyles)) {
       fail("style fragments cannot contain a closing style tag");
