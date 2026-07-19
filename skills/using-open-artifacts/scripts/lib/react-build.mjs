@@ -77,8 +77,20 @@ export function bundleReactComponent(entryRealPath, source) {
   }
 
   // The entry stub imports the component by absolute path (so it resolves from
-  // anywhere) and mounts it. React/ReactDOM resolve via nodePaths; the JSX
-  // automatic runtime injects react/jsx-runtime, which resolves the same way.
+  // anywhere) and mounts it. Alias-pin every React entrypoint to the skill
+  // runtime: the component's own `import "react"` would otherwise resolve from
+  // its on-disk tree, and esbuild dedupes by absolute path — two physical
+  // react copies → "Invalid hook call" at mount (standalone skill installs).
+  const resolveRuntime = (id) =>
+    nodeRequire.resolve(id, { paths: [runtimeModules] });
+  const reactAlias = {
+    react: resolveRuntime("react"),
+    "react/jsx-runtime": resolveRuntime("react/jsx-runtime"),
+    "react/jsx-dev-runtime": resolveRuntime("react/jsx-dev-runtime"),
+    "react-dom": resolveRuntime("react-dom"),
+    "react-dom/client": resolveRuntime("react-dom/client"),
+  };
+
   const stub = `import { createRoot } from "react-dom/client";
 import { createElement } from "react";
 import Component from ${JSON.stringify(entryRealPath)};
@@ -96,6 +108,7 @@ if (el) createRoot(el).render(createElement(Component));
       jsx: "automatic",
       minify: true,
       define: { "process.env.NODE_ENV": '"production"' },
+      alias: reactAlias,
       nodePaths: [runtimeModules],
       write: false,
       legalComments: "none",

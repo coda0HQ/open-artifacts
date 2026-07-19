@@ -163,4 +163,65 @@ describe("React/JSX artifact format", () => {
     expect(result.code).not.toBe(0);
     expect(result.stderr).toMatch(/only support body fragments/i);
   });
+
+  // esbuild dedupes by absolute path. Without alias-pinning the runtime, an
+  // entry that resolves its own react (standalone skill install / nested
+  // node_modules) would inline a second copy → "Invalid hook call" at mount.
+  it("pins a single React runtime even when the entry has a local react", async () => {
+    const { bundleReactComponent } = await import(
+      "../../skills/using-open-artifacts/scripts/lib/react-build.mjs"
+    );
+    const entryDir = mkdtempSync(join(tmpdir(), "oa-react-dup-"));
+    const localReact = join(entryDir, "node_modules", "react");
+    mkdirSync(localReact, { recursive: true });
+    const LOCAL_MARKER = "__OA_LOCAL_REACT_COPY__";
+    writeFileSync(
+      join(localReact, "package.json"),
+      JSON.stringify({
+        name: "react",
+        version: "0.0.0-local",
+        main: "index.js",
+      }),
+    );
+    // Side-effecting marker so minify/DCE cannot drop the local copy's proof.
+    writeFileSync(
+      join(localReact, "index.js"),
+      "export function useState(v){\n" +
+        `  globalThis[${JSON.stringify(LOCAL_MARKER)}] = 1;\n` +
+        "  return [v, () => {}];\n" +
+        "}\n" +
+        "export default { useState };\n",
+    );
+    // jsx-runtime stubs so an unaliased resolve can still complete a build.
+    writeFileSync(
+      join(localReact, "jsx-runtime.js"),
+      "export function jsx(t, p) {\n" +
+        `  globalThis[${JSON.stringify(LOCAL_MARKER)}] = 1;\n` +
+        "  return { t, p };\n" +
+        "}\n" +
+        "export function jsxs(t, p) { return jsx(t, p); }\n" +
+        'export const Fragment = "frag";\n',
+    );
+    writeFileSync(
+      join(localReact, "jsx-dev-runtime.js"),
+      "export function jsx(t, p) {\n" +
+        `  globalThis[${JSON.stringify(LOCAL_MARKER)}] = 1;\n` +
+        "  return { t, p };\n" +
+        "}\n" +
+        "export function jsxs(t, p) { return jsx(t, p); }\n" +
+        'export const Fragment = "frag";\n',
+    );
+    const entryPath = join(entryDir, "App.jsx");
+    const source = `import { useState } from "react";
+export default function App() {
+  const [n] = useState(0);
+  return <span>{n}</span>;
+}
+`;
+    writeFileSync(entryPath, source);
+
+    const bundle = bundleReactComponent(entryPath, source);
+    expect(bundle).toContain("createRoot");
+    expect(bundle).not.toContain(LOCAL_MARKER);
+  });
 });

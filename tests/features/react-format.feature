@@ -40,3 +40,9 @@ Feature: React/JSX artifact format
     Then the "</script" is escaped to "<\/script" so the inline script is not broken
     And the escape mirrors the plain path's escapeInlineScript
     And the html and markdown decrypt paths are unchanged
+
+  Scenario: A single React runtime is bundled even when the entry has its own react
+    Given a react entry component that sits next to a local node_modules/react
+    When the skill precompiles the component
+    Then the bundle uses only the skill runtime React
+    And the entry-local React copy is not inlined
