@@ -5,7 +5,13 @@
 // resolveMaxContentBytes in src/api.ts (the Worker enforces the same cap);
 // raising it far past a few MiB risks the Worker request-body / memory limit.
 export function resolveMaxContentBytes() {
-  const mib = Number.parseInt(process.env.MAX_CONTENT_MIB ?? "", 10);
+  const raw = process.env.MAX_CONTENT_MIB ?? "";
+  // Full-string digits only — keep in lockstep with src/api.ts so parseInt
+  // partials like "12abc" fall back instead of silently raising the cap.
+  if (!/^\d+$/.test(raw)) {
+    return 4 * 1024 * 1024;
+  }
+  const mib = Number.parseInt(raw, 10);
   return (mib > 0 ? mib : 4) * 1024 * 1024;
 }
 

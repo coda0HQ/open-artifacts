@@ -23,6 +23,7 @@ Feature: Configurable content cap
 
   Scenario: An invalid override falls back to the 4 MiB default
     Given MAX_CONTENT_MIB is set to a non-positive or non-numeric value
+      (including partial parses like "12abc" and non-integers like "12.5")
     When a 5 MiB artifact is published
     Then it is rejected with 413
 

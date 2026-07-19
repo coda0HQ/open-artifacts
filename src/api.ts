@@ -42,7 +42,13 @@ export type AppContext = { Bindings: Bindings };
 // at the operator's own risk; keep this in lockstep with resolveMaxContentBytes
 // in skills/using-open-artifacts/scripts/lib/limits.mjs.
 export function resolveMaxContentBytes(env: Bindings): number {
-  const mib = Number.parseInt(env.MAX_CONTENT_MIB ?? "", 10);
+  const raw = env.MAX_CONTENT_MIB ?? "";
+  // Full-string digits only — parseInt("12abc") === 12 would silently raise
+  // the cap contrary to the documented "non-numeric falls back" contract.
+  if (!/^\d+$/.test(raw)) {
+    return 4 * 1024 * 1024;
+  }
+  const mib = Number.parseInt(raw, 10);
   return (mib > 0 ? mib : 4) * 1024 * 1024;
 }
 

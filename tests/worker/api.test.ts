@@ -684,7 +684,8 @@ describe("configurable content cap (MAX_CONTENT_MIB)", () => {
   });
 
   it("falls back to 4 MiB for a non-positive or non-numeric override", async () => {
-    for (const value of ["0", "-5", "abc", ""]) {
+    // "12abc" must not partially parse as 12 — docs require a full integer.
+    for (const value of ["0", "-5", "abc", "", "12abc", "12.5"]) {
       const res = await publish("x".repeat(5 * MIB), {
         ...env,
         MAX_CONTENT_MIB: value,
