@@ -417,6 +417,44 @@ describe("Recipe builder", () => {
     expect(requests).toHaveLength(0);
   });
 
+  // The builder's output gate must track the service cap so a passing build is
+  // never 413'd on publish. It defaults to 4 MiB and reads MAX_CONTENT_MIB, the
+  // same override the Worker honors. Two ~2 MiB body fragments keep each source
+  // file under the per-fragment input guard while pushing composed output past
+  // 4 MiB, isolating the output gate.
+  const writeOversizeRecipe = (name: string): { recipePath: string } => {
+    const chunk = "x".repeat(2 * 1024 * 1024 + 4096);
+    const { recipePath } = writeRecipe(name, {
+      body: `<main class="oa-prose"><h1>Big</h1><p>${chunk}</p>\n`,
+      mutate: (r) => {
+        r.document.fragments.body.push(`${name}-fragments/body2.html`);
+      },
+    });
+    writeFileSync(
+      join(projectDir, `recipes/${name}-fragments/body2.html`),
+      `<p>${chunk}</p></main>\n`,
+    );
+    return { recipePath };
+  };
+
+  it("fails the output gate when composed output exceeds the default 4 MiB cap", async () => {
+    const { recipePath } = writeOversizeRecipe("oversize-output");
+    const result = await run(["validate", recipePath], {
+      expectFailure: true,
+    });
+    expect(result.stderr).toContain("service limit");
+    expect(requests).toHaveLength(0);
+  });
+
+  it("passes the same over-4-MiB output when MAX_CONTENT_MIB raises the cap", async () => {
+    const { recipePath } = writeOversizeRecipe("oversize-output-raised");
+    const result = await run(["validate", recipePath], {
+      env: { MAX_CONTENT_MIB: "12" },
+    });
+    expect(result.code).toBe(0);
+    expect(requests).toHaveLength(0);
+  });
+
   it("builds an explicit standalone Canvas preview with one injected control cluster", async () => {
     const { recipePath } = writeRecipe("flow", { canvas: true });
     const output = join(projectDir, "flow-preview.html");

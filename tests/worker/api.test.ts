@@ -648,3 +648,106 @@ describe("the feedback channel is gone", () => {
     expect(html).toContain("oa-cm-toggle");
   });
 });
+
+describe("configurable content cap (MAX_CONTENT_MIB)", () => {
+  const MIB = 1024 * 1024;
+
+  async function fetchWith(
+    request: Request,
+    environment: Bindings,
+  ): Promise<Response> {
+    const ctx = createExecutionContext();
+    const res = await app.fetch(request, environment, ctx);
+    await waitOnExecutionContext(ctx);
+    return res;
+  }
+
+  const publish = (content: string, environment: Bindings): Promise<Response> =>
+    fetchWith(
+      jsonRequest("POST", "/api/artifacts", {
+        content,
+        title: "Big",
+        favicon: "📦",
+      }),
+      environment,
+    );
+
+  it("rejects content over the default 4 MiB cap when MAX_CONTENT_MIB is unset", async () => {
+    const res = await publish("x".repeat(5 * MIB), env);
+    expect(res.status).toBe(413);
+  });
+
+  it("accepts 10 MiB and rejects 13 MiB under MAX_CONTENT_MIB=12", async () => {
+    const raised: Bindings = { ...env, MAX_CONTENT_MIB: "12" };
+    expect((await publish("x".repeat(10 * MIB), raised)).status).toBe(201);
+    expect((await publish("x".repeat(13 * MIB), raised)).status).toBe(413);
+  });
+
+  it("falls back to 4 MiB for a non-positive or non-numeric override", async () => {
+    for (const value of ["0", "-5", "abc", ""]) {
+      const res = await publish("x".repeat(5 * MIB), {
+        ...env,
+        MAX_CONTENT_MIB: value,
+      });
+      expect(res.status, `MAX_CONTENT_MIB=${JSON.stringify(value)}`).toBe(413);
+    }
+  });
+
+  it("applies the raised cap to updates as well as creates", async () => {
+    const raised: Bindings = { ...env, MAX_CONTENT_MIB: "12" };
+    const created = await createArtifact();
+    const put = (content: string): Promise<Response> =>
+      fetchWith(
+        jsonRequest(
+          "PUT",
+          `/api/artifacts/${created.id}`,
+          { content },
+          { authorization: `Bearer ${created.writeToken}` },
+        ),
+        raised,
+      );
+    expect((await put("x".repeat(10 * MIB))).status).toBe(200);
+    expect((await put("x".repeat(13 * MIB))).status).toBe(413);
+  });
+
+  it("rejects oversized PUT content under the default cap", async () => {
+    const created = await createArtifact();
+    const res = await fetchWith(
+      jsonRequest(
+        "PUT",
+        `/api/artifacts/${created.id}`,
+        { content: "x".repeat(5 * MIB) },
+        { authorization: `Bearer ${created.writeToken}` },
+      ),
+      env,
+    );
+    expect(res.status).toBe(413);
+  });
+
+  it("gives PUT a pre-parse body cap that scales with MAX_CONTENT_MIB", async () => {
+    const created = await createArtifact();
+    // A real ~8 MiB body with an honest content-length (this test env does not
+    // auto-populate the header). Its declared length sits above the default
+    // derived body cap (~6.3 MiB) but below the ~18.9 MiB cap at 12 MiB.
+    const body = JSON.stringify({ content: "x".repeat(8 * MIB) });
+    const put = (environment: Bindings): Promise<Response> =>
+      fetchWith(
+        new Request(`${BASE}/api/artifacts/${created.id}`, {
+          method: "PUT",
+          headers: {
+            "content-type": "application/json",
+            "content-length": String(new TextEncoder().encode(body).byteLength),
+            authorization: `Bearer ${created.writeToken}`,
+          },
+          body,
+        }),
+        environment,
+      );
+    // Default cap: 413'd before c.req.json() buffers the payload — the pre-parse
+    // guard PUT previously lacked.
+    expect((await put(env)).status).toBe(413);
+    // Raised cap: the same declared length clears the higher body cap, so the
+    // request proceeds and the (under-cap) content is accepted.
+    expect((await put({ ...env, MAX_CONTENT_MIB: "12" })).status).toBe(200);
+  });
+});

@@ -3,7 +3,6 @@ import { Hono } from "hono";
 import type { CreateInput } from "./domain";
 import {
   MAX_COMMENT_BODY_BYTES,
-  MAX_CONTENT_BYTES,
   validateComment,
   validateCreate,
   validateUpdate,
@@ -28,12 +27,29 @@ export type Bindings = Env & {
   // way — the opt-in never grants allow-same-origin (R1). Absent (or any other
   // value) keeps font-src data:-only.
   OPEN_ARTIFACTS_WEB_FONTS?: string;
+  // Content cap in MiB. Unset keeps the deliberate 4 MiB free-tier default
+  // (docs/architecture.md); a self-hoster on a paid plan raises it to publish
+  // larger artifacts. See resolveMaxContentBytes for the parse/fallback rules.
+  MAX_CONTENT_MIB?: string;
 };
 export type AppContext = { Bindings: Bindings };
 
+// The content cap defaults to 4 MiB — a deliberate free-tier envelope — and is
+// overridable per instance via MAX_CONTENT_MIB. Unset, non-numeric, or <= 0
+// falls back to 4 so the default stays byte-for-byte unchanged. Raising it far
+// past a few MiB risks the Cloudflare Worker request-body / memory limit (the
+// body is buffered by c.req.json() and held as a JS string), so a large cap is
+// at the operator's own risk; keep this in lockstep with resolveMaxContentBytes
+// in skills/using-open-artifacts/scripts/lib/limits.mjs.
+export function resolveMaxContentBytes(env: Bindings): number {
+  const mib = Number.parseInt(env.MAX_CONTENT_MIB ?? "", 10);
+  return (mib > 0 ? mib : 4) * 1024 * 1024;
+}
+
 // JSON escaping and encryption metadata inflate the body beyond the content
 // cap; anything past this is rejected before parsing.
-const MAX_BODY_BYTES = MAX_CONTENT_BYTES * 1.5 + 16 * 1024;
+const bodyCapFor = (maxContentBytes: number): number =>
+  maxContentBytes * 1.5 + 16 * 1024;
 
 export const storeFrom = (c: Context<AppContext>): ArtifactStore =>
   new D1R2Store(c.env.DB, c.env.CONTENT);
@@ -174,8 +190,9 @@ api.post("/artifacts", async (c) => {
     }
   }
 
+  const maxContentBytes = resolveMaxContentBytes(c.env);
   const declaredLength = Number(c.req.header("content-length") ?? "0");
-  if (declaredLength > MAX_BODY_BYTES) {
+  if (declaredLength > bodyCapFor(maxContentBytes)) {
     return c.json({ error: "request body too large" }, 413);
   }
 
@@ -186,7 +203,7 @@ api.post("/artifacts", async (c) => {
     return c.json({ error: "request body must be JSON" }, 400);
   }
 
-  const parsed = validateCreate(body);
+  const parsed = validateCreate(body, maxContentBytes);
   if (!parsed.ok) return c.json({ error: parsed.error }, parsed.status);
 
   const store = storeFrom(c);
@@ -246,6 +263,15 @@ api.put("/artifacts/:id", async (c) => {
   const auth = await authorizeWrite(c, store, c.req.param("id"));
   if (!auth.ok) return auth.response;
 
+  // Same pre-parse body cap as POST: reject an oversized declared body before
+  // c.req.json() buffers it into worker memory. PUT lacked this guard, so an
+  // over-cap update was only caught after the whole body was parsed.
+  const maxContentBytes = resolveMaxContentBytes(c.env);
+  const declaredLength = Number(c.req.header("content-length") ?? "0");
+  if (declaredLength > bodyCapFor(maxContentBytes)) {
+    return c.json({ error: "request body too large" }, 413);
+  }
+
   let body: Record<string, unknown>;
   try {
     body = await c.req.json<Record<string, unknown>>();
@@ -253,7 +279,7 @@ api.put("/artifacts/:id", async (c) => {
     return c.json({ error: "request body must be JSON" }, 400);
   }
 
-  const parsed = validateUpdate(body);
+  const parsed = validateUpdate(body, maxContentBytes);
   if (!parsed.ok) return c.json({ error: parsed.error }, parsed.status);
 
   const { baseVersion, force } = parsed.value;
