@@ -143,6 +143,24 @@ function saveCredentials(credentials) {
   ensureGitignored();
 }
 
+// Read-modify-write the credentials file in one place, re-reading immediately
+// before the write. commandCreate already does this inline; update, delete, and
+// migrate held a snapshot read before their network round-trip and wrote it back
+// afterward, so a credentials write by another process during that window — a
+// concurrent create adding a token, say — was silently clobbered. A lost write
+// token is unrecoverable (no endpoint re-issues one). Routing every mutation
+// through here keeps the read adjacent to the write and gives future callers one
+// correct path instead of a pattern to remember.
+//
+// A narrow RMW race still exists (no file lock); running `update` calls
+// concurrently is unsupported, documented in SKILL.md. This closes the
+// network-sized window, which is the one that actually bit.
+function mutateCredentials(mutate) {
+  const credentials = loadCredentials();
+  mutate(credentials);
+  saveCredentials(credentials);
+}
+
 // Resolve which manifest file (shared vs local) an entry currently lives in.
 // Used by update/delete/ack/auto-update to write back to the right file
 // without persisting an origin tag on the entry.
@@ -604,11 +622,12 @@ async function commandUpdate(id, recipePath, flags) {
     saveManifest(nextManifest, artifact.local);
   }
   if (password) {
-    credentials.passwords[id] = password;
-    credentials.namedPasswords[
-      build.loaded.recipe.security.passwordCredential
-    ] = password;
-    saveCredentials(credentials);
+    mutateCredentials((credentials) => {
+      credentials.passwords[id] = password;
+      credentials.namedPasswords[
+        build.loaded.recipe.security.passwordCredential
+      ] = password;
+    });
   }
   if (artifact.local || password) ensureGitignored();
 
@@ -624,8 +643,9 @@ async function commandDelete(id, flags) {
   // it actually lives in.
   const merged = loadManifest();
   findEntry(merged, id);
-  const credentials = loadCredentials();
-  const token = credentials.tokens[id];
+  // Read only to authorize the request; the write-back re-reads (mutateCredentials)
+  // so a concurrent credentials write during the DELETE round-trip is not lost.
+  const token = loadCredentials().tokens[id];
   if (!token) fail(`no write token for ${id} in ${CREDENTIALS_PATH}`);
 
   const { status, json } = await request(
@@ -640,9 +660,10 @@ async function commandDelete(id, flags) {
   const { local, manifest } = manifestFileForId(id);
   manifest.artifacts = manifest.artifacts.filter((a) => a.id !== id);
   saveManifest(manifest, local);
-  delete credentials.tokens[id];
-  if (credentials.passwords) delete credentials.passwords[id];
-  saveCredentials(credentials);
+  mutateCredentials((credentials) => {
+    delete credentials.tokens[id];
+    if (credentials.passwords) delete credentials.passwords[id];
+  });
   console.error(`deleted artifact ${id}`);
 }
 
@@ -1092,8 +1113,10 @@ async function commandMigrate(id, flags) {
     console.error("artifact already uses a Recipe");
     return entry.recipe;
   }
-  const credentials = loadCredentials();
-  const token = credentials.tokens[id];
+  // Read only to authorize the request; the write-back re-reads
+  // (mutateCredentials) so a concurrent credentials write during migrate's
+  // long round-trip (GET raw, then build) is not lost.
+  const token = loadCredentials().tokens[id];
   const { status, json, text } = await request(
     "GET",
     `${config.apiUrl}/api/artifacts/${id}/raw`,
@@ -1109,7 +1132,12 @@ async function commandMigrate(id, flags) {
   let source = text;
   let password = null;
   if (encrypted) {
-    password = flags.password ?? credentials.passwords[id];
+    // Re-read here — do not close over a pre-network credentials snapshot.
+    // The earlier load was dropped so migrate's write-back goes through
+    // mutateCredentials; this password lookup is post-GET and needs a fresh
+    // read (or --password). A dangling `credentials` binding here crashed
+    // every encrypted migrate (#38 review).
+    password = flags.password ?? loadCredentials().passwords[id];
     if (!password) {
       fail("encrypted legacy artifact requires --password for migration");
     }
@@ -1235,8 +1263,9 @@ async function commandMigrate(id, flags) {
     saveManifest(target, local);
   }
   if (password) {
-    credentials.namedPasswords[`artifact-${id}`] = password;
-    saveCredentials(credentials);
+    mutateCredentials((credentials) => {
+      credentials.namedPasswords[`artifact-${id}`] = password;
+    });
   }
   if (local) ensureGitignored();
   console.log(build.loaded.projectPath);
