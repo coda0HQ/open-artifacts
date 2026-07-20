@@ -302,13 +302,13 @@ function writeRecipe(
   const isPrivate = options.local === true || options.encrypted === true;
   const recipeDir = join(
     projectDir,
-    isPrivate ? ".artifacts/recipes.local" : "recipes",
+    isPrivate ? ".artifacts/recipes.local" : ".artifacts/recipes",
   );
   const fragmentDir = join(
     projectDir,
     isPrivate
       ? `.artifacts/fragments.local/${name}`
-      : `recipes/${name}-fragments`,
+      : `.artifacts/recipes/${name}-fragments`,
   );
   mkdirSync(recipeDir, { recursive: true });
   mkdirSync(fragmentDir, { recursive: true });
@@ -413,7 +413,14 @@ describe("Recipe builder", () => {
       canvas: false,
       fragments: 2,
     });
-    expect(existsSync(join(projectDir, ".artifacts"))).toBe(false);
+    // Shared sources live under .artifacts/, but validate must not write
+    // publication state (manifest / credentials).
+    expect(existsSync(join(projectDir, ".artifacts/manifest.json"))).toBe(
+      false,
+    );
+    expect(existsSync(join(projectDir, ".artifacts/credentials.json"))).toBe(
+      false,
+    );
     expect(requests).toHaveLength(0);
   });
 
@@ -431,7 +438,7 @@ describe("Recipe builder", () => {
       },
     });
     writeFileSync(
-      join(projectDir, `recipes/${name}-fragments/body2.html`),
+      join(projectDir, `.artifacts/recipes/${name}-fragments/body2.html`),
       `<p>${chunk}</p></main>\n`,
     );
     return { recipePath };
@@ -575,7 +582,7 @@ describe("Recipe builder", () => {
   });
 
   it("passes a max-width class applied only via JS (L2 rendered body)", async () => {
-    const scriptsDir = join(projectDir, "js-container-fragments");
+    const scriptsDir = join(projectDir, ".artifacts/js-container-fragments");
     mkdirSync(scriptsDir, { recursive: true });
     writeFileSync(
       join(scriptsDir, "behavior.js"),
@@ -707,7 +714,7 @@ describe("Recipe builder", () => {
   });
 
   it("passes a CSP-forbidden token mentioned only in a comment", async () => {
-    const scriptsDir = join(projectDir, "comment-csp-fragments");
+    const scriptsDir = join(projectDir, ".artifacts/comment-csp-fragments");
     mkdirSync(scriptsDir, { recursive: true });
     writeFileSync(
       join(scriptsDir, "behavior.js"),
@@ -729,7 +736,7 @@ describe("Recipe builder", () => {
   });
 
   it("rejects a real fetch() call in executable code", async () => {
-    const scriptsDir = join(projectDir, "real-csp-fragments");
+    const scriptsDir = join(projectDir, ".artifacts/real-csp-fragments");
     mkdirSync(scriptsDir, { recursive: true });
     writeFileSync(join(scriptsDir, "behavior.js"), "fetch('/secret');\n");
     const recipe = writeRecipe("real-csp", {
@@ -752,7 +759,7 @@ describe("Recipe builder", () => {
   });
 
   it("rejects a @font-face src that points at a remote host", async () => {
-    const stylesDir = join(projectDir, "remote-font-fragments");
+    const stylesDir = join(projectDir, ".artifacts/remote-font-fragments");
     mkdirSync(stylesDir, { recursive: true });
     writeFileSync(
       join(stylesDir, "styles.css"),
@@ -774,7 +781,7 @@ describe("Recipe builder", () => {
   });
 
   it("accepts a @font-face src that points at the same-origin /fonts/ proxy", async () => {
-    const stylesDir = join(projectDir, "proxy-font-fragments");
+    const stylesDir = join(projectDir, ".artifacts/proxy-font-fragments");
     mkdirSync(stylesDir, { recursive: true });
     writeFileSync(
       join(stylesDir, "styles.css"),
@@ -793,7 +800,7 @@ describe("Recipe builder", () => {
   });
 
   it("accepts a @font-face src pointing at an allowlisted font CDN", async () => {
-    const stylesDir = join(projectDir, "cdn-font-fragments");
+    const stylesDir = join(projectDir, ".artifacts/cdn-font-fragments");
     mkdirSync(stylesDir, { recursive: true });
     writeFileSync(
       join(stylesDir, "styles.css"),
@@ -812,7 +819,7 @@ describe("Recipe builder", () => {
   });
 
   it("accepts a Google Fonts @import (fonts.googleapis.com CSS)", async () => {
-    const stylesDir = join(projectDir, "gfont-import-fragments");
+    const stylesDir = join(projectDir, ".artifacts/gfont-import-fragments");
     mkdirSync(stylesDir, { recursive: true });
     writeFileSync(
       join(stylesDir, "styles.css"),
@@ -831,7 +838,10 @@ describe("Recipe builder", () => {
   });
 
   it("accepts a same-origin @import of the /fonts proxy CSS shim", async () => {
-    const stylesDir = join(projectDir, "fonts-proxy-import-fragments");
+    const stylesDir = join(
+      projectDir,
+      ".artifacts/fonts-proxy-import-fragments",
+    );
     mkdirSync(stylesDir, { recursive: true });
     writeFileSync(
       join(stylesDir, "styles.css"),
@@ -852,7 +862,7 @@ describe("Recipe builder", () => {
   });
 
   it("rejects a @font-face src pointing at a non-allowlisted host", async () => {
-    const stylesDir = join(projectDir, "bad-cdn-font-fragments");
+    const stylesDir = join(projectDir, ".artifacts/bad-cdn-font-fragments");
     mkdirSync(stylesDir, { recursive: true });
     writeFileSync(
       join(stylesDir, "styles.css"),
@@ -978,7 +988,7 @@ describe("Recipe builder", () => {
   });
 
   it("passes a CSP-forbidden API name mentioned only in a script string", async () => {
-    const scriptsDir = join(projectDir, "string-csp-fragments");
+    const scriptsDir = join(projectDir, ".artifacts/string-csp-fragments");
     mkdirSync(scriptsDir, { recursive: true });
     writeFileSync(
       join(scriptsDir, "behavior.js"),
@@ -1325,7 +1335,7 @@ describe("Recipe builder", () => {
   });
 
   it("fails a scrollspy with a tight IO band, no boundary fallback, and scrollIntoView in setActive", async () => {
-    const scriptsDir = join(projectDir, "scrollspy-bad-fragments");
+    const scriptsDir = join(projectDir, ".artifacts/scrollspy-bad-fragments");
     mkdirSync(scriptsDir, { recursive: true });
     writeFileSync(
       join(scriptsDir, "behavior.js"),
@@ -1360,7 +1370,7 @@ describe("Recipe builder", () => {
   });
 
   it("passes a scrollspy with a bottom-boundary fallback and chip-only scrollIntoView", async () => {
-    const scriptsDir = join(projectDir, "scrollspy-good-fragments");
+    const scriptsDir = join(projectDir, ".artifacts/scrollspy-good-fragments");
     mkdirSync(scriptsDir, { recursive: true });
     writeFileSync(
       join(scriptsDir, "behavior.js"),
@@ -1397,7 +1407,10 @@ describe("Recipe builder", () => {
     // The project-intro artifact used `window.scrollY + window.innerHeight >=
     // document.documentElement.scrollHeight - 2` — functionally correct, but the
     // gate must accept this additive spelling, not just the maxScroll local form.
-    const scriptsDir = join(projectDir, "scrollspy-additive-fragments");
+    const scriptsDir = join(
+      projectDir,
+      ".artifacts/scrollspy-additive-fragments",
+    );
     mkdirSync(scriptsDir, { recursive: true });
     writeFileSync(
       join(scriptsDir, "behavior.js"),
@@ -1431,7 +1444,7 @@ describe("Recipe builder", () => {
   });
 
   it("passes a lazy-image-reveal artifact (not a scrollspy) untouched", async () => {
-    const scriptsDir = join(projectDir, "lazy-reveal-fragments");
+    const scriptsDir = join(projectDir, ".artifacts/lazy-reveal-fragments");
     mkdirSync(scriptsDir, { recursive: true });
     writeFileSync(
       join(scriptsDir, "behavior.js"),
@@ -1845,7 +1858,7 @@ describe("Recipe publishing", () => {
     expect(state.artifacts[0]).toMatchObject({
       id: "testid123456",
       version: 1,
-      recipe: "recipes/report.recipe.json",
+      recipe: ".artifacts/recipes/report.recipe.json",
       strategy: "direct",
     });
     expect(state.artifacts[0].recipeHash).toMatch(/^sha256:/);
@@ -1988,6 +2001,187 @@ describe("Recipe publishing", () => {
     expect(privateResult.stderr).toContain(
       "shared Recipes cannot live under .artifacts/recipes.local",
     );
+  });
+
+  it("rejects a shared Recipe placed outside .artifacts/", async () => {
+    // Top-level artifacts/ is the common mistake the docs once taught.
+    const recipeDir = join(projectDir, "artifacts");
+    const fragmentDir = join(recipeDir, "report-fragments");
+    mkdirSync(fragmentDir, { recursive: true });
+    writeFileSync(
+      join(fragmentDir, "theme.css"),
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n',
+    );
+    writeFileSync(
+      join(fragmentDir, "body.html"),
+      '<main class="oa-prose"><h1>Outside</h1></main>\n',
+    );
+    const recipePath = join(recipeDir, "report.recipe.json");
+    writeJson(recipePath, {
+      version: 1,
+      artifact: {
+        title: "Outside",
+        description: "Misplaced shared recipe",
+        favicon: "📄",
+        format: "html",
+        level: 1,
+        canvas: false,
+        channel: null,
+        scope: "placement",
+        watch: [],
+        local: false,
+        autoUpdate: false,
+      },
+      document: {
+        language: "en",
+        theme: "test",
+        fragments: {
+          theme: ["report-fragments/theme.css"],
+          styles: [],
+          body: ["report-fragments/body.html"],
+          scripts: [],
+        },
+      },
+      security: { encrypted: false, passwordCredential: null },
+      build: { strategy: "auto" },
+    });
+
+    const result = await run(["validate", recipePath], { expectFailure: true });
+    expect(result.stderr).toContain(
+      "shared Recipes must live under .artifacts/recipes/",
+    );
+    expect(requests).toHaveLength(0);
+  });
+
+  it("rejects shared fragments that resolve outside .artifacts/", async () => {
+    // Recipe correctly under .artifacts/recipes/, but fragments escape to
+    // a top-level artifacts/ tree.
+    const recipeDir = join(projectDir, ".artifacts/recipes");
+    const outsideDir = join(projectDir, "artifacts/outside-fragments");
+    mkdirSync(recipeDir, { recursive: true });
+    mkdirSync(outsideDir, { recursive: true });
+    writeFileSync(
+      join(outsideDir, "theme.css"),
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n',
+    );
+    writeFileSync(
+      join(outsideDir, "body.html"),
+      '<main class="oa-prose"><h1>Outside frags</h1></main>\n',
+    );
+    const recipePath = join(recipeDir, "outside-frags.recipe.json");
+    writeJson(recipePath, {
+      version: 1,
+      artifact: {
+        title: "Outside frags",
+        description: "Misplaced shared fragments",
+        favicon: "📄",
+        format: "html",
+        level: 1,
+        canvas: false,
+        channel: null,
+        scope: "placement",
+        watch: [],
+        local: false,
+        autoUpdate: false,
+      },
+      document: {
+        language: "en",
+        theme: "test",
+        fragments: {
+          theme: ["../../artifacts/outside-fragments/theme.css"],
+          styles: [],
+          body: ["../../artifacts/outside-fragments/body.html"],
+          scripts: [],
+        },
+      },
+      security: { encrypted: false, passwordCredential: null },
+      build: { strategy: "auto" },
+    });
+
+    const result = await run(["validate", recipePath], { expectFailure: true });
+    expect(result.stderr).toContain(
+      "shared fragments must live under .artifacts/fragments/",
+    );
+    expect(requests).toHaveLength(0);
+  });
+
+  it("accepts a shared Recipe and fragments both under .artifacts/", async () => {
+    const built = writeRecipe("shared-ok");
+    // Point at the conventional shared layout migration already writes:
+    // .artifacts/recipes/ + .artifacts/fragments/<slug>/
+    const recipe = readJson<TestRecipe>(built.recipePath);
+    const fragDir = join(projectDir, ".artifacts/fragments/shared-ok");
+    mkdirSync(fragDir, { recursive: true });
+    writeFileSync(
+      join(fragDir, "theme.css"),
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n',
+    );
+    writeFileSync(
+      join(fragDir, "body.html"),
+      '<main class="oa-prose"><h1>Shared ok</h1></main>\n',
+    );
+    recipe.document.fragments.theme = ["../fragments/shared-ok/theme.css"];
+    recipe.document.fragments.body = ["../fragments/shared-ok/body.html"];
+    writeJson(built.recipePath, recipe);
+
+    const result = await run(["validate", built.recipePath]);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      strategy: "direct",
+      format: "html",
+      fragments: 2,
+    });
+  });
+
+  it("accepts skill-shipped example Recipes outside .artifacts/", async () => {
+    // examples/recipes/ ships with the skill as reference sources. The
+    // shared-placement gate must not force them under .artifacts/.
+    const recipeDir = join(projectDir, "examples/recipes/document");
+    const fragmentDir = join(recipeDir, "fragments");
+    mkdirSync(fragmentDir, { recursive: true });
+    writeFileSync(
+      join(fragmentDir, "theme.css"),
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n',
+    );
+    writeFileSync(
+      join(fragmentDir, "body.html"),
+      '<main class="oa-prose"><h1>Example</h1></main>\n',
+    );
+    const recipePath = join(recipeDir, "report.recipe.json");
+    writeJson(recipePath, {
+      version: 1,
+      artifact: {
+        title: "Example",
+        description: "Skill-shipped example",
+        favicon: "📄",
+        format: "html",
+        level: 1,
+        canvas: false,
+        channel: null,
+        scope: "example",
+        watch: [],
+        local: false,
+        autoUpdate: false,
+      },
+      document: {
+        language: "en",
+        theme: "test",
+        fragments: {
+          theme: ["fragments/theme.css"],
+          styles: [],
+          body: ["fragments/body.html"],
+          scripts: [],
+        },
+      },
+      security: { encrypted: false, passwordCredential: null },
+      build: { strategy: "auto" },
+    });
+
+    const result = await run(["validate", recipePath]);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      strategy: "direct",
+      format: "html",
+      fragments: 2,
+    });
   });
 
   it("reports the fragments.local rule and ../traversal for a local Recipe with misplaced fragments", async () => {

@@ -23,8 +23,9 @@ create token, put it in `OPEN_ARTIFACTS_TOKEN` or `config.json` `createToken`.
 
 Every artifact is built from a JSON Recipe plus ordered fragments. Read
 `${CLAUDE_SKILL_DIR}/references/recipe.md` before creating or updating one.
-Shared Recipes and fragments are project sources and may be committed. Local
-or encrypted sources live under `.artifacts/recipes.local/` and
+Shared Recipes and fragments are project sources and may be committed — place
+them under `.artifacts/recipes/` and `.artifacts/fragments/`. Local or
+encrypted sources live under `.artifacts/recipes.local/` and
 `.artifacts/fragments.local/`.
 
 State lives in `.artifacts/`: Manifest v2 records only publication state and
@@ -273,8 +274,8 @@ in a sub-agent" above.)*
 Create a Recipe and ordered fragments, validate them, then publish:
 
 ```
-node artifact.mjs validate artifacts/app-interactions.recipe.json
-node artifact.mjs create artifacts/app-interactions.recipe.json
+node artifact.mjs validate .artifacts/recipes/app-interactions.recipe.json
+node artifact.mjs create .artifacts/recipes/app-interactions.recipe.json
 ```
 
 The Recipe owns favicon, scope, channel, watch globs, level, Canvas mode,

@@ -288,3 +288,29 @@ Feature: Build validation catches silent layout defects
     Given an HTML recipe whose body shows icon-in-heading markup only inside an HTML comment
     When the agent runs the artifact script with validate
     Then the build succeeds because comments are stripped before the heading scan
+
+  Scenario: A shared Recipe placed outside .artifacts/ fails validation
+    Given a shared (non-local, non-encrypted) HTML recipe whose file lives in a
+      top-level artifacts/ directory rather than under .artifacts/
+    When the agent runs the artifact script with validate
+    Then the build fails telling the author shared Recipes must live under .artifacts/recipes/
+    And no publish request is made
+
+  Scenario: A shared Recipe whose fragments live outside .artifacts/ fails validation
+    Given a shared HTML recipe correctly placed under .artifacts/recipes/ but whose
+      fragments are referenced from a top-level artifacts/ directory outside .artifacts/
+    When the agent runs the artifact script with validate
+    Then the build fails telling the author shared fragments must live under .artifacts/fragments/
+    And no publish request is made
+
+  Scenario: A shared Recipe and fragments both under .artifacts/ passes validation
+    Given a shared HTML recipe whose file lives under .artifacts/recipes/ and whose
+      fragments live under .artifacts/fragments/
+    When the agent runs the artifact script with validate
+    Then the build succeeds because shared sources are correctly rooted under .artifacts/
+
+  Scenario: A skill-shipped example Recipe outside .artifacts/ still validates
+    Given a shared HTML recipe under examples/recipes/ (the skill's reference sources)
+      with colocated fragments under that same examples tree
+    When the agent runs the artifact script with validate
+    Then the build succeeds because skill examples are exempt from the project-source placement gate
