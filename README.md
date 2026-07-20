@@ -63,9 +63,9 @@ Retargeted to this project's strict no-external-requests CSP.
 Ask your agent to "publish this as an artifact" — it runs the bundled CLI:
 
 ```sh
-node .claude/skills/using-open-artifacts/scripts/artifact.mjs validate \
+node skills/using-open-artifacts/scripts/artifact.mjs validate \
   artifacts/app-interactions.recipe.json
-node .claude/skills/using-open-artifacts/scripts/artifact.mjs create \
+node skills/using-open-artifacts/scripts/artifact.mjs create \
   artifacts/app-interactions.recipe.json
 ```
 

@@ -54,9 +54,9 @@ CSP。
 让你的 agent "把这个发布成 artifact"，它会运行随附的 CLI：
 
 ```sh
-node .claude/skills/using-open-artifacts/scripts/artifact.mjs validate \
+node skills/using-open-artifacts/scripts/artifact.mjs validate \
   artifacts/app-interactions.recipe.json
-node .claude/skills/using-open-artifacts/scripts/artifact.mjs create \
+node skills/using-open-artifacts/scripts/artifact.mjs create \
   artifacts/app-interactions.recipe.json
 ```
 
