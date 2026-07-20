@@ -28,7 +28,7 @@ export default function App() {
 function writeReactRecipe(
   options: { body?: string; mutate?: (recipe: TestRecipe) => void } = {},
 ): string {
-  const recipeDir = join(projectDir, "recipes");
+  const recipeDir = join(projectDir, ".artifacts/recipes");
   const fragmentDir = join(recipeDir, "fragments");
   mkdirSync(fragmentDir, { recursive: true });
   writeFileSync(join(fragmentDir, "App.jsx"), options.body ?? DEFAULT_BODY);
@@ -153,7 +153,7 @@ describe("React/JSX artifact format", () => {
     const recipePath = writeReactRecipe({
       mutate: (recipe) => {
         writeFileSync(
-          join(projectDir, "recipes/fragments/extra.css"),
+          join(projectDir, ".artifacts/recipes/fragments/extra.css"),
           ".x{color:red}\n",
         );
         recipe.document.fragments.styles = ["fragments/extra.css"];

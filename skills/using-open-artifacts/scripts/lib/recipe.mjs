@@ -446,6 +446,32 @@ export function loadRecipe(recipePath, options = {}) {
         })
         .map((descriptor) => descriptor.source)
     : [];
+  // Shared sources must be rooted under .artifacts/ — matching the layout
+  // migrate already writes (.artifacts/recipes/ + .artifacts/fragments/). A
+  // top-level artifacts/ tree is the common mistake; reject it here so create
+  // and validate agree with migrate. Skill-shipped examples under
+  // **/examples/recipes/ are reference sources packaged with the skill, not
+  // project publications — keep them valid in place.
+  const sharedRecipePath =
+    normalizedRecipePath.startsWith(".artifacts/recipes/") ||
+    /(^|\/)examples\/recipes\//.test(normalizedRecipePath);
+  const misplacedSharedOutside = !isPrivate
+    ? descriptors
+        .filter((descriptor) => {
+          const resolvedProjectPath = relative(projectRoot, descriptor.real)
+            .split(sep)
+            .join("/");
+          if (resolvedProjectPath.startsWith(".artifacts/")) return false;
+          if (
+            /(^|\/)examples\/recipes\//.test(normalizedRecipePath) &&
+            /(^|\/)examples\/recipes\//.test(resolvedProjectPath)
+          ) {
+            return false;
+          }
+          return true;
+        })
+        .map((descriptor) => descriptor.source)
+    : [];
   if (isPrivate && (!privateRecipePath || misplacedPrivate.length > 0)) {
     const parts = [];
     if (!privateRecipePath) {
@@ -465,6 +491,18 @@ export function loadRecipe(recipePath, options = {}) {
     fail(
       `shared Recipes cannot reference private fragments: ${misplacedShared.join(", ")}`,
     );
+  }
+  if (!isPrivate && (!sharedRecipePath || misplacedSharedOutside.length > 0)) {
+    const parts = [];
+    if (!sharedRecipePath) {
+      parts.push("shared Recipes must live under .artifacts/recipes/");
+    }
+    if (misplacedSharedOutside.length > 0) {
+      parts.push(
+        `shared fragments must live under .artifacts/fragments/ (reference them as ../fragments/... from the Recipe): ${misplacedSharedOutside.join(", ")}`,
+      );
+    }
+    fail(parts.join("; "));
   }
   const aggregateBytes = descriptors.reduce(
     (total, descriptor) => total + descriptor.size,

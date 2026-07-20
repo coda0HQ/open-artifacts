@@ -131,14 +131,43 @@ inline JavaScript, full-document markup in body fragments, and output above the
 service limit. Canvas builds also validate frame IDs, geometry, connectors,
 tours, and builder-owned controls.
 
-Shared Recipes and fragments may be committed. A local or encrypted Recipe must
+Shared Recipes and fragments may be committed. A shared Recipe must live under
+`.artifacts/recipes/`, and its fragments must resolve under `.artifacts/`
+(conventionally `.artifacts/fragments/<slug>/`). Skill-shipped reference
+Recipes under `examples/recipes/` are exempt — they stay with the skill
+package. A local or encrypted Recipe must
 live under `.artifacts/recipes.local/`, and all of its fragments must live under
-`.artifacts/fragments.local/`. These directories, credentials, and
-`.artifacts/previews/` are gitignored.
+`.artifacts/fragments.local/`. Credentials and `.artifacts/previews/` are
+gitignored; the `.local/` source directories are too.
 
 Because fragment paths resolve against the **Recipe file's own directory**, a
-local Recipe at `.artifacts/recipes.local/report.recipe.json` reaches its
-fragments via `../fragments.local/...`. The local layout is:
+shared Recipe at `.artifacts/recipes/report.recipe.json` reaches its fragments
+via `../fragments/...`, and a local Recipe at
+`.artifacts/recipes.local/report.recipe.json` reaches its fragments via
+`../fragments.local/...`. The shared layout is:
+
+```
+.artifacts/
+  recipes/
+    report.recipe.json            # fragment paths here use ../fragments/
+  fragments/
+    report/
+      theme.css
+      body.html
+      behavior.js
+```
+
+with the Recipe referencing them as:
+
+```json
+"fragments": {
+  "theme": ["../fragments/report/theme.css"],
+  "body": ["../fragments/report/body.html"],
+  "scripts": ["../fragments/report/behavior.js"]
+}
+```
+
+The local layout is:
 
 ```
 .artifacts/
@@ -161,11 +190,11 @@ with the Recipe referencing them as:
 }
 ```
 
-If a local Recipe is misplaced, validation reports both rules at once — the
-Recipe path and every fragment that must also move under `fragments.local/`.
+If a Recipe is misplaced, validation reports both rules at once — the Recipe
+path and every fragment that must also move.
 
 **Run `validate`/`create` from the project root with a project-relative Recipe
-path** (e.g. `node artifact.mjs validate artifacts/report.recipe.json`, not
+path** (e.g. `node artifact.mjs validate .artifacts/recipes/report.recipe.json`, not
 `validate /abs/path/report.recipe.json`). The project root is your current
 working directory; an absolute Recipe path, or a path whose real location
 resolves outside the cwd, fails with `recipe must live inside the project
