@@ -24,6 +24,8 @@
       <span class="oa-chip">Cloudflare Worker</span>
       <span class="oa-chip">Hono 4.12</span>
       <span class="oa-chip">D1 + R2</span>
+      <span class="oa-chip">HTML / Markdown / React</span>
+      <span class="oa-chip">nonce CSP</span>
       <span class="oa-chip">MIT</span>
       <span class="oa-chip">coda0.com</span>
     </div>
@@ -35,7 +37,7 @@
       <p class="oa-section-sub">三个角色，一条直线。</p>
     </div>
     <div class="oa-prose">
-      <p>整个系统只有三部分：<strong>agent skill</strong>（在用户项目里创作页面源）、<strong>Cloudflare Worker</strong>（Hono，存元数据到 D1、存内容到 R2、serve 时把内容包进带 reset 和主题切换的骨架）、以及一个<strong>沙箱 viewer</strong>（严格 CSP，opaque origin，无外部请求、无存储）。</p>
+      <p>整个系统只有三部分：<strong>agent skill</strong>（在用户项目里创作页面源）、<strong>Cloudflare Worker</strong>（Hono，存元数据到 D1、存内容到 R2、serve 时把 host 页 embed 一个沙箱 iframe）、以及一个<strong>沙箱 viewer</strong>（严格 CSP，opaque origin，无外部请求、无存储）。host 页是正常 origin，负责评论 API 调用和主题持久化；frame 内 artifact 脚本完全 air-gapped。</p>
       <p>关键张力是：要服务<strong>不可信的 HTML</strong>，又不能让它逃逸。open-artifacts 的答案是 CSP <code>sandbox</code> 指令——它给文档一个 opaque origin，artifact 脚本读不到 serving origin 的 cookie 和 storage，也不能 fetch 外部。<code>connect-src 'none'</code> 和 <code>default-src 'none'</code> 堵死所有外发。workerd 的 <code>workers.dev</code> 在 Public Suffix List 上，实例之间互相隔离。</p>
       <p>存储选型上，KV 被否了：跨 colo 最终一致最多 60s、1 write/s/key、免费层 1000 writes/day——对频繁更新的 artifact 不合适。D1 强一致（元数据、指针），R2 binding 强一致 read-after-write（内容体）。D1 的 2MB 行上限也让 HTML 不能放 D1。</p>
     </div>
@@ -94,7 +96,7 @@
           <text x="495" y="260" text-anchor="middle">HTML + CSP</text>
         </g>
       </svg>
-      <figcaption id="flow-caption" class="oa-flow-caption">创建：agent POST 到 Worker，元数据入 D1，内容入 R2。查看：Worker 从 D1 取记录、从 R2 取内容，<code>wrapDocument()</code> 包骨架，以严格 CSP 响应。</figcaption>
+      <figcaption id="flow-caption" class="oa-flow-caption">创建：agent POST 到 Worker，元数据入 D1，内容入 R2。查看：Worker 从 D1 取记录、从 R2 取内容，host 页 inline 评论 + embed <code>/a/:id/frame</code> 沙箱 iframe，以 nonce-only CSP 响应。</figcaption>
     </figure>
   </section>
 
@@ -104,25 +106,29 @@
       <p class="oa-section-sub">不可信 HTML，封死。</p>
     </div>
     <div class="oa-prose">
-      <p>每个 user-content 响应（viewer 页和 <code>/raw</code>）都带这组头。核心是 <code>sandbox allow-scripts allow-modals allow-forms allow-popups</code>——它给文档一个 opaque origin（等价于 iframe sandbox 的响应头版）：artifact 脚本读不到 serving origin 的 cookie / localStorage，也不能用 ambient credentials 调 API。<code>connect-src 'none'</code> 和 <code>default-src 'none'</code> 堵死所有外发。<code>X-Content-Type-Options: nosniff</code> 和 <code>Referrer-Policy: no-referrer</code> 补齐。</p>
+      <p>每个 user-content 响应（artifact frame 和 <code>/raw</code）都带这组头。核心是 <code>sandbox allow-scripts allow-modals allow-forms allow-popups</code>——它给文档一个 opaque origin（等价于 iframe sandbox 的响应头版）：artifact 脚本读不到 serving origin 的 cookie / localStorage，也不能用 ambient credentials 调 API。<code>connect-src 'none'</code> 和 <code>default-src 'none'</code> 堵死所有外发。<code>X-Content-Type-Options: nosniff</code> 和 <code>Referrer-Policy: no-referrer</code> 补齐。</p>
+      <p><strong>script-src 是 nonce-only 的</strong>，不是 <code>'unsafe-inline'</code>：每个响应生成一个 16-byte base64 nonce，盖在所有 viewer-injected inline <code>&lt;script&gt;</code> 上，CSP <code>script-src</code> 列 <code>'nonce-&lt;v&gt;'</code>。同一个 <code>selfSrc</code>（host 页用 <code>'self'</code>，opaque-origin frame 用真实响应 origin）让 same-origin 的 <code>/vendor/mermaid.runtime.js</code> 能加载——没有外部 script host、没有 <code>'strict-dynamic'</code>，所以 artifact 里的 <code>createElement("script", {src: externalURL})</code> 被堵死（关掉 jsdelivr bypass，issue #11）。opt-in web-font surface（<code>OPEN_ARTIFACTS_WEB_FONTS="1"</code>）把 <code>font-src</code> 加到 <code>'self' data: cdn.fontshare.com fonts.gstatic.com</code>，<code>style-src</code> 加到 <code>'self' 'unsafe-inline' fonts.googleapis.com</code>；sandbox 永远是 opaque origin，never <code>allow-same-origin</code>（R1）。</p>
     </div>
     <div class="oa-code-block" data-copyable>
       <div class="oa-code-head">
-        <span class="oa-code-label">src/wrap.ts · contentSecurityPolicy()</span>
+        <span class="oa-code-label">src/wrap.ts · contentSecurityPolicy()（默认形态）</span>
         <button type="button" class="oa-copy" data-copy aria-label="复制 CSP 指令">
           <svg class="oa-ic" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M7 4V2H17V4H20.0066C20.5552 4 21 4.44495 21 4.9934V21.0066C21 21.5552 20.5551 22 20.0066 22H3.9934C3.44476 22 3 21.5551 3 21.0066V4.9934C3 4.44476 3.44495 4 3.9934 4H7ZM7 6H5V20H19V6H17V8H7V6ZM9 4V6H15V4H9Z"/></svg>
           <span class="oa-copy-text">复制</span>
         </button>
       </div>
       <pre><code>Content-Security-Policy: sandbox allow-scripts allow-modals allow-forms allow-popups;
-  default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline';
+  default-src 'none';
+  script-src 'self' 'nonce-&lt;per-request&gt;';
+  style-src 'unsafe-inline';
   img-src data: blob:; font-src data:; media-src data: blob:;
   connect-src 'none'; form-action 'none'; base-uri 'none'
 X-Content-Type-Options: nosniff
-Referrer-Policy: no-referrer</code></pre>
+Referrer-Policy: no-referrer
+Cache-Control: no-cache</code></pre>
     </div>
     <div class="oa-callout">
-      <p>沙箱内<strong>无 localStorage、无 fetch、无外部子资源</strong>。任何 viewer 端数据（版本选择器、token）必须在 serve 时由 Worker 内联——运行时拿不到。</p>
+      <p>沙箱内<strong>无 localStorage、无 fetch、无外部子资源</strong>。任何 viewer 端数据（版本选择器、评论抽屉、token）必须在 serve 时由 Worker 内联进 host 页——frame 内运行时拿不到。host 页（<code>GET /a/:id</code>）是正常 origin 文档：embed 一个 <code>&lt;iframe src="/a/:id/frame"&gt;</code>，自己只跑 <code>connect-src 'self'</code> 调评论 API。</p>
     </div>
   </section>
 
@@ -132,7 +138,7 @@ Referrer-Policy: no-referrer</code></pre>
       <p class="oa-section-sub"><code>public/</code> 不是原样直出。</p>
     </div>
     <div class="oa-prose">
-      <p><code>wrangler.jsonc</code> 对 <code>/</code>、<code>/api/*</code>、<code>/a/*</code>、<code>/og/*</code> 设了 <code>run_worker_first</code>——Worker 先于静态资源跑，拦截这些路由做 coda0 rebrand 和动态路径。landing page 是 <code>public/</code> 里的静态资源，但 Worker 在托管主机（coda0.com）上用 <code>HTMLRewriter</code> 把品牌 token 重写成 "coda0"（<code>src/home.ts</code>，服务端改 HTML，crawler 和 no-JS 访客也看到 SaaS 身份）；其他 deploy 原样返回 asset。</p>
+      <p><code>wrangler.jsonc</code> 对 <code>/</code>、<code>/api/*</code>、<code>/a/*</code>、<code>/og/*</code>、<code>/fonts/*</code>、<code>/vendor/*</code> 设了 <code>run_worker_first</code>——Worker 先于静态资源跑，拦截这些路由做 coda0 rebrand、动态路径、<code>/fonts</code> 字体代理（opt-in）和 <code>/vendor/*</code> 自托管 mermaid bundle。landing page 是 <code>public/</code> 里的静态资源，但 Worker 在托管主机（coda0.com）上用 <code>HTMLRewriter</code> 把品牌 token 重写成 "coda0"（<code>src/home.ts</code>，服务端改 HTML，crawler 和 no-JS 访客也看到 SaaS 身份）；其他 deploy 原样返回 asset。同一个 host 规则驱动 <code>brandFor(hostname)</code>——viewer header 的品牌 chip、404/坏版本页的 "Go to ⟨name⟩" 链接、OG 卡的 wordmark 全从这一处读，coda0.com 永远显 "coda0" 链到 "/"（忽略 <code>BRAND_URL</code>），自托管 deploy 不设 <code>BRAND_URL</code> 就不显。</p>
     </div>
     <div class="oa-code-block" data-copyable>
       <div class="oa-code-head">
@@ -144,10 +150,18 @@ Referrer-Policy: no-referrer</code></pre>
       </div>
       <pre><code>{
   "main": "src/index.ts",
+  "compatibility_date": "2026-07-03",
   "assets": { "directory": "./public", "binding": "ASSETS",
-              "run_worker_first": ["/", "/api/*", "/a/*", "/og/*"] },
+              "run_worker_first": ["/", "/api/*", "/a/*", "/og/*",
+                                   "/fonts/*", "/vendor/*"] },
+  "vars": { "OPEN_ARTIFACTS_WEB_FONTS": "1" },
   "d1_databases": [{ "binding": "DB", "database_name": "open-artifacts" }],
-  "r2_buckets": [{ "binding": "CONTENT", "bucket_name": "open-artifacts-content" }]
+  "r2_buckets": [{ "binding": "CONTENT", "bucket_name": "open-artifacts-content" }],
+  "rules": [
+    { "type": "Text", "globs": ["**/*.txt"], "fallthrough": true },
+    { "type": "CompiledWasm", "globs": ["**/*.wasm"], "fallthrough": true }
+  ],
+  "observability": { "enabled": true }
 }</code></pre>
     </div>
     <div class="oa-route-table-wrap">
@@ -156,13 +170,21 @@ Referrer-Policy: no-referrer</code></pre>
           <tr><th scope="col">方法</th><th scope="col">路径</th><th scope="col">用途</th></tr>
         </thead>
         <tbody>
-          <tr><td><code>POST</code></td><td><code>/api/artifacts</code></td><td>创建（D1 + R2）</td></tr>
+          <tr><td><code>POST</code></td><td><code>/api/artifacts</code></td><td>创建（D1 + R2）；带 channel token → 在已绑 artifact 上发新版本</td></tr>
           <tr><td><code>PUT</code></td><td><code>/api/artifacts/:id</code></td><td>更新（<code>baseVersion</code> 冲突 → 409，<code>force: true</code> 覆盖）</td></tr>
-          <tr><td><code>GET</code></td><td><code>/api/artifacts/:id</code></td><td>元数据</td></tr>
-          <tr><td><code>GET</code></td><td><code>/api/artifacts/:id/raw</code></td><td>原始内容</td></tr>
+          <tr><td><code>GET</code></td><td><code>/api/artifacts/:id</code></td><td>元数据 + 版本列表</td></tr>
+          <tr><td><code>GET</code></td><td><code>/api/artifacts/:id/raw</code></td><td>原始内容（<code>?v=N</code> 取历史；加密 → JSON envelope）</td></tr>
           <tr><td><code>DELETE</code></td><td><code>/api/artifacts/:id</code></td><td>删除</td></tr>
-          <tr><td><code>GET</code></td><td><code>/a/:id</code></td><td>viewer 页（<code>?v=N</code> 取历史版本）</td></tr>
+          <tr><td><code>GET</code></td><td><code>/api/artifacts/:id/comments</code></td><td>评论列表</td></tr>
+          <tr><td><code>POST</code></td><td><code>/api/artifacts/:id/comments</code></td><td>发评论（point / text anchor，Phase 1 open）</td></tr>
+          <tr><td><code>PATCH</code></td><td><code>/api/artifacts/:id/comments/:cid</code></td><td>done / undone（作者或 owner）</td></tr>
+          <tr><td><code>DELETE</code></td><td><code>/api/artifacts/:id/comments/:cid</code></td><td>删除评论（作者 delete-token 或 owner）</td></tr>
+          <tr><td><code>GET</code></td><td><code>/a/:id</code></td><td>host 页（embed frame，inline 评论；<code>?v=N</code>）</td></tr>
+          <tr><td><code>GET</code></td><td><code>/a/:id/frame</code></td><td>沙箱 iframe（明文 artifact；加密 404）</td></tr>
           <tr><td><code>GET</code></td><td><code>/og/:id</code></td><td>1200×630 PNG 预览卡（resvg 渲染）</td></tr>
+          <tr><td><code>GET</code></td><td><code>/fonts/:slug</code></td><td>woff2/css 字体代理（opt-in <code>OPEN_ARTIFACTS_WEB_FONTS</code>）</td></tr>
+          <tr><td><code>GET</code></td><td><code>/vendor/mermaid.runtime.js</code></td><td>自托管 mermaid IIFE bundle（始终服务）</td></tr>
+          <tr><td><code>GET</code></td><td><code>/health</code></td><td>健康检查</td></tr>
           <tr><td><code>GET</code></td><td><code>/</code></td><td>landing（托管主机上 HTMLRewriter 重品牌）</td></tr>
         </tbody>
       </table>
@@ -175,8 +197,9 @@ Referrer-Policy: no-referrer</code></pre>
       <p class="oa-section-sub">元数据强一致，内容体 read-after-write。</p>
     </div>
     <div class="oa-prose">
-      <p>绑定：D1 = <code>DB</code>，R2 = <code>CONTENT</code>。D1 存元数据、token 哈希、版本索引；R2 存内容体，object key 是 <code>content/&lt;id&gt;/&lt;version&gt;</code>。加密 artifact 存的是一个 JSON envelope（<code>v</code>、<code>alg</code>、<code>kdf</code>、<code>iterations</code>、<code>salt</code>、<code>iv</code>、<code>ciphertext</code>，全 base64）。</p>
-      <p><strong>D1 schema 首请求自动应用</strong>——<code>CREATE TABLE IF NOT EXISTS</code> 加一组 <code>ALTER TABLE</code>（channel_hash、versions 的 title/description/favicon/format/encrypted 列）和一条 <code>UNIQUE INDEX</code>，结果用一个 <code>WeakMap&lt;D1Database&gt;</code> 记忆化，失败的尝试清 memo 避免污染 isolate；没有单独的 migration 步骤。对自托管者意味着零步骤 deploy，对 vitest miniflare 测试也零配置。</p>
+      <p>绑定：D1 = <code>DB</code>，R2 = <code>CONTENT</code>。D1 存元数据、token 哈希、版本索引、评论线程；R2 存内容体，object key 是 <code>content/&lt;id&gt;/&lt;version&gt;</code>。artifact <code>format</code> 三选一：<code>html</code>、<code>markdown</code>、<code>react</code>（react 是编译好的 JS bundle，不是 prose，title 必须由 Recipe 给）。加密 artifact 存的是一个 JSON envelope（<code>v</code>、<code>alg</code>、<code>kdf</code>、<code>iterations</code>、<code>salt</code>、<code>iv</code>、<code>ciphertext</code>，全 base64）。</p>
+      <p><strong>D1 schema 首请求自动应用</strong>——<code>CREATE TABLE IF NOT EXISTS</code> 加一组 <code>ALTER TABLE</code>（channel_hash、versions 的 title/description/favicon/format/encrypted 列、评论表）和一条 <code>UNIQUE INDEX</code>，结果用一个 <code>WeakMap&lt;D1Database&gt;</code> 记忆化，失败的尝试清 memo 避免污染 isolate；没有单独的 migration 步骤。对自托管者意味着零步骤 deploy，对 vitest miniflare 测试也零配置。</p>
+      <p><strong>Channel 绑定</strong>：POST 带 channel token（<code>ch_</code>）会落到该 channel 已绑的 artifact 上——发新版本而不是 mint 新 id，URL 稳定。channel 首次创建时绑定，<code>channel_hash</code> 上的 UNIQUE INDEX 让并发首发只能有一个赢家，输家转成 update 而非报错。channel holder 不需要 <code>wt_</code> 就能更新已绑 artifact。</p>
     </div>
     <div class="oa-code-block" data-copyable>
       <div class="oa-code-head">
@@ -190,19 +213,27 @@ Referrer-Policy: no-referrer</code></pre>
            format, encrypted, current_version, created_at, updated_at)
 versions(artifact_id, version, label, title, description, favicon, format,
          encrypted, size, created_at)
--- R2: content/&lt;id&gt;/&lt;v&gt;  明文或加密 envelope
+comments(id, artifact_id, author, body, anchor, delete_token_hash,
+         done, created_at)
+-- R2: content/&lt;id&gt;/&lt;v&gt;  明文、Markdown、React bundle，或加密 envelope
 -- channel_hash 上的 UNIQUE INDEX 让并发首发同一 channel 只能 mint 一个 artifact</code></pre>
     </div>
     <details class="oa-details">
       <summary>身份与鉴权（无账号）</summary>
       <div class="oa-prose">
-        <p>Artifact id：12 字符 crypto-random，base58-like 字母表（不可猜、默认不列出）。Write token：<code>wt_</code> + 32 random bytes base64url，<code>create</code> 时返回一次；只存 SHA-256(token)，用 <code>crypto.subtle.timingSafeEqual</code> 比较。可选实例门：<code>CREATE_TOKEN</code> secret 设了，<code>POST /api/artifacts</code> 需要它作 bearer；没设 = 开放实例（应用层无限流，仅这道 bearer 门）。可选 canonical 域：<code>PUBLIC_URL</code>（如 <code>https://coda0.com</code>）是每个生成链接的 base。</p>
+        <p>Artifact id：12 字符 crypto-random，base58-like 字母表（不可猜、默认不列出）。Write token：<code>wt_</code> + 32 random bytes base64url，<code>create</code> 时返回一次；只存 SHA-256(token)，用 <code>crypto.subtle.timingSafeEqual</code> 比较。Channel token：<code>ch_</code> 同样形式，存 SHA-256，授权对已绑 artifact 的更新权。可选实例门：<code>CREATE_TOKEN</code> secret 设了，<code>POST /api/artifacts</code> 需要它作 bearer（两端比 SHA-256 哈希，避免 length oracle）；没设 = 开放实例（应用层无限流，仅这道 bearer 门）。可选 canonical 域：<code>PUBLIC_URL</code>（如 <code>https://coda0.com</code>）是每个生成链接的 base，trailing slash 被修剪。</p>
+      </div>
+    </details>
+    <details class="oa-details">
+      <summary>评论（anchored，Phase 1）</summary>
+      <div class="oa-prose">
+        <p>评论线程住在 viewer chrome（沙箱外的 host 页），持久化到 D1，所以一个 thread 能跨断连到达未来 viewer。anchor 三种：<code>null</code>（page-level，Phase-1 back-compat）、<code>point</code>（canvas world 坐标，只检查 finiteness）、<code>text</code>（W3C-style quote selector，存 verbatim quote——但加密版本的 text anchor 被拒，因为服务端永远拿不到明文，存 quote 会拷贝明文进 D1，破坏零知识）。<code>anchorVersion</code> 由服务端 stamp/clamp 到 artifact 当前版本，防客户端伪造未来版本隐藏 marker。发评论返回一个 per-comment delete token（SHA-256 存），作者用它删自己的评论；artifact 的 <code>wt_</code>/<code>ch_</code> holder 能做 owner moderation。POST/PATCH open（Phase 1），live fan-out（跨并发 viewer 不 reload 同步）是 Phase 2 Durable Object。</p>
       </div>
     </details>
     <details class="oa-details">
       <summary>密码保护（零知识）</summary>
       <div class="oa-prose">
-        <p>服务端永远看不到密码或明文。skill CLI 在本地加密：PBKDF2-HMAC-SHA256，600,000 次迭代，16-byte salt → AES-256-GCM，每版本新 12-byte IV。Viewer：Worker 服务一个可信 unlock shell（严格 CSP，ciphertext envelope 内联——<code>connect-src 'none'</code> 仍成立）；浏览器派生密钥、解密、用同一骨架模板包明文，注入 <code>&lt;iframe sandbox="allow-scripts allow-modals" srcdoc&gt;</code>。密码错 = AES-GCM auth 失败 → 错误信息，无内容。workerd 把 PBKDF2 上限设 100,000 次且免费 CPU 10ms，服务端做不到。</p>
+        <p>服务端永远看不到密码或明文。skill CLI 在本地加密：PBKDF2-HMAC-SHA256，600,000 次迭代，16-byte salt → AES-256-GCM，每版本新 12-byte IV。Viewer：Worker 服务一个可信 unlock shell（严格 CSP，ciphertext envelope 内联——<code>connect-src 'none'</code> 仍成立）；浏览器派生密钥、解密、用同一骨架模板包明文，注入 <code>&lt;iframe sandbox="allow-scripts allow-modals" srcdoc&gt;</code>。密码错 = AES-GCM auth 失败 → 错误信息，无内容。workerd 把 PBKDF2 上限设 100,000 次且免费 CPU 10ms，服务端做不到。Markdown 用 vendored <code>marked</code> 在客户端渲染，让加密路径和明文路径共用一条代码路径，Worker 留在 CPU cap 内。</p>
       </div>
     </details>
   </section>
@@ -213,8 +244,8 @@ versions(artifact_id, version, label, title, description, favicon, format,
       <p class="oa-section-sub">发布从不直接吃 HTML/Markdown。</p>
     </div>
     <div class="oa-prose">
-      <p>作者写一个严格 Recipe（版本化 JSON）加有序 fragments。本地 builder 验证并在内存里确定性组装成最终 HTML 或 Markdown，然后一次发布。Worker serve 时把发布体包进 doctype/head/body 骨架（minimal reset、emoji favicon、viewport meta、主题支持）。</p>
-      <p>Recipe 声明 <code>title</code>、<code>favicon</code>、<code>level</code>（1 simple / 2 interactive / 3 rich）、<code>canvas</code>、<code>channel</code>（固定 URL 的 kebab-case 名）、<code>scope</code>、<code>watch</code>（glob）、<code>local</code>、<code>autoUpdate</code>，以及有序 fragments：<code>theme</code>（CSS）、<code>styles</code>（CSS）、<code>body</code>（HTML 或 Markdown）、<code>scripts</code>（JS）。Manifest v2 只记发布状态和 SHA-256 哈希（Recipe、有序输入、最终输出各一个）。</p>
+      <p>作者写一个严格 Recipe（版本化 JSON）加有序 fragments。本地 builder 验证并在内存里确定性组装成最终 HTML、Markdown 或 React bundle，然后一次发布。Worker serve 时把发布体包进 doctype/head/body 骨架（minimal reset、emoji favicon、viewport meta、主题支持）。React artifact 是一份编译好的 JS bundle，skill CLI 用 pinned React 别名编译（<code>scripts/lib/react*</code>），<code>&lt;/script&gt;</code> 在 bundle 里被转义成 <code>&lt;\/script&gt;</code>，frame 用 nonce-only <code>script-src</code> 加载。</p>
+      <p>Recipe 声明 <code>title</code>、<code>favicon</code>、<code>format</code>（<code>html</code> / <code>markdown</code> / <code>react</code>）、<code>level</code>（1 simple / 2 interactive / 3 rich）、<code>canvas</code>、<code>channel</code>（固定 URL 的 kebab-case 名）、<code>scope</code>、<code>watch</code>（glob）、<code>local</code>、<code>autoUpdate</code>，以及有序 fragments：<code>theme</code>（CSS）、<code>styles</code>（CSS）、<code>body</code>（HTML / Markdown / React）、<code>scripts</code>（JS）。Manifest v2 只记发布状态和 SHA-256 哈希（Recipe、有序输入、最终输出各一个）。</p>
       <p>builder 拒绝：未知 Recipe 键、项目/symlink 逃逸、重复或超大 fragment、CSP 不兼容资源和 API、畸形脚本、全文档 markup 在 body fragment 里、输出超服务上限。它注入 tokens（HTML），Canvas 构建额外注入 vendored CSS/JS。小构建直接组装，大构建用本地 structure/detail 两遍，两条路最后都只发一个发布请求。</p>
     </div>
     <div class="oa-code-block" data-copyable>
@@ -246,11 +277,12 @@ versions(artifact_id, version, label, title, description, favicon, format,
       <p class="oa-section-sub"><code>wrap.ts</code> 的四个块。</p>
     </div>
     <div class="oa-prose">
-      <p><code>src/wrap.ts</code> 服务时给每个 artifact 包骨架。四个关键块：<strong><code>RESET_CSS</code></strong>（reset + <code>--oa-*</code> token + <code>.oa-header</code> sticky + <code>.oa-md</code> markdown prose 基线）、<strong><code>THEME_SCRIPT</code></strong>（localStorage 存主题——这是外层 viewer 页，不是沙箱 iframe 内，opaque origin 时 try/catch 容错）、<strong><code>LAYOUT_SCRIPT</code></strong>（测 header 高度写到 <code>--oa-header-h</code>，把作者自写的 sticky 元素顶到 header 下方；并把 header 钉到 viewport 顶部——若作者设了 <code>body { padding-top }</code>，会把该 padding 折进 header 首个兄弟节点的 <code>margin-top</code>，header 仍贴 y=0，作者的内容垂直偏移不丢）、<strong><code>ogCardSvg</code></strong>（自包含 SVG OG 卡，<code>src/og.ts</code> 用 <code>@resvg/resvg-wasm</code> 栅格化成 PNG；内嵌 Inter + Noto Sans SC 子集让 CJK 标题直接渲，只有西里尔/谚文/阿拉伯/emoji 等覆盖不到的字符才掉到 <code>isRenderable</code> 品牌锁型 fallback 卡）。</p>
-      <p>sticky header 高度约 2.5rem（padding .375rem、toggle 28px，收紧到对齐设计规格），测成 <code>--oa-header-h</code> 暴露给页面。作者的 sticky 元素设 <code>top: var(--oa-header-h, 2.5rem)</code> 更可靠。viewer 的主题切换盖 <code>prefers-color-scheme</code> 双向。</p>
+      <p>页面架构是 host + frame 两层：<code>GET /a/:id</code>（host 页，正常 origin，<code>hostHeaders</code>：<code>connect-src 'self'</code>、<code>frame-src 'self'</code>、无 sandbox）embed 一个 <code>&lt;iframe src="/a/:id/frame"&gt;</code>；<code>GET /a/:id/frame</code> 是沙箱、opaque-origin 的 artifact 文档（<code>userContentHeaders</code> 带 sandbox）。host 页从不渲染 artifact body——只有它调 API（评论 fetch/post），并 inline 评论线程和版本选择器，因为 frame 里 <code>connect-src 'none'</code> 拿不到。加密 artifact 的 <code>/frame</code> 永远 404（服务端不持有明文）；host 页服务 unlock shell，浏览器派生密钥、解密、用同一骨架模板包明文，再 <code>srcdoc</code> 进 iframe。</p>
+      <p><code>src/wrap.ts</code> 在两层都注入：host 页和 frame 都有 <code>RESET_CSS</code>（reset + <code>--oa-*</code> token + <code>.oa-header</code> sticky + <code>.oa-md</code> markdown prose 基线 + 评论抽屉 chrome）、<code>THEME_SCRIPT</code>（localStorage 存主题——只在 host 页生效，frame 是 opaque origin，try/catch 容错）、<code>LAYOUT_SCRIPT</code>（host 页测 header 高度写到 <code>--oa-header-h</code>，把作者自写的 sticky 元素顶到 header 下方；并把 header 钉到 viewport 顶部——若作者设了 <code>body { padding-top }</code>，会把该 padding 折进 header 首个兄弟节点的 <code>margin-top</code>，header 仍贴 y=0）、<strong>评论 chrome</strong>（drawer + compose + anchored marker，CSS/JS 都 viewer-owned，作者只写内容）、<strong><code>ogCardSvg</code></strong>（自包含 SVG OG 卡，<code>src/og.ts</code> 用 <code>@resvg/resvg-wasm</code> 栅格化成 PNG；内嵌 Inter + Noto Sans SC 子集让 CJK 标题直接渲，只有西里尔/谚文/阿拉伯/emoji 等覆盖不到的字符才掉到 <code>isRenderable</code> 品牌锁型 fallback 卡）。</p>
+      <p>sticky header 高度约 2.5rem（padding .375rem、toggle 28px，收紧到对齐设计规格），测成 <code>--oa-header-h</code> 暴露给页面。作者的 sticky 元素设 <code>top: var(--oa-header-h, 2.5rem)</code> 更可靠。host 页的主题切换盖 <code>prefers-color-scheme</code> 双向；frame 不持久化主题（opaque origin 拿不到 localStorage），但 CSS <code>@media (prefers-color-scheme)</code> 在 frame 内仍生效。</p>
     </div>
     <div class="oa-callout">
-      <p>OpenGraph：每个 viewer 响应带 OG + Twitter 标签。<code>og:image</code> 指向 <code>GET /og/:id</code>，返回 1200×630 <strong>PNG</strong>（不是 SVG——Facebook、X、LinkedIn、Slack、iMessage、Discord 都拒渲 SVG <code>og:image</code>）。卡是自包含 SVG，<code>@resvg/resvg-wasm</code> 栅格化，用 bundle 时编译进来的 wasm（Worker 运行时禁止运行时编译 wasm）。内嵌 Inter（Latin）+ Noto Sans SC 子集（GB2312 汉字、假名、CJK/全角标点），所以中英混排标题能直接栅格化，不会掉到 fallback 卡。<code>ogCardSvg()</code>（<code>src/wrap.ts</code>）里的 <code>isRenderable()</code> 只在西里尔/谚文/阿拉伯/emoji 等 Noto 子集覆盖不到的字符时返回品牌锁型 fallback 卡——此时真实标题仍通过 <code>og:title</code> meta 到达爬虫。emoji favicon 故意从 OG 卡省略（resvg 渲不了彩色 emoji），但仍作页面 favicon。</p>
+      <p>OpenGraph：每个 host 响应带 OG + Twitter 标签。<code>og:image</code> 指向 <code>GET /og/:id</code>，返回 1200×630 <strong>PNG</strong>（不是 SVG——Facebook、X、LinkedIn、Slack、iMessage、Discord 都拒渲 SVG <code>og:image</code>）。卡是自包含 SVG，<code>@resvg/resvg-wasm</code> 栅格化，用 bundle 时编译进来的 wasm（Worker 运行时禁止运行时编译 wasm）。内嵌 Inter（Latin）+ Noto Sans SC 子集（GB2312 汉字、假名、CJK/全角标点），所以中英混排标题能直接栅格化，不会掉到 fallback 卡。<code>ogCardSvg()</code>（<code>src/wrap.ts</code>）里的 <code>isRenderable()</code> 只在西里尔/谚文/阿拉伯/emoji 等 Noto 子集覆盖不到的字符时返回品牌锁型 fallback 卡——此时真实标题仍通过 <code>og:title</code> meta 到达爬虫。emoji favicon 故意从 OG 卡省略（resvg 渲不了彩色 emoji），但仍作页面 favicon。response 缓存 <code>max-age=300</code>，爬虫不每次重栅格化。</p>
     </div>
   </section>
 
@@ -261,24 +293,28 @@ versions(artifact_id, version, label, title, description, favicon, format,
     </div>
     <div class="oa-grid-2">
       <div class="oa-stat">
-        <span class="oa-stat-num">4 MiB</span>
-        <span class="oa-stat-label">内容上限（MAX_CONTENT_BYTES）</span>
+        <span class="oa-stat-display">4 MiB</span>
+        <span class="oa-stat-label">内容上限（默认；<code>MAX_CONTENT_MIB</code> 可改）</span>
       </div>
       <div class="oa-stat">
-        <span class="oa-stat-num">200 / 1000 / 60</span>
+        <span class="oa-stat-display">200 / 1000 / 60</span>
         <span class="oa-stat-label">title / description / label 字符上限</span>
       </div>
       <div class="oa-stat">
-        <span class="oa-stat-num">1k–10M</span>
+        <span class="oa-stat-display">1k–10M</span>
         <span class="oa-stat-label">PBKDF2 迭代区间（客户端校验）</span>
       </div>
       <div class="oa-stat">
-        <span class="oa-stat-num">D1 / R2</span>
+        <span class="oa-stat-display">8 KiB</span>
+        <span class="oa-stat-label">评论 body 上限（<code>MAX_COMMENT_BODY_BYTES</code>）</span>
+      </div>
+      <div class="oa-stat">
+        <span class="oa-stat-display">D1 / R2</span>
         <span class="oa-stat-label">绑定 DB / CONTENT</span>
       </div>
     </div>
     <div class="oa-prose">
-      <p>应用层<strong>没有限流</strong>——<code>src/api.ts</code> 里既无 per-IP/per-colo 速率计数也无 429 路径；唯一的应用层上限是 <code>MAX_CONTENT_BYTES</code>（4 MiB，<code>src/domain.ts</code>）和 <code>MAX_BODY_BYTES</code>（<code>MAX_CONTENT_BYTES * 1.5 + 16 KiB</code>，JSON 包络膨胀前先拒）。可选实例门 <code>CREATE_TOKEN</code> secret 设了才挡 <code>POST /api/artifacts</code>，否则创建完全开放。免费层余量：Workers 100k req/day，R2 1M writes/mo，D1 100k row writes/day。本地 dev 状态在 <code>.wrangler/state</code>。</p>
+      <p>应用层<strong>没有限流</strong>——<code>src/api.ts</code> 里既无 per-IP/per-colo 速率计数也无 429 路径；唯一的应用层上限是内容 cap（4 MiB 默认，<code>MAX_CONTENT_MIB</code> env 覆盖；非数字或 ≤0 回落到 4，<code>resolveMaxContentBytes</code> 用 <code>/^\d+$/</code> 全串匹配避免 <code>parseInt("12abc")</code> 悄悄抬高），和 <code>bodyCapFor()</code>（<code>maxContentBytes * 1.5 + 16 KiB</code>，JSON 包络膨胀前先拒，POST 和 PUT 都做 pre-parse declared-length 检查）。评论有自己的 <code>COMMENT_BODY_BYTES</code>（<code>MAX_COMMENT_BODY_BYTES + 4 KiB</code> headroom 给 anchor/author/JSON braces）。可选实例门 <code>CREATE_TOKEN</code> secret 设了才挡 <code>POST /api/artifacts</code>，否则创建完全开放。免费层余量：Workers 100k req/day，R2 1M writes/mo，D1 100k row writes/day。本地 dev 状态在 <code>.wrangler/state</code>。</p>
     </div>
   </section>
 
@@ -331,6 +367,6 @@ node skills/using-open-artifacts/scripts/artifact.mjs install-hook</code></pre>
 
   <footer class="oa-footer">
     <p>开源 · MIT · 托管 <a href="https://coda0.com" target="_blank" rel="noopener noreferrer">coda0.com</a> · 源码 <a href="https://github.com/coda0HQ/open-artifacts" target="_blank" rel="noopener noreferrer">coda0HQ/open-artifacts</a></p>
-    <p class="oa-footer-sub">本文由 Recipe + fragments 组装，沙箱内服务。CSP：<code>sandbox allow-scripts</code>，<code>default-src 'none'</code>。</p>
+    <p class="oa-footer-sub">本文由 Recipe + fragments 组装，host 页 embed 沙箱 frame 服务。CSP：<code>sandbox allow-scripts</code>，<code>default-src 'none'</code>，<code>script-src 'self' 'nonce-…'</code>。</p>
   </footer>
 </main>

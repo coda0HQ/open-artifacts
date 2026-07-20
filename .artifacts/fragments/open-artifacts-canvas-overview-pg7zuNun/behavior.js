@@ -417,7 +417,8 @@
         container: false,
         measure: false,
         canvas: hasCanvasNoPlane,
-        overlap: false
+        overlap: false,
+        bounds: false
       };
       gates.forEach(function (g) {
         var key = g.dataset.gate;
@@ -500,10 +501,12 @@
         cols: [
           ["binding", "ASSETS"],
           ["dir", "public/"],
-          ["routes", "run_worker_first: /, /api/*, /a/*, /og/*"],
-          ["landing", "HTMLRewriter rebrands on coda0.com only"]
+          ["routes", "run_worker_first: /, /api/*, /a/*, /og/*, /fonts/*, /vendor/*"],
+          ["landing", "HTMLRewriter rebrands on coda0.com only"],
+          ["fonts", "/fonts/<slug> proxy (opt-in: OPEN_ARTIFACTS_WEB_FONTS)"],
+          ["vendor", "/vendor/mermaid.runtime.js (self-hosted)"]
         ],
-        note: "The Worker intercepts the listed routes before falling back to static assets."
+        note: "The Worker intercepts the listed routes before falling back to static assets. /fonts and /vendor are served with correct MIME + nosniff."
       }
     };
     var nodes = sbRoot.querySelectorAll(".sb-node");

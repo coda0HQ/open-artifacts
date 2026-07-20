@@ -80,7 +80,7 @@ section > h2 .idx{font-family:var(--font-mono);font-size:var(--text-xs);color:va
 .feature:hover{color:var(--accent-on)}
 .feature > *{position:relative;z-index:1}
 .feature:hover h3,.feature:hover p,.feature:hover svg.ic{color:var(--accent-on);fill:currentColor}
-.feature .ic{font-size:1.5rem;color:var(--accent);margin-bottom:var(--space-3);transition:color var(--motion-fast)}
+.feature .ic{width:1.5rem;height:1.5rem;color:var(--accent);margin-bottom:var(--space-3);transition:color var(--motion-fast)}
 .feature h3{margin:0 0 var(--space-2);font-size:var(--text-base);font-weight:700;font-family:var(--font-body);transition:color var(--motion-fast)}
 .feature p{margin:0;color:var(--muted);font-size:var(--text-sm);line-height:1.5;transition:color var(--motion-fast)}
 .feature p code{font-family:var(--font-mono);font-size:.85em;border:1px solid currentColor;padding:.1em .35em}

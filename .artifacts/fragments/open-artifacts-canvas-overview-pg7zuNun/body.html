@@ -200,6 +200,7 @@
             <li class="vg-gate" data-gate="measure"><span class="vg-state" aria-hidden="true">&bull;</span><span class="vg-k">measure cap (L1)</span><span>An L1 non-canvas HTML doc must constrain body width.</span></li>
             <li class="vg-gate" data-gate="canvas"><span class="vg-state" aria-hidden="true">&bull;</span><span class="vg-k">canvas ABI</span><span>One <span class="fr-mono">#canvas</span> + one <span class="fr-mono">#plane</span>; frames as <span class="fr-mono">&lt;section&gt;</span> with kebab ids and geometry.</span></li>
             <li class="vg-gate" data-gate="overlap"><span class="vg-state" aria-hidden="true">&bull;</span><span class="vg-k">frame overlap</span><span>Two canvas frames whose interiors intersect fail.</span></li>
+            <li class="vg-gate" data-gate="bounds"><span class="vg-state" aria-hidden="true">&bull;</span><span class="vg-k">bounding rect</span><span>Canvas bounding width &le; 2880 world px and height &le; 2560 world px, or the overview fit drops below 0.5&times; and notes collapse to chips.</span></li>
           </ul>
         </div>
       </div>
@@ -226,6 +227,7 @@
           </div>
           <div class="vc-gate"><span class="fr-gk">LAYOUT_SCRIPT</span><span>The harness rewrites <span class="fr-mono">top</span> of every <span class="fr-mono">position: sticky</span> body descendant to <span class="fr-mono">var(--oa-header-h)</span> &mdash; canvas controls must be <span class="fr-mono">position: fixed</span>.</span></div>
           <div class="vc-gate"><span class="fr-gk">OG card</span><span>Every page emits OpenGraph + Twitter tags; <span class="fr-mono">/og/:id</span> returns a 1200&times;630 PNG rasterized on the edge &mdash; no external requests.</span></div>
+          <div class="vc-gate"><span class="fr-gk">Comment pins</span><span>On a canvas, an anchored comment drops a pin on <span class="fr-mono">#plane</span> in world coords, counter-scaled <span class="fr-mono">1/k</span> uncapped, centered on its world point. Author only <span class="fr-mono">#canvas</span>/<span class="fr-mono">#plane</span>/frames; pins ride it with no per-artifact work.</span></div>
         </div>
       </div>
     </section>
@@ -257,7 +259,8 @@
           <div class="sb-detail" id="sb-detail" aria-live="polite">
             <p class="sb-detail-hint">Select a binding to see its columns.</p>
           </div>
-          <div class="fr-gate"><span class="fr-gk">4 MiB cap</span><span>Max artifact content size is 4 MiB (post-base64 for encrypted). Fits the free-tier envelope.</span></div>
+          <div class="fr-gate"><span class="fr-gk">content cap</span><span>4 MiB default (post-base64 for encrypted). Operator-overridable via the <span class="fr-mono">MAX_CONTENT_MIB</span> env var; non-numeric or &le; 0 falls back to 4. Both the Worker (<span class="fr-mono">resolveMaxContentBytes</span>) and the builder's output gate read it.</span></div>
+          <div class="fr-gate"><span class="fr-gk">run_worker_first</span><span>The Worker intercepts <span class="fr-mono">/</span>, <span class="fr-mono">/api/*</span>, <span class="fr-mono">/a/*</span>, <span class="fr-mono">/og/*</span>, <span class="fr-mono">/fonts/*</span> (web-font proxy), and <span class="fr-mono">/vendor/*</span> (self-hosted mermaid) before falling back to static assets.</span></div>
           <div class="fr-gate"><span class="fr-gk">compare-and-swap</span><span>D1 advances <span class="fr-mono">current_version</span> only if it still matches the snapshot, then R2 writes &mdash; an R2 object is never orphaned from D1. Concurrent PUTs: exactly one wins, the rest get 409.</span></div>
         </div>
       </div>
