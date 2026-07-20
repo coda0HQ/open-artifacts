@@ -64,9 +64,9 @@ Ask your agent to "publish this as an artifact" — it runs the bundled CLI:
 
 ```sh
 node skills/using-open-artifacts/scripts/artifact.mjs validate \
-  artifacts/app-interactions.recipe.json
+  .artifacts/recipes/app-interactions.recipe.json
 node skills/using-open-artifacts/scripts/artifact.mjs create \
-  artifacts/app-interactions.recipe.json
+  .artifacts/recipes/app-interactions.recipe.json
 ```
 
 Every artifact is generated from a versioned JSON Recipe plus ordered
@@ -101,7 +101,7 @@ Local development: `pnpm dev` (state persists in `.wrangler/state`).
 | Identity | No accounts. Artifact ids are 12-char crypto-random (unguessable, unlisted). Creation returns a one-time `writeToken`; only its SHA-256 is stored. |
 | Deterministic sources | A strict Recipe plus ordered fragments generates every Artifact. The builder injects tokens and, for Canvas, the vendored runtime and controls. Manifest v2 records Recipe/input/output hashes; direct HTML/Markdown CLI publishing is rejected. |
 | Channels | `artifact.channel` binds an artifact to a stable URL. The CLI keeps a per-channel token (`ch_`) in `.artifacts/credentials.json`; presenting it on a later `create` updates the bound artifact (new version, same link) instead of minting a new one. Only the channel hash is stored server-side. |
-| Local mode | `artifact.local: true` places private sources under gitignored `.artifacts/recipes.local/` and `.artifacts/fragments.local/`, with state in `manifest.local.json`. Shared Recipes/fragments may be committed. Encrypted Recipes are always private. |
+| Local mode | `artifact.local: true` places private sources under gitignored `.artifacts/recipes.local/` and `.artifacts/fragments.local/`, with state in `manifest.local.json`. Shared Recipes/fragments live under `.artifacts/recipes/` and `.artifacts/fragments/` and may be committed. Encrypted Recipes are always private. |
 | Storage | D1 for metadata/tokens/version index, R2 for content bodies (`content/<id>/<version>`). Both strongly consistent — updates are visible immediately. |
 | Versions | Every publish is an immutable version with an optional label and its own title, description, favicon, format, and encryption state, so history reflects what each version actually looked like. `?v=N` views history; `PUT` accepts `baseVersion` and returns 409 on conflicts (override with `force`). |
 | Serving | The Worker wraps stored content in a skeleton (CSS reset, emoji favicon, viewport, light/dark theme with a `data-theme` toggle) and serves it with `Content-Security-Policy: sandbox allow-scripts ...; default-src 'none'` — artifact scripts run in an opaque origin and cannot make any external request. |
