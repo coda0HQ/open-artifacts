@@ -8,6 +8,7 @@ import {
   INTER_SEMIBOLD_TTF_BASE64,
   NOTO_SANS_SC_TTF_BASE64,
 } from "./generated/fonts";
+import type { Brand } from "./home";
 import { ogCardSvg } from "./wrap";
 
 function decodeBase64(b64: string): Uint8Array {
@@ -46,7 +47,7 @@ function ensureWasm(): Promise<unknown> {
 export async function renderOgCardPng(options: {
   title: string;
   description: string;
-  hostname: string;
+  brand: Brand;
 }): Promise<Uint8Array> {
   await ensureWasm();
   const resvg = new Resvg(ogCardSvg(options), {

@@ -29,6 +29,8 @@ const ARTIFACT_KEYS = new Set([
   "watch",
   "local",
   "autoUpdate",
+  "visibility",
+  "org",
 ]);
 const DOCUMENT_KEYS = new Set(["language", "theme", "fragments"]);
 const FRAGMENT_KEYS = new Set(["theme", "styles", "body", "scripts"]);
@@ -171,6 +173,23 @@ function parseArtifact(raw) {
   if (!isEmojiFavicon(favicon)) {
     fail("artifact.favicon must be one or two emoji");
   }
+  const visibility =
+    raw.visibility === undefined || raw.visibility === null
+      ? null
+      : (() => {
+          if (
+            raw.visibility !== "private" &&
+            raw.visibility !== "org" &&
+            raw.visibility !== "public"
+          ) {
+            fail('artifact.visibility must be "private", "org", or "public"');
+          }
+          return raw.visibility;
+        })();
+  const org =
+    raw.org === undefined || raw.org === null
+      ? null
+      : requireString(raw.org, "artifact.org");
   return {
     title,
     description,
@@ -183,6 +202,8 @@ function parseArtifact(raw) {
     watch,
     local: requireBoolean(raw.local ?? false, "artifact.local"),
     autoUpdate: requireBoolean(raw.autoUpdate ?? false, "artifact.autoUpdate"),
+    visibility,
+    org,
   };
 }
 

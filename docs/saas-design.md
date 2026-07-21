@@ -1,6 +1,22 @@
-# SaaS Layer — Design (Phase 1)
+# SaaS Layer — Design (SUPERSEDED)
 
-Status: proposal (not yet implemented). Scope locked: **single personal space**
+> **Superseded.** This single-repo / GitHub-only / always-public-read design is
+> replaced by the dual-repo plan: brand-neutral `open-artifacts` engine +
+> sibling `coda0` SaaS (Google + GitHub, orgs, private|org|public visibility).
+>
+> Implementation lives in:
+> - Engine: this repository (`Authorizer`, ownership columns, brand env)
+> - SaaS: `~/Developer/FradSer/coda0` (`file:../open-artifacts`)
+> - Plan source: `~/.claude/plans/google-google-delegated-kernighan.md`
+>
+> Session / CSRF / `sk_` / loopback OAuth **mechanisms** below remain useful
+> reference; do not implement the "account tables in open-artifacts" approach.
+
+---
+
+# SaaS Layer — Design (Phase 1) — archived
+
+Status: **superseded** (was: proposal, not yet implemented). Scope locked: **single personal space**
 per GitHub user — no workspaces/`services` concept in v1. This document is the
 build reference; it is opinionated and concrete by design.
 

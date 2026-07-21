@@ -1,3 +1,4 @@
+import type { OwnershipGrant, Visibility } from "./authorizer";
 import type {
   Anchor,
   ArtifactFormat,
@@ -15,6 +16,9 @@ import { generateId } from "./tokens";
 export interface ArtifactRecord extends ArtifactMeta {
   tokenHash: string;
   channelHash: string | null;
+  ownerId: string;
+  orgId: string | null;
+  visibility: Visibility;
 }
 
 export interface StoredContent {
@@ -28,6 +32,7 @@ export interface ArtifactStore {
     tokenHash: string,
     input: CreateInput,
     channelHash: string | null,
+    ownership?: OwnershipGrant | null,
   ): Promise<ArtifactRecord>;
   get(id: string): Promise<ArtifactRecord | null>;
   findByChannel(channelHash: string): Promise<ArtifactRecord | null>;
@@ -46,6 +51,7 @@ export interface ArtifactStore {
     input: UpdateInput,
   ): Promise<number | { conflict: true; currentVersion: number }>;
   delete(id: string): Promise<void>;
+  updateVisibility(id: string, visibility: Visibility): Promise<void>;
   listComments(artifactId: string): Promise<CommentMeta[]>;
   addComment(
     artifactId: string,
@@ -71,7 +77,10 @@ const SCHEMA = [
     encrypted INTEGER NOT NULL DEFAULT 0,
     current_version INTEGER NOT NULL,
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    owner_id TEXT NOT NULL DEFAULT '',
+    org_id TEXT,
+    visibility TEXT NOT NULL DEFAULT 'public'
   )`,
   `CREATE TABLE IF NOT EXISTS versions (
     artifact_id TEXT NOT NULL,
@@ -134,6 +143,11 @@ const MIGRATIONS = [
   `DROP INDEX IF EXISTS idx_feedback_artifact_status`,
   `DROP TABLE IF EXISTS feedback`,
   `ALTER TABLE artifacts DROP COLUMN project_ref`,
+  `ALTER TABLE artifacts ADD COLUMN owner_id TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE artifacts ADD COLUMN org_id TEXT`,
+  `ALTER TABLE artifacts ADD COLUMN visibility TEXT NOT NULL DEFAULT 'public'`,
+  `CREATE INDEX IF NOT EXISTS idx_artifacts_owner ON artifacts(owner_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_artifacts_org ON artifacts(org_id)`,
 ];
 
 // After the ALTERs above add columns to existing rows with empty defaults,
@@ -242,6 +256,9 @@ interface ArtifactRow {
   current_version: number;
   created_at: string;
   updated_at: string;
+  owner_id: string;
+  org_id: string | null;
+  visibility: string;
 }
 
 function toRecord(row: ArtifactRow): ArtifactRecord {
@@ -257,8 +274,17 @@ function toRecord(row: ArtifactRow): ArtifactRecord {
     currentVersion: row.current_version,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    ownerId: row.owner_id ?? "",
+    orgId: row.org_id ?? null,
+    visibility: (row.visibility ?? "public") as Visibility,
   };
 }
+
+const defaultOwnership = (): OwnershipGrant => ({
+  ownerId: "",
+  orgId: null,
+  visibility: "public",
+});
 
 const contentKey = (id: string, version: number) => `content/${id}/${version}`;
 
@@ -297,8 +323,10 @@ export class D1R2Store implements ArtifactStore {
     tokenHash: string,
     input: CreateInput,
     channelHash: string | null,
+    ownership: OwnershipGrant | null = null,
   ): Promise<ArtifactRecord> {
     await ensureSchema(this.db);
+    const grant = ownership ?? defaultOwnership();
     const now = new Date().toISOString();
     const encrypted = input.encrypted !== null;
     await this.bucket.put(
@@ -311,8 +339,8 @@ export class D1R2Store implements ArtifactStore {
     const insert = this.db.batch([
       this.db
         .prepare(
-          `INSERT INTO artifacts (id, token_hash, channel_hash, title, description, favicon, format, encrypted, current_version, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+          `INSERT INTO artifacts (id, token_hash, channel_hash, title, description, favicon, format, encrypted, current_version, created_at, updated_at, owner_id, org_id, visibility)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`,
         )
         .bind(
           id,
@@ -325,6 +353,9 @@ export class D1R2Store implements ArtifactStore {
           input.encrypted ? 1 : 0,
           now,
           now,
+          grant.ownerId,
+          grant.orgId,
+          grant.visibility,
         ),
       this.db
         .prepare(
@@ -362,6 +393,9 @@ export class D1R2Store implements ArtifactStore {
       currentVersion: 1,
       createdAt: now,
       updatedAt: now,
+      ownerId: grant.ownerId,
+      orgId: grant.orgId,
+      visibility: grant.visibility,
     };
   }
 
@@ -542,6 +576,17 @@ export class D1R2Store implements ArtifactStore {
       this.db.prepare("DELETE FROM artifacts WHERE id = ?").bind(id),
       this.db.prepare("DELETE FROM comments WHERE artifact_id = ?").bind(id),
     ]);
+  }
+
+  async updateVisibility(id: string, visibility: Visibility): Promise<void> {
+    await ensureSchema(this.db);
+    const now = new Date().toISOString();
+    await this.db
+      .prepare(
+        "UPDATE artifacts SET visibility = ?, updated_at = ? WHERE id = ?",
+      )
+      .bind(visibility, now, id)
+      .run();
   }
 
   async listComments(artifactId: string): Promise<CommentMeta[]> {

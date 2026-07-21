@@ -1,4 +1,5 @@
 import { buildTextAnchor, reAnchor } from "./anchor";
+import type { Visibility } from "./authorizer";
 import type {
   ArtifactFormat,
   CommentMeta,
@@ -6,7 +7,7 @@ import type {
   VersionMeta,
 } from "./domain";
 import { MARKED_SOURCE } from "./generated/marked-source";
-import { type Brand, brandFor, isCoda0Host } from "./home";
+import type { Brand } from "./home";
 
 export function escapeHtml(value: string): string {
   return value
@@ -84,7 +85,7 @@ const WEB_FONT_CSP = {
 export function contentSecurityPolicy(options: {
   sandbox: boolean;
   webFonts?: boolean;
-  // Absolute origin of the response URL (e.g. https://coda0.com). A sandboxed
+  // Absolute origin of the response URL (e.g. https://example.com). A sandboxed
   // document has an opaque origin, so its CSP 'self' matches nothing and the
   // same-origin /fonts/<slug> proxy would be blocked; passing the real origin
   // lets those subresources load as cross-origin-from-opaque. Only the artifact
@@ -217,16 +218,16 @@ img,video,canvas{max-width:100%}
 .oa-brand svg{display:block;width:14px;height:14px}
 @media (hover:hover) and (pointer:fine){.oa-header #oa-theme-toggle:hover{opacity:1;border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 25%)}.oa-brand:hover{color:var(--oa-fg);background:var(--oa-surface)}}
 @media (max-width:30rem){.oa-brand .oa-brand-text{display:none}}
-.oa-version{display:inline-flex;align-items:center;flex-shrink:0;min-width:0}
-.oa-version .oa-version-select{min-height:28px;padding:.2rem 1.6rem .2rem .5rem;border:1px solid var(--oa-border);border-radius:6px;background:var(--oa-surface);color:var(--oa-fg);font-size:.75rem;font-family:inherit;line-height:1.4;cursor:pointer;transition:border-color .15s,background .15s;-webkit-appearance:none;appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--oa-muted) 50%),linear-gradient(135deg,var(--oa-muted) 50%,transparent 50%);background-position:calc(100% - .7rem) 55%,calc(100% - .4rem) 55%;background-size:.3rem .3rem;background-repeat:no-repeat}
+.oa-version,.oa-visibility{display:inline-flex;align-items:center;flex-shrink:0;min-width:0}
+.oa-version .oa-version-select,.oa-visibility .oa-visibility-select{min-height:28px;padding:.2rem 1.6rem .2rem .5rem;border:1px solid var(--oa-border);border-radius:6px;background:var(--oa-surface);color:var(--oa-fg);font-size:.75rem;font-family:inherit;line-height:1.4;cursor:pointer;transition:border-color .15s,background .15s;-webkit-appearance:none;appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--oa-muted) 50%),linear-gradient(135deg,var(--oa-muted) 50%,transparent 50%);background-position:calc(100% - .7rem) 55%,calc(100% - .4rem) 55%;background-size:.3rem .3rem;background-repeat:no-repeat}
 /* After the base rule, not before: same selector, same specificity, and a
    media query does not raise it, so source order alone decides. Emitted
    first, the base rule's padding shorthand resets padding-right and silently
    drops the narrow-screen value. */
-@media (max-width:30rem){.oa-version .oa-version-select{max-width:5rem;padding-right:1.4rem}}
-.oa-version .oa-version-select:focus-visible{outline:none;border-color:var(--oa-accent);box-shadow:var(--oa-focus-ring)}
-.oa-version .oa-version-select:active{transform:translateY(1px)}
-@media (hover:hover) and (pointer:fine){.oa-version .oa-version-select:hover{border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 25%)}}
+@media (max-width:30rem){.oa-version .oa-version-select,.oa-visibility .oa-visibility-select{max-width:5rem;padding-right:1.4rem}}
+.oa-version .oa-version-select:focus-visible,.oa-visibility .oa-visibility-select:focus-visible{outline:none;border-color:var(--oa-accent);box-shadow:var(--oa-focus-ring)}
+.oa-version .oa-version-select:active,.oa-visibility .oa-visibility-select:active{transform:translateY(1px)}
+@media (hover:hover) and (pointer:fine){.oa-version .oa-version-select:hover,.oa-visibility .oa-visibility-select:hover{border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 25%)}}
 `;
 
 const MARKDOWN_CSS = `
@@ -426,6 +427,22 @@ function versionPickerHtml(
   return `<label class="oa-version" for="oa-version-select"><span class="oa-version-sr" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0">Version</span><select id="oa-version-select" class="oa-version-select" aria-label="Artifact version">${options}</select></label>`;
 }
 
+const VISIBILITY_LABELS: Record<Visibility, string> = {
+  private: "Private",
+  org: "Organization",
+  public: "Public",
+};
+
+function visibilityPickerHtml(visibility: Visibility): string {
+  const options = (["private", "org", "public"] as const)
+    .map((value) => {
+      const selected = value === visibility ? " selected" : "";
+      return `<option value="${value}"${selected}>${VISIBILITY_LABELS[value]}</option>`;
+    })
+    .join("");
+  return `<label class="oa-visibility" for="oa-visibility-select"><span class="oa-visibility-sr" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0">Visibility</span><select id="oa-visibility-select" class="oa-visibility-select" aria-label="Artifact visibility">${options}</select></label>`;
+}
+
 // The badge counts what the drawer's default view shows (open comments), so a
 // fully-done thread never renders a count over a "No open comments." list.
 function openCommentsCount(comments: CommentMeta[]): number {
@@ -435,20 +452,21 @@ function openCommentsCount(comments: CommentMeta[]): number {
 function headerHtml(
   favicon: string,
   title: string,
-  hostname: string,
+  brand: Brand,
+  branded: boolean,
   brandUrl?: string | null,
   versions?: VersionMeta[],
   currentVersion?: number,
   url?: string,
   artifactId?: string,
   commentsCount = 0,
+  canManage = false,
+  visibility: Visibility = "public",
 ): string {
-  // The hosted host always names itself "coda0" and links its own root,
-  // ignoring BRAND_URL entirely (same override rule as the landing page); a
-  // self-hoster's deploy shows the neutral "Open Artifacts" credit only when
-  // it opts in by setting BRAND_URL.
-  const brand = brandFor(hostname);
-  const href = isCoda0Host(hostname) ? "/" : brandUrl;
+  // A primary brand (BRAND_NAME) always names itself and links its own root,
+  // ignoring BRAND_URL; a self-hoster without BRAND_NAME shows the neutral
+  // "Open Artifacts" credit only when they opt in via BRAND_URL.
+  const href = branded ? "/" : brandUrl;
   const chip = href
     ? `<a class="oa-brand" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" title="Made with ${escapeHtml(brand.name)}">${BRAND_SVG}<span class="oa-brand-text">${escapeHtml(brand.name)}</span></a>`
     : "";
@@ -462,9 +480,11 @@ function headerHtml(
     versions && currentVersion && url
       ? versionPickerHtml(versions, currentVersion, url)
       : "";
+  const share = canManage ? visibilityPickerHtml(visibility) : "";
   return `<header class="oa-header">
   <span class="oa-header-title"><span class="oa-header-fav">${escapeHtml(favicon)}</span>${escapeHtml(title)}</span>
   ${picker}
+  ${share}
   ${chip}
   ${comments}
   <button id="oa-theme-toggle" type="button" aria-label="Toggle theme"></button>
@@ -522,6 +542,23 @@ const VERSION_SCRIPT = `
   if(!sel)return;
   sel.addEventListener('change',function(){
     if(sel.value)location.search='?'+sel.value.split('?')[1];
+  });
+})();
+`;
+
+const VISIBILITY_SCRIPT = `
+(function(){
+  var sel=document.getElementById('oa-visibility-select');
+  if(!sel)return;
+  var id=window.__oaBridgeId;
+  if(!id)return;
+  var prev=sel.value;
+  sel.addEventListener('change',function(){
+    var next=sel.value;
+    fetch('/api/artifacts/'+id,{method:'PATCH',headers:{'content-type':'application/json','X-OA-CSRF':'1'},body:JSON.stringify({visibility:next})})
+      .then(function(r){if(!r.ok)throw r.status;return r.json()})
+      .then(function(){prev=next})
+      .catch(function(){sel.value=prev});
   });
 })();
 `;
@@ -695,9 +732,12 @@ export interface HostShellOptions {
   favicon: string;
   url: string;
   ogImage: string;
-  /** Request hostname; selects the coda0 vs. Open Artifacts identity. */
-  hostname: string;
-  /** "Powered by Open Artifacts" link URL; omit to hide the brand entry. */
+  /** Resolved brand identity for chrome / meta. */
+  brand: Brand;
+  /** True when BRAND_NAME is set — chip links home and overrides BRAND_URL. */
+  branded: boolean;
+  /** "Powered by Open Artifacts" link URL; omit to hide the brand entry when
+   *  not branded. */
   brandUrl?: string | null;
   /** Artifact id; drives the comment thread drawer and the frame's src. */
   artifactId: string;
@@ -714,6 +754,10 @@ export interface HostShellOptions {
   versions?: VersionMeta[];
   /** Version currently being served; marked selected in the picker. */
   currentVersion?: number;
+  /** When true, render the visibility selector for owners. */
+  canManage?: boolean;
+  /** Current artifact visibility; drives the share selector. */
+  visibility?: Visibility;
 }
 
 const OG_CARD_W = 1200;
@@ -842,10 +886,9 @@ function wrapLines(text: string, budget: number, maxLines: number): string[] {
 export function ogCardSvg(options: {
   title: string;
   description: string;
-  hostname: string;
+  brand: Brand;
 }): string {
-  const { title, description, hostname } = options;
-  const brand = brandFor(hostname);
+  const { title, description, brand } = options;
   if (!isRenderable(title)) return fallbackCardSvg(brand);
   const titleLines = wrapLines(title, 30, 4);
   const descLines =
@@ -975,15 +1018,17 @@ export function hostShell(options: HostShellOptions): string {
     favicon,
     url,
     ogImage,
-    hostname,
+    brand,
+    branded,
     brandUrl,
     artifactId,
     frameSrc,
     nonce,
     versions,
     currentVersion,
+    canManage = false,
+    visibility = "public",
   } = options;
-  const brand = brandFor(hostname);
   const ogDescription = description || title;
   const commentsList = options.comments ?? [];
   const drawer = commentsDrawerHtml(artifactId, commentsList);
@@ -1011,7 +1056,7 @@ export function hostShell(options: HostShellOptions): string {
 <style>${RESET_CSS}${COMMENTS_CSS}${HOST_FRAME_CSS}</style>
 </head>
 <body>
-${headerHtml(favicon, title, hostname, brandUrl, versions, currentVersion, url, artifactId, openCommentsCount(commentsList))}
+${headerHtml(favicon, title, brand, branded, brandUrl, versions, currentVersion, url, artifactId, openCommentsCount(commentsList), canManage, visibility)}
 <iframe id="oa-frame" src="${escapeHtml(frameSrc)}" sandbox="allow-scripts allow-modals allow-forms allow-popups" title="${escapeHtml(title)}"></iframe>
 ${drawer}
 ${commentsDataScript(commentsList)}
@@ -1021,6 +1066,7 @@ ${commentsDataScript(commentsList)}
 <script nonce="${nonce}">${LAYOUT_SCRIPT}</script>
 <script nonce="${nonce}">${escapeInlineScript(COMMENTS_SCRIPT)}</script>
 <script nonce="${nonce}">${escapeInlineScript(hostBridgeScript(artifactId))}</script>
+<script nonce="${nonce}">${VISIBILITY_SCRIPT}</script>
 <script nonce="${nonce}">${escapeInlineScript(HOST_UI_SCRIPT)}</script>
 </body>
 </html>
@@ -1728,7 +1774,8 @@ export interface UnlockShellOptions {
   format: ArtifactFormat;
   url: string;
   ogImage: string;
-  hostname: string;
+  brand: Brand;
+  branded: boolean;
   brandUrl?: string | null;
   artifactId: string;
   comments?: CommentMeta[];
@@ -1742,6 +1789,10 @@ export interface UnlockShellOptions {
   versions?: VersionMeta[];
   /** Version currently being served; marked selected in the picker. */
   currentVersion?: number;
+  /** When true, render the visibility selector for owners. */
+  canManage?: boolean;
+  /** Current artifact visibility; drives the share selector. */
+  visibility?: Visibility;
 }
 
 // The unlock page is itself a HOST PAGE (chrome + password form); the server
@@ -1758,7 +1809,8 @@ export function unlockShell(options: UnlockShellOptions): string {
     format,
     url,
     ogImage,
-    hostname,
+    brand,
+    branded,
     brandUrl,
     artifactId,
     comments,
@@ -1766,6 +1818,8 @@ export function unlockShell(options: UnlockShellOptions): string {
     nonce,
     versions,
     currentVersion,
+    canManage = false,
+    visibility = "public",
   } = options;
   // The decrypted document renders inside a sandboxed iframe. The version
   // picker would have no parent origin to navigate, so the inner template is
@@ -1893,7 +1947,6 @@ form.addEventListener("submit",async function(event){
 input.focus();
 `;
 
-  const brand = brandFor(hostname);
   const ogDescription = description || title;
   const commentsList = comments ?? [];
   const drawer = commentsDrawerHtml(artifactId, commentsList);
@@ -1921,7 +1974,7 @@ input.focus();
 <style>${RESET_CSS}${UNLOCK_CSS}${COMMENTS_CSS}</style>
 </head>
 <body>
-${headerHtml(favicon, title, hostname, brandUrl, versions, currentVersion, url, artifactId, openCommentsCount(commentsList))}
+${headerHtml(favicon, title, brand, branded, brandUrl, versions, currentVersion, url, artifactId, openCommentsCount(commentsList), canManage, visibility)}
 <div class="oa-unlock">
   <form class="oa-card" id="oa-form">
     <div class="oa-emoji">${escapeHtml(favicon)}</div>
@@ -1943,6 +1996,7 @@ ${commentsDataScript(commentsList)}
 <script nonce="${nonce}">${LAYOUT_SCRIPT}</script>
 <script nonce="${nonce}">${escapeInlineScript(COMMENTS_SCRIPT)}</script>
 <script nonce="${nonce}">${escapeInlineScript(hostBridgeScript(artifactId))}</script>
+<script nonce="${nonce}">${VISIBILITY_SCRIPT}</script>
 <script nonce="${nonce}">${escapeInlineScript(HOST_UI_SCRIPT)}</script>
 </body>
 </html>
@@ -1962,15 +2016,18 @@ const STATUS_CSS = `
 // Minimal, on-brand page for the states that don't render an artifact
 // (missing artifact, invalid ?v=). No header/toggle: the reset's
 // prefers-color-scheme default handles the theme without any JS. The "go
-// home" link names and links whichever identity this host presents (coda0 on
-// the hosted host, Open Artifacts everywhere else), mirroring the header chip.
+// home" link names whichever brand this instance presents.
 function statusPage(options: {
   title: string;
   heading: string;
   body: string;
-  hostname: string;
+  brand: Brand;
+  linkHref?: string;
+  linkText?: string;
 }): string {
-  const brand = brandFor(options.hostname);
+  const brand = options.brand;
+  const linkHref = options.linkHref ?? "/";
+  const linkText = options.linkText ?? `Go to ${brand.name}`;
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -1984,27 +2041,47 @@ function statusPage(options: {
 <span class="oa-mark">${BRAND_SVG}</span>
 <h1>${options.heading}</h1>
 <p>${options.body}</p>
-<a href="/">Go to ${escapeHtml(brand.name)}</a>
+<a href="${escapeHtml(linkHref)}">${escapeHtml(linkText)}</a>
 </div>
 </body>
 </html>
 `;
 }
 
-export function notFoundPage(hostname: string): string {
+export function notFoundPage(brand: Brand): string {
   return statusPage({
     title: "Artifact not found",
     heading: "Artifact not found",
     body: "This link does not exist, or the artifact it pointed to was deleted.",
-    hostname,
+    brand,
   });
 }
 
-export function badVersionPage(hostname: string): string {
+export function badVersionPage(brand: Brand): string {
   return statusPage({
     title: "Invalid version",
     heading: "Invalid version",
     body: "The <code>?v=</code> parameter must be a positive integer version number.",
-    hostname,
+    brand,
+  });
+}
+
+export function signInToViewPage(brand: Brand): string {
+  return statusPage({
+    title: "Sign in to view",
+    heading: "Sign in to view",
+    body: "This artifact is private. Sign in to check whether you have access.",
+    brand,
+    linkHref: "/login",
+    linkText: "Sign in",
+  });
+}
+
+export function noAccessPage(brand: Brand): string {
+  return statusPage({
+    title: "No access",
+    heading: "You don't have access",
+    body: "You're signed in, but this artifact isn't shared with you.",
+    brand,
   });
 }

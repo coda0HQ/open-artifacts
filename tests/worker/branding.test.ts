@@ -10,7 +10,12 @@ import app from "../../src/index";
 import { ogCardSvg } from "../../src/wrap";
 
 const BASE = "http://artifacts.test";
-const CODA0 = "https://coda0.com";
+
+const BRANDED_ENV = {
+  BRAND_NAME: "coda0",
+  BRAND_WORDMARK: "CODA0",
+  BRAND_TAGLINE: "share self-contained pages",
+} as const;
 
 interface CreateResult {
   id: string;
@@ -50,32 +55,29 @@ async function create(
 }
 
 describe("brandFor", () => {
-  it("identifies as coda0 on the hosted host", () => {
-    expect(brandFor("coda0.com")).toEqual({
+  it("identifies as the configured brand when BRAND_NAME is set", () => {
+    expect(brandFor(BRANDED_ENV)).toEqual({
       name: "coda0",
       wordmark: "CODA0",
       tagline: "share self-contained pages",
     });
-    expect(brandFor("www.coda0.com").name).toBe("coda0");
   });
 
-  it("keeps the neutral Open Artifacts identity everywhere else", () => {
-    expect(brandFor("example.com")).toEqual({
+  it("keeps the neutral Open Artifacts identity without brand env", () => {
+    expect(brandFor({})).toEqual({
       name: "Open Artifacts",
       wordmark: "OPEN ARTIFACTS",
       tagline: "self-hosted artifact viewer",
     });
-    expect(brandFor("open-artifacts.frad.workers.dev").name).toBe(
-      "Open Artifacts",
-    );
   });
 });
 
 describe("viewer header brand chip", () => {
-  it("shows a coda0 chip linking home on the hosted host", async () => {
-    const created = await create(CODA0, env);
+  it("shows a configured brand chip linking home when BRAND_NAME is set", async () => {
+    const branded = { ...env, ...BRANDED_ENV };
+    const created = await create(BASE, branded);
     const html = await (
-      await fetchWith(new Request(`${CODA0}/a/${created.id}`), env)
+      await fetchWith(new Request(`${BASE}/a/${created.id}`), branded)
     ).text();
     expect(html).toContain('class="oa-brand" href="/"');
     expect(html).toContain('<span class="oa-brand-text">coda0</span>');
@@ -99,11 +101,15 @@ describe("viewer header brand chip", () => {
     expect(html).toContain('<span class="oa-brand-text">Open Artifacts</span>');
   });
 
-  it("ignores a stray BRAND_URL on the hosted host and still identifies as coda0", async () => {
-    const strayEnv = { ...env, BRAND_URL: "https://example.org/about" };
-    const created = await create(CODA0, strayEnv);
+  it("ignores a stray BRAND_URL when BRAND_NAME is set and still links home", async () => {
+    const strayEnv = {
+      ...env,
+      ...BRANDED_ENV,
+      BRAND_URL: "https://example.org/about",
+    };
+    const created = await create(BASE, strayEnv);
     const html = await (
-      await fetchWith(new Request(`${CODA0}/a/${created.id}`), strayEnv)
+      await fetchWith(new Request(`${BASE}/a/${created.id}`), strayEnv)
     ).text();
     expect(html).toContain('class="oa-brand" href="/"');
     expect(html).not.toContain("example.org");
@@ -112,25 +118,30 @@ describe("viewer header brand chip", () => {
 });
 
 describe("status pages", () => {
-  it("links 'Go to coda0' on a 404 from the hosted host", async () => {
-    const res = await fetchWith(new Request(`${CODA0}/a/nonexistent00`), env);
+  it("links 'Go to' the configured brand on a 404", async () => {
+    const branded = { ...env, ...BRANDED_ENV };
+    const res = await fetchWith(
+      new Request(`${BASE}/a/nonexistent00`),
+      branded,
+    );
     expect(res.status).toBe(404);
     const html = await res.text();
     expect(html).toContain(">Go to coda0<");
   });
 
-  it("links 'Go to Open Artifacts' on a 404 from any other host", async () => {
+  it("links 'Go to Open Artifacts' on a 404 without brand env", async () => {
     const res = await fetchWith(new Request(`${BASE}/a/nonexistent00`), env);
     expect(res.status).toBe(404);
     const html = await res.text();
     expect(html).toContain(">Go to Open Artifacts<");
   });
 
-  it("links 'Go to coda0' on an invalid ?v= from the hosted host", async () => {
-    const created = await create(CODA0, env);
+  it("links 'Go to' the configured brand on an invalid ?v=", async () => {
+    const branded = { ...env, ...BRANDED_ENV };
+    const created = await create(BASE, branded);
     const res = await fetchWith(
-      new Request(`${CODA0}/a/${created.id}?v=notanumber`),
-      env,
+      new Request(`${BASE}/a/${created.id}?v=notanumber`),
+      branded,
     );
     expect(res.status).toBe(400);
     const html = await res.text();
@@ -139,21 +150,24 @@ describe("status pages", () => {
 });
 
 describe("OG card wordmark", () => {
-  it("reads CODA0 on the hosted host", () => {
+  const branded = brandFor(BRANDED_ENV);
+  const neutral = brandFor({});
+
+  it("reads the configured wordmark when branded", () => {
     const svg = ogCardSvg({
       title: "x",
       description: "y",
-      hostname: "coda0.com",
+      brand: branded,
     });
     expect(svg).toContain(">CODA0<");
     expect(svg).not.toContain("OPEN ARTIFACTS");
   });
 
-  it("reads OPEN ARTIFACTS everywhere else", () => {
+  it("reads OPEN ARTIFACTS without brand env", () => {
     const svg = ogCardSvg({
       title: "x",
       description: "y",
-      hostname: "example.com",
+      brand: neutral,
     });
     expect(svg).toContain(">OPEN ARTIFACTS<");
   });
@@ -162,7 +176,7 @@ describe("OG card wordmark", () => {
     const svg = ogCardSvg({
       title: "x",
       description: "y",
-      hostname: "coda0.com",
+      brand: branded,
     });
     expect(svg).toContain(">Open →<");
   });
@@ -171,7 +185,7 @@ describe("OG card wordmark", () => {
     const svg = ogCardSvg({
       title: "Пример",
       description: "",
-      hostname: "coda0.com",
+      brand: branded,
     });
     expect(svg).toContain(">Open →<");
   });
@@ -180,22 +194,18 @@ describe("OG card wordmark", () => {
     const svg = ogCardSvg({
       title: "开源自托管",
       description: "任意编码 agent 都能发布可分享的页面",
-      hostname: "coda0.com",
+      brand: branded,
     });
-    // The title and description are laid out as text (not the wordmark-only
-    // fallback), and the brand footer is still present.
     expect(svg).toContain("开源自托管");
     expect(svg).toContain("任意编码 agent");
     expect(svg).toContain(">CODA0<");
   });
 
   it("brands the fallback card for scripts with no embedded glyphs", () => {
-    // Cyrillic is covered by neither Inter nor the Noto Sans SC subset, so the
-    // card drops to the brand lockup and the title text is omitted.
     const svg = ogCardSvg({
       title: "Пример заголовка",
       description: "",
-      hostname: "coda0.com",
+      brand: branded,
     });
     expect(svg).toContain(">CODA0<");
     expect(svg).not.toContain("Пример");

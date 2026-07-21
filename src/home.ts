@@ -1,20 +1,17 @@
-// Server-side branding for the static landing page. On the hosted host the
-// page must read as "coda0" in the HTML source itself — title, meta, and the
-// visible hero — so crawlers and no-JS visitors see the SaaS identity, not the
-// neutral "Open Artifacts" markup shipped in public/index.html. A self-hosted
-// deploy never runs this, so its landing page stays "Open Artifacts".
+// Server-side branding for the static landing page and viewer chrome.
+// Brand identity comes from env (BRAND_NAME, …) so the engine stays brand-
+// neutral: a self-hosted deploy with no brand env keeps the "Open Artifacts"
+// markup; a SaaS deploy sets BRAND_* and gets a rewritten home
+// page plus matching header / status / OG chrome.
 
-const CODA0_DESCRIPTION =
-  "coda0 — the managed, hosted home for the open-source Open Artifacts engine. Publish self-contained HTML and Markdown pages from any coding agent, share by URL, protect with a password, and keep them in sync as your project evolves.";
-
-const CODA0_LEAD =
-  'The managed home for <a href="https://github.com/coda0HQ/open-artifacts" target="_blank" rel="noopener noreferrer">Open Artifacts</a> — the open-source engine that lets any coding agent publish self-contained pages to shareable URLs, password-protect them, and keep them in sync. Hosted here, or self-host it yourself.';
-
-// True only for the hosted SaaS host. Keyed on the request host (mirroring the
-// landing page's own rule) so the coda0 brand appears on coda0.com and never on
-// a self-hoster's deploy — even one that sets PUBLIC_URL to its own domain.
-export function isCoda0Host(hostname: string): boolean {
-  return hostname === "coda0.com" || hostname === "www.coda0.com";
+export interface BrandEnv {
+  BRAND_NAME?: string;
+  BRAND_WORDMARK?: string;
+  BRAND_TAGLINE?: string;
+  BRAND_DESCRIPTION?: string;
+  BRAND_LEAD?: string;
+  BRAND_CHIP?: string;
+  BRAND_URL?: string;
 }
 
 export interface Brand {
@@ -25,25 +22,28 @@ export interface Brand {
   readonly tagline: string;
 }
 
-// The identity presented to a visitor, keyed on the same host rule as the
-// landing page. Every touchpoint that names the service outside the landing
-// page itself — the viewer header's brand chip, the not-found/invalid-version
-// pages, and the OG card wordmark — reads from this one place, so coda0.com
-// reads "coda0" everywhere and a self-hoster's deploy keeps the neutral
-// "Open Artifacts" identity everywhere, instead of each call site deciding on
-// its own and drifting out of sync.
-export function brandFor(hostname: string): Brand {
-  return isCoda0Host(hostname)
-    ? {
-        name: "coda0",
-        wordmark: "CODA0",
-        tagline: "share self-contained pages",
-      }
-    : {
-        name: "Open Artifacts",
-        wordmark: "OPEN ARTIFACTS",
-        tagline: "self-hosted artifact viewer",
-      };
+const DEFAULT_BRAND: Brand = {
+  name: "Open Artifacts",
+  wordmark: "OPEN ARTIFACTS",
+  tagline: "self-hosted artifact viewer",
+};
+
+/** True when the operator configured a primary brand via BRAND_NAME. */
+export function hasBrandConfig(env: BrandEnv): boolean {
+  return Boolean(env.BRAND_NAME?.trim());
+}
+
+// The identity presented to a visitor. Every touchpoint that names the service
+// — viewer header chip, not-found/invalid-version pages, OG wordmark — reads
+// from this one place so brand stays consistent.
+export function brandFor(env: BrandEnv): Brand {
+  if (!hasBrandConfig(env)) return DEFAULT_BRAND;
+  const name = (env.BRAND_NAME ?? "").trim();
+  return {
+    name,
+    wordmark: (env.BRAND_WORDMARK?.trim() || name).toUpperCase(),
+    tagline: env.BRAND_TAGLINE?.trim() || "share self-contained pages",
+  };
 }
 
 const setText = (text: string): HTMLRewriterElementContentHandlers => ({
@@ -52,24 +52,34 @@ const setText = (text: string): HTMLRewriterElementContentHandlers => ({
   },
 });
 
-// Stream the neutral landing markup through HTMLRewriter, rewriting the brand
-// tokens to coda0. Streaming (no buffering) keeps content-length correct and
+// Stream the neutral landing markup through HTMLRewriter, rewriting brand
+// tokens from env. Streaming (no buffering) keeps content-length correct and
 // avoids re-encoding; the hooks (.brand-name, .chip-text, #hero-title,
-// #hero-lead) are the stable anchors added to public/index.html.
-export function brandHomepageForCoda0(response: Response): Response {
+// #hero-lead) are the stable anchors in public/index.html.
+export function brandHomepage(response: Response, env: BrandEnv): Response {
+  if (!hasBrandConfig(env)) return response;
+  const brand = brandFor(env);
+  const description =
+    env.BRAND_DESCRIPTION?.trim() ||
+    `${brand.name} — publish self-contained HTML and Markdown pages from any coding agent, share by URL, protect with a password, and keep them in sync as your project evolves.`;
+  const lead =
+    env.BRAND_LEAD?.trim() ||
+    `Publish self-contained HTML and Markdown pages from any coding agent, share by URL, protect with a password, and keep them in sync.`;
+  const chip = env.BRAND_CHIP?.trim() || "hosted instance";
+
   return new HTMLRewriter()
-    .on("title", setText("coda0"))
+    .on("title", setText(brand.name))
     .on("meta[name=description]", {
       element(el: Element) {
-        el.setAttribute("content", CODA0_DESCRIPTION);
+        el.setAttribute("content", description);
       },
     })
-    .on(".brand-name", setText("coda0"))
-    .on(".chip-text", setText("hosted instance"))
-    .on("#hero-title", setText("coda0"))
+    .on(".brand-name", setText(brand.name))
+    .on(".chip-text", setText(chip))
+    .on("#hero-title", setText(brand.name))
     .on("#hero-lead", {
       element(el: Element) {
-        el.setInnerContent(CODA0_LEAD, { html: true });
+        el.setInnerContent(lead, { html: true });
       },
     })
     .transform(response);

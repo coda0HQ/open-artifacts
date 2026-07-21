@@ -16,6 +16,22 @@ import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
+function buildCliLoginUrl(
+  apiUrl: string,
+  provider: string | null,
+  redirectUri: string,
+): string {
+  const loginPath =
+    provider === "google" || provider === "github"
+      ? `/auth/${provider}/login`
+      : "/login";
+  const params = new URLSearchParams({
+    cli: "1",
+    redirect_uri: redirectUri,
+  });
+  return `${apiUrl.replace(/\/+$/, "")}${loginPath}?${params}`;
+}
+
 const itUnix = platform() === "win32" ? it.skip : it;
 
 const execFileAsync = promisify(execFile);
@@ -75,6 +91,8 @@ interface ManifestEntry {
   autoUpdate?: boolean;
   title?: string;
   migrationPending?: boolean;
+  visibility?: string;
+  orgId?: string;
 }
 
 interface ManifestState {
@@ -83,6 +101,7 @@ interface ManifestState {
 }
 
 interface CredentialsState {
+  apiKey?: string;
   tokens?: Record<string, string>;
   channels?: Record<string, string>;
   passwords?: Record<string, string>;
@@ -179,6 +198,9 @@ beforeEach(() => {
 function cleanEnv(): NodeJS.ProcessEnv {
   const env = { ...process.env };
   delete env.CLAUDE_PROJECT_DIR;
+  delete env.OPEN_ARTIFACTS_API_KEY;
+  delete env.OPEN_ARTIFACTS_TOKEN;
+  delete env.OPEN_ARTIFACTS_NO_BROWSER;
   return env;
 }
 
@@ -2518,5 +2540,164 @@ describe("credentials read-modify-write is re-read across the network", () => {
       password,
     );
     expect(existsSync(join(projectDir, result.stdout.trim()))).toBe(true);
+  });
+});
+
+describe("auth token precedence", () => {
+  it("prefers OPEN_ARTIFACTS_API_KEY over OPEN_ARTIFACTS_TOKEN on create", async () => {
+    const { recipePath } = writeRecipe();
+    const sk = `sk_${"a".repeat(40)}`;
+    const wt = `wt_${"b".repeat(43)}`;
+    await run(["create", recipePath], {
+      env: { OPEN_ARTIFACTS_API_KEY: sk, OPEN_ARTIFACTS_TOKEN: wt },
+    });
+    expect(requests[0].auth).toBe(`Bearer ${sk}`);
+  });
+
+  it("prefers --token over OPEN_ARTIFACTS_API_KEY", async () => {
+    const { recipePath } = writeRecipe();
+    const sk = `sk_${"a".repeat(40)}`;
+    const override = `sk_${"c".repeat(40)}`;
+    await run(["create", recipePath, "--token", override], {
+      env: { OPEN_ARTIFACTS_API_KEY: sk },
+    });
+    expect(requests[0].auth).toBe(`Bearer ${override}`);
+  });
+
+  it("uses credentials.json apiKey when no env or config token is set", async () => {
+    const { recipePath } = writeRecipe();
+    writeJson(join(projectDir, ".artifacts/credentials.json"), {
+      apiKey: `sk_${"d".repeat(40)}`,
+    });
+    writeJson(join(projectDir, ".artifacts/config.json"), {
+      apiUrl,
+    });
+    await run(["create", recipePath], {
+      env: { OPEN_ARTIFACTS_URL: apiUrl },
+    });
+    expect(requests[0].auth).toBe(`Bearer sk_${"d".repeat(40)}`);
+  });
+
+  it("prefers config createToken over credentials.json apiKey", async () => {
+    const { recipePath } = writeRecipe();
+    writeJson(join(projectDir, ".artifacts/credentials.json"), {
+      apiKey: `sk_${"d".repeat(40)}`,
+    });
+    writeJson(join(projectDir, ".artifacts/config.json"), {
+      apiUrl,
+      createToken: `wt_${"e".repeat(43)}`,
+    });
+    await run(["create", recipePath], {
+      env: { OPEN_ARTIFACTS_URL: apiUrl },
+    });
+    expect(requests[0].auth).toBe(`Bearer wt_${"e".repeat(43)}`);
+  });
+});
+
+describe("create visibility and org metadata", () => {
+  it("defaults visibility to private when creating with sk_", async () => {
+    const { recipePath } = writeRecipe();
+    await run(["create", recipePath], {
+      env: { OPEN_ARTIFACTS_API_KEY: `sk_${"k".repeat(40)}` },
+    });
+    expect(requests[0].body.visibility).toBe("private");
+    expect(manifest().artifacts[0].visibility).toBe("private");
+  });
+
+  it("sends visibility and org from flags and stores them in the manifest", async () => {
+    const { recipePath } = writeRecipe();
+    await run([
+      "create",
+      recipePath,
+      "--visibility",
+      "org",
+      "--org",
+      "org-acme",
+      "--token",
+      `sk_${"k".repeat(40)}`,
+    ]);
+    expect(requests[0].body).toMatchObject({
+      visibility: "org",
+      orgId: "org-acme",
+    });
+    expect(manifest().artifacts[0]).toMatchObject({
+      visibility: "org",
+      orgId: "org-acme",
+    });
+  });
+
+  it("reads visibility and org from the Recipe artifact block", async () => {
+    const { recipePath } = writeRecipe("scoped", {
+      mutate: (recipe) => {
+        recipe.artifact.visibility = "public";
+        recipe.artifact.org = "org-from-recipe";
+      },
+    });
+    await run(["create", recipePath], {
+      env: { OPEN_ARTIFACTS_API_KEY: `sk_${"k".repeat(40)}` },
+    });
+    expect(requests[0].body).toMatchObject({
+      visibility: "public",
+      orgId: "org-from-recipe",
+    });
+  });
+});
+
+describe("CLI SaaS login", () => {
+  it("builds a provider-specific login URL with loopback redirect", () => {
+    const url = buildCliLoginUrl(
+      apiUrl,
+      "github",
+      "http://127.0.0.1:8765/callback",
+    );
+    expect(url).toBe(
+      `${apiUrl}/auth/github/login?cli=1&redirect_uri=http%3A%2F%2F127.0.0.1%3A8765%2Fcallback`,
+    );
+  });
+
+  it("uses /login when no provider is set", () => {
+    const url = buildCliLoginUrl(
+      apiUrl,
+      null,
+      "http://127.0.0.1:8765/callback",
+    );
+    expect(url).toContain("/login?");
+    expect(url).toContain("cli=1");
+  });
+
+  it("stores apiKey from /api/keys/exchange after OAuth callback", async () => {
+    const port = 19876;
+    nextResponse = { status: 200, body: { apiKey: `sk_${"z".repeat(40)}` } };
+    const loginPromise = run(["login", "--port", String(port)], {
+      env: { OPEN_ARTIFACTS_NO_BROWSER: "1" },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await fetch(`http://127.0.0.1:${port}/callback?code=test-oauth-code`);
+    const result = await loginPromise;
+    expect(result.code).toBe(0);
+    expect(credentials().apiKey).toBe(`sk_${"z".repeat(40)}`);
+    expect(
+      requests.some(
+        (request) =>
+          request.method === "POST" &&
+          request.path === "/api/keys/exchange" &&
+          request.body.code === "test-oauth-code",
+      ),
+    ).toBe(true);
+  });
+
+  it("fails when the exchange endpoint is unavailable", async () => {
+    const port = 19877;
+    nextResponse = { status: 404, body: { error: "not found" } };
+    const loginPromise = run(["login", "--port", String(port)], {
+      env: { OPEN_ARTIFACTS_NO_BROWSER: "1" },
+      expectFailure: true,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await fetch(`http://127.0.0.1:${port}/callback?code=missing-endpoint`);
+    const result = await loginPromise;
+    expect(result.stderr).toMatch(
+      /login failed \(404\)|exchange endpoint unavailable/i,
+    );
   });
 });

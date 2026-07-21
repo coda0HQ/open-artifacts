@@ -2,6 +2,7 @@
 // Open Artifacts publishing CLI. Zero dependencies; requires Node >= 22.
 // Used by the "artifacts" agent skill; also usable by humans.
 
+import { execFile } from "node:child_process";
 import { createHash, webcrypto } from "node:crypto";
 import {
   chmodSync,
@@ -11,10 +12,11 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
+import { createServer } from "node:http";
 import { homedir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseArgs } from "node:util";
+import { parseArgs, promisify } from "node:util";
 import {
   buildArtifactRecipe,
   recipeBuildSummary,
@@ -23,6 +25,8 @@ import {
 import { CANVAS_MARKERS, loadCanvasRuntime } from "./lib/compose.mjs";
 import { loadRecipe, resolveWatchFiles } from "./lib/recipe.mjs";
 import { MAX_CONTENT_BYTES } from "./lib/validate.mjs";
+
+const execFileAsync = promisify(execFile);
 
 const PBKDF2_ITERATIONS = 600_000;
 const PROJECT_ROOT = process.cwd();
@@ -56,6 +60,48 @@ function writeJson(path, value, mode = 0o644) {
   writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, { mode });
 }
 
+function loadCredentials() {
+  if (existsSync(CREDENTIALS_PATH)) {
+    // One-time migration: a credentials file created by an older CLI version
+    // before 0600 enforcement shipped may still be group/world-readable.
+    // Tighten it on first load; chmodSync no-ops the mode bits to 0600.
+    const mode = statSync(CREDENTIALS_PATH).mode & 0o777;
+    if (mode & ~0o600) chmodSync(CREDENTIALS_PATH, 0o600);
+  }
+  const value = readJson(CREDENTIALS_PATH, {});
+  return {
+    ...value,
+    apiKey: value.apiKey ?? null,
+    tokens: value.tokens ?? {},
+    channels: value.channels ?? {},
+    passwords: value.passwords ?? {},
+    namedPasswords: value.namedPasswords ?? {},
+  };
+}
+
+function resolveAuthToken(flags) {
+  if (flags.token) return flags.token;
+  if (process.env.OPEN_ARTIFACTS_API_KEY) {
+    return process.env.OPEN_ARTIFACTS_API_KEY;
+  }
+  if (process.env.OPEN_ARTIFACTS_TOKEN) {
+    return process.env.OPEN_ARTIFACTS_TOKEN;
+  }
+  const project = {
+    ...readJson(CONFIG.shared, {}),
+    ...readJson(CONFIG.local, {}),
+  };
+  const global = readJson(
+    join(homedir(), ".config/open-artifacts/config.json"),
+    {},
+  );
+  const fromConfig = project.createToken ?? global.createToken;
+  if (fromConfig) return fromConfig;
+  const credentials = loadCredentials();
+  if (credentials.apiKey) return credentials.apiKey;
+  return null;
+}
+
 function loadConfig(flags) {
   const project = {
     ...readJson(CONFIG.shared, {}),
@@ -70,16 +116,15 @@ function loadConfig(flags) {
     process.env.OPEN_ARTIFACTS_URL ??
     project.apiUrl ??
     global.apiUrl;
-  const createToken =
-    process.env.OPEN_ARTIFACTS_TOKEN ??
-    project.createToken ??
-    global.createToken;
   if (!apiUrl) {
     fail(
       'no instance configured. Set OPEN_ARTIFACTS_URL, pass --api <url>, or write .artifacts/config.json {"apiUrl": "https://..."}',
     );
   }
-  return { apiUrl: apiUrl.replace(/\/+$/, ""), createToken };
+  return {
+    apiUrl: apiUrl.replace(/\/+$/, ""),
+    authToken: resolveAuthToken(flags),
+  };
 }
 
 // Merge shared + local manifest entries. Keyed by id only: a local entry with
@@ -118,24 +163,6 @@ function saveManifest(manifest, local) {
     manifestVersion: 2,
     artifacts: manifest.artifacts,
   });
-}
-
-function loadCredentials() {
-  if (existsSync(CREDENTIALS_PATH)) {
-    // One-time migration: a credentials file created by an older CLI version
-    // before 0600 enforcement shipped may still be group/world-readable.
-    // Tighten it on first load; chmodSync no-ops the mode bits to 0600.
-    const mode = statSync(CREDENTIALS_PATH).mode & 0o777;
-    if (mode & ~0o600) chmodSync(CREDENTIALS_PATH, 0o600);
-  }
-  const value = readJson(CREDENTIALS_PATH, {});
-  return {
-    ...value,
-    tokens: value.tokens ?? {},
-    channels: value.channels ?? {},
-    passwords: value.passwords ?? {},
-    namedPasswords: value.namedPasswords ?? {},
-  };
 }
 
 function saveCredentials(credentials) {
@@ -462,11 +489,19 @@ async function commandCreate(recipePath, flags) {
     payload.channel = credentials.channels[channel];
   }
 
+  const orgId = flags.org ?? artifact.org ?? null;
+  const visibility =
+    flags.visibility ??
+    artifact.visibility ??
+    (config.authToken?.startsWith("sk_") ? "private" : undefined);
+  if (orgId) payload.orgId = orgId;
+  if (visibility) payload.visibility = visibility;
+
   const { status, json } = await request(
     "POST",
     `${config.apiUrl}/api/artifacts`,
     payload,
-    config.createToken,
+    config.authToken,
   );
   if (status !== 201 && status !== 200) {
     fail(`create failed (${status}): ${json.error ?? "unknown error"}`);
@@ -498,6 +533,8 @@ async function commandCreate(recipePath, flags) {
     snapshot: recipeSnapshot(build),
     updatedAt: new Date().toISOString(),
   };
+  if (visibility) entry.visibility = visibility;
+  if (orgId) entry.orgId = orgId;
   if (existingIndex >= 0) manifest.artifacts[existingIndex] = entry;
   else manifest.artifacts.push(entry);
   saveManifest(manifest, artifact.local);
@@ -1275,6 +1312,143 @@ async function commandMigrate(id, flags) {
   return build.loaded.projectPath;
 }
 
+export function buildCliLoginUrl(apiUrl, provider, redirectUri) {
+  const loginPath =
+    provider === "google" || provider === "github"
+      ? `/auth/${provider}/login`
+      : "/login";
+  const params = new URLSearchParams({
+    cli: "1",
+    redirect_uri: redirectUri,
+  });
+  return `${apiUrl.replace(/\/+$/, "")}${loginPath}?${params}`;
+}
+
+async function openBrowser(url) {
+  if (process.env.OPEN_ARTIFACTS_NO_BROWSER === "1") {
+    console.error(`open: ${url}`);
+    return;
+  }
+  const platform = process.platform;
+  const command =
+    platform === "darwin" ? "open" : platform === "win32" ? "cmd" : "xdg-open";
+  const args = platform === "win32" ? ["/c", "start", "", url] : [url];
+  await execFileAsync(command, args);
+}
+
+async function startOAuthCallbackServer(preferredPort) {
+  return new Promise((resolve, reject) => {
+    const server = createServer((req, res) => {
+      const url = new URL(req.url ?? "/", "http://127.0.0.1");
+      if (url.pathname !== "/callback") {
+        res.writeHead(404);
+        res.end();
+        return;
+      }
+      const code = url.searchParams.get("code");
+      if (!code) {
+        res.writeHead(400, { "content-type": "text/plain; charset=utf-8" });
+        res.end("missing code");
+        return;
+      }
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      res.end(
+        "<!doctype html><html><body><p>Login complete. You can close this tab.</p></body></html>",
+      );
+      server.close();
+      if (server.__resolveCode) server.__resolveCode(code);
+    });
+    server.on("error", reject);
+    server.__codePromise = new Promise((resolveCode) => {
+      server.__resolveCode = resolveCode;
+    });
+    server.listen(preferredPort ?? 0, "127.0.0.1", () => {
+      const address = server.address();
+      if (address === null || typeof address === "string") {
+        server.close();
+        reject(new Error("could not bind loopback callback server"));
+        return;
+      }
+      resolve({
+        port: address.port,
+        code: server.__codePromise,
+        close: () => server.close(),
+      });
+    });
+  });
+}
+
+async function commandLogin(flags) {
+  const config = loadConfig(flags);
+  const provider = flags.provider ?? null;
+  if (provider !== null && provider !== "google" && provider !== "github") {
+    fail('login --provider must be "google" or "github" when set');
+  }
+  const preferredPort = flags.port ? Number(flags.port) : undefined;
+  if (preferredPort !== undefined && !Number.isInteger(preferredPort)) {
+    fail("login --port must be an integer");
+  }
+
+  const callback = await startOAuthCallbackServer(preferredPort);
+  const redirectUri = `http://127.0.0.1:${callback.port}/callback`;
+  const loginUrl = buildCliLoginUrl(config.apiUrl, provider, redirectUri);
+
+  console.error(
+    "login requires a SaaS instance with OAuth and /api/keys/exchange enabled",
+  );
+  console.error(`opening ${loginUrl}`);
+  await openBrowser(loginUrl);
+
+  const code = await callback.code;
+  const { status, json } = await request(
+    "POST",
+    `${config.apiUrl}/api/keys/exchange`,
+    { code },
+  );
+  if (status !== 200 && status !== 201) {
+    fail(
+      `login failed (${status}): ${json.error ?? "exchange endpoint unavailable on this instance"}`,
+    );
+  }
+  const apiKey = json.apiKey ?? json.key;
+  if (!apiKey || typeof apiKey !== "string") {
+    fail("login failed: exchange response did not include an apiKey");
+  }
+  mutateCredentials((credentials) => {
+    credentials.apiKey = apiKey;
+  });
+  console.error("logged in; API key stored in credentials.json");
+}
+
+function commandLogout() {
+  mutateCredentials((credentials) => {
+    delete credentials.apiKey;
+  });
+  console.error("logged out; removed stored API key");
+}
+
+async function commandWhoami(flags) {
+  const config = loadConfig(flags);
+  const token = resolveAuthToken(flags);
+  if (!token?.startsWith("sk_")) {
+    const stored = loadCredentials().apiKey;
+    if (!stored) {
+      fail("not logged in; run artifact login on a SaaS instance first");
+    }
+  }
+  const { status, json } = await request(
+    "GET",
+    `${config.apiUrl}/api/me`,
+    undefined,
+    token,
+  );
+  if (status !== 200) {
+    fail(`whoami failed (${status}): ${json.error ?? "unknown error"}`);
+  }
+  const login = json.login ?? json.email ?? json.id ?? "unknown";
+  console.log(login);
+}
+
 const HELP = `usage: artifact.mjs <command> [options]
 
 commands:
@@ -1297,6 +1471,11 @@ commands:
                        for encrypted artifacts using the stored password)
   delete <id>          delete an artifact from the server and manifest
   install-hook         add a Claude Code Stop hook that runs status --hook
+  login [--provider google|github]
+                       OAuth login via loopback callback; stores sk_ in
+                       credentials.json (requires a SaaS instance)
+  logout               remove the stored API key from credentials.json
+  whoami               print the authenticated SaaS user for the current API key
 
 options:
   --output <path>      (build) explicit preview/export output path
@@ -1304,9 +1483,17 @@ options:
   --label <l>          (create/update) version label (max 60 bytes; note: CJK chars are 3 bytes each, so keep labels terse)
   --password <p>       encrypt client-side; server only stores ciphertext
   --api <url>          instance URL (default: OPEN_ARTIFACTS_URL or config)
+  --token <t>          bearer token (overrides OPEN_ARTIFACTS_API_KEY and env)
+  --visibility <v>     (create) private, org, or public (default private with sk_)
+  --org <id>           (create) organization id for org-scoped artifacts
+  --provider <name>    (login) google or github OAuth provider
+  --port <n>           (login) loopback callback port (default: ephemeral)
   --force              overwrite on version conflict
   --v <n>              (show) view a specific version's content
   --hook               (status) emit Claude Code hook JSON instead of text
+
+auth precedence for requests: --token > OPEN_ARTIFACTS_API_KEY > OPEN_ARTIFACTS_TOKEN >
+credentials.json apiKey > config createToken
 `;
 
 async function main() {
@@ -1319,6 +1506,11 @@ async function main() {
       label: { type: "string" },
       password: { type: "string" },
       api: { type: "string" },
+      token: { type: "string" },
+      visibility: { type: "string" },
+      org: { type: "string" },
+      provider: { type: "string" },
+      port: { type: "string" },
       force: { type: "boolean" },
       hook: { type: "boolean" },
       v: { type: "string" },
@@ -1378,6 +1570,15 @@ async function main() {
       break;
     case "install-hook":
       commandInstallHook();
+      break;
+    case "login":
+      await commandLogin(flags);
+      break;
+    case "logout":
+      commandLogout();
+      break;
+    case "whoami":
+      await commandWhoami(flags);
       break;
     default:
       fail(`unknown command: ${command}\n${HELP}`);

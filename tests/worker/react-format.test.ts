@@ -1,5 +1,6 @@
 import { exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
+import { brandFor } from "../../src/home";
 import { frameDocument, unlockShell } from "../../src/wrap";
 
 const BASE = "http://artifacts.test";
@@ -133,7 +134,8 @@ describe("React/JSX encrypted serve path", () => {
       format,
       url: "http://artifacts.test/a/abc123456789",
       ogImage: "http://artifacts.test/og/abc123456789",
-      hostname: "artifacts.test",
+      brand: brandFor({}),
+      branded: false,
       artifactId: "abc123456789",
       nonce: "test-nonce",
       envelope: ENVELOPE,

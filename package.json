@@ -31,5 +31,8 @@
     "vitest": "^4.1.9",
     "wrangler": "^4.107.0"
   },
-  "type": "module"
+  "type": "module",
+  "exports": {
+    ".": "./src/engine.ts"
+  }
 }

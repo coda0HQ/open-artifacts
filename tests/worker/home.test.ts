@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { brandHomepageForCoda0, isCoda0Host } from "../../src/home";
+import { brandFor, brandHomepage, hasBrandConfig } from "../../src/home";
 
 // Mirrors the branding hooks in public/index.html.
 const SAMPLE = `<!doctype html><html><head>
@@ -12,27 +12,52 @@ const SAMPLE = `<!doctype html><html><head>
 <p id="hero-lead">Publish self-contained HTML and Markdown pages from any coding agent.</p>
 </body></html>`;
 
+const BRANDED = {
+  BRAND_NAME: "coda0",
+  BRAND_WORDMARK: "CODA0",
+  BRAND_TAGLINE: "share self-contained pages",
+  BRAND_DESCRIPTION:
+    "coda0 — the managed, hosted home for the open-source Open Artifacts engine.",
+  BRAND_LEAD:
+    'The managed home for <a href="https://github.com/coda0HQ/open-artifacts" target="_blank" rel="noopener noreferrer">Open Artifacts</a>.',
+  BRAND_CHIP: "hosted instance",
+};
+
 function brand(html: string): Promise<string> {
-  return brandHomepageForCoda0(
+  return brandHomepage(
     new Response(html, { headers: { "content-type": "text/html" } }),
+    BRANDED,
   ).text();
 }
 
-describe("isCoda0Host", () => {
-  it("matches the hosted domain and its www subdomain", () => {
-    expect(isCoda0Host("coda0.com")).toBe(true);
-    expect(isCoda0Host("www.coda0.com")).toBe(true);
-  });
-
-  it("does not match self-hosted, workers.dev, or look-alike hosts", () => {
-    expect(isCoda0Host("open-artifacts.frad.workers.dev")).toBe(false);
-    expect(isCoda0Host("example.com")).toBe(false);
-    expect(isCoda0Host("coda0.com.evil.com")).toBe(false);
+describe("hasBrandConfig", () => {
+  it("is true only when BRAND_NAME is set", () => {
+    expect(hasBrandConfig({ BRAND_NAME: "coda0" })).toBe(true);
+    expect(hasBrandConfig({})).toBe(false);
+    expect(hasBrandConfig({ BRAND_NAME: "  " })).toBe(false);
   });
 });
 
-describe("brandHomepageForCoda0", () => {
-  it("rewrites the title, meta description, and visible hero to coda0", async () => {
+describe("brandFor", () => {
+  it("uses BRAND_* when configured", () => {
+    expect(brandFor(BRANDED)).toEqual({
+      name: "coda0",
+      wordmark: "CODA0",
+      tagline: "share self-contained pages",
+    });
+  });
+
+  it("keeps the neutral Open Artifacts identity without brand env", () => {
+    expect(brandFor({})).toEqual({
+      name: "Open Artifacts",
+      wordmark: "OPEN ARTIFACTS",
+      tagline: "self-hosted artifact viewer",
+    });
+  });
+});
+
+describe("brandHomepage", () => {
+  it("rewrites the title, meta description, and visible hero from env", async () => {
     const html = await brand(SAMPLE);
     expect(html).toContain("<title>coda0</title>");
     expect(html).not.toContain("<title>Open Artifacts</title>");
@@ -42,10 +67,18 @@ describe("brandHomepageForCoda0", () => {
     expect(html).toContain('<h1 id="hero-title">coda0</h1>');
   });
 
-  it("frames coda0 as the hosted home of the open-artifacts engine", async () => {
+  it("leaves the asset untouched without brand env", async () => {
+    const html = await brandHomepage(
+      new Response(SAMPLE, { headers: { "content-type": "text/html" } }),
+      {},
+    ).text();
+    expect(html).toContain("<title>Open Artifacts</title>");
+    expect(html).toContain('<span class="brand-name">Open Artifacts</span>');
+  });
+
+  it("uses BRAND_LEAD when provided", async () => {
     const html = await brand(SAMPLE);
     expect(html).toContain("The managed home for");
-    expect(html).toContain("open-source engine");
     expect(html).toContain('href="https://github.com/coda0HQ/open-artifacts"');
   });
 });

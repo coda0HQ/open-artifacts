@@ -736,9 +736,11 @@ describe("GET /a/:id version picker", () => {
     // order alone decides. Emitted first, the base rule's `padding` shorthand
     // silently resets the narrow-screen padding-right. Asserting only that the
     // media query exists cannot catch that, so pin the order.
-    const baseRule = html.indexOf(".oa-version .oa-version-select{min-height");
+    const baseRule = html.indexOf(
+      ".oa-version .oa-version-select,.oa-visibility .oa-visibility-select{min-height",
+    );
     const narrowRule = html.indexOf(
-      "@media (max-width:30rem){.oa-version .oa-version-select",
+      "@media (max-width:30rem){.oa-version .oa-version-select,.oa-visibility .oa-visibility-select",
     );
     expect(baseRule).toBeGreaterThan(-1);
     expect(narrowRule).toBeGreaterThan(baseRule);

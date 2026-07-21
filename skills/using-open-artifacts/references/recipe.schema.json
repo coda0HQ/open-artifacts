@@ -35,7 +35,9 @@
         "scope": { "type": ["string", "null"] },
         "watch": { "type": "array", "items": { "type": "string" } },
         "local": { "type": "boolean" },
-        "autoUpdate": { "type": "boolean" }
+        "autoUpdate": { "type": "boolean" },
+        "visibility": { "enum": ["private", "org", "public"] },
+        "org": { "type": "string", "minLength": 1 }
       }
     },
     "document": {
