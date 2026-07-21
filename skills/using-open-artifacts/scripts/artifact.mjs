@@ -914,7 +914,9 @@ function commandList() {
 async function commandShow(id, flags) {
   const config = loadConfig(flags);
   const credentials = loadCredentials();
-  const token = credentials.tokens[id];
+  // Prefer sk_/API key so private SaaS artifacts pass authorizeView; fall back
+  // to the per-artifact wt_ for self-hosted capability-only deploys.
+  const token = resolveAuthToken(flags) ?? credentials.tokens[id];
   const url = `${config.apiUrl}/api/artifacts/${id}/raw${
     flags.v ? `?v=${flags.v}` : ""
   }`;

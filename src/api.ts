@@ -198,9 +198,6 @@ const isChannelBindingConflict = (error: unknown): boolean =>
   error.message.includes("channel_hash");
 
 api.post("/artifacts", async (c) => {
-  const grant = await c.get("authorizer").authorizeCreate(c);
-  if (!grant) return c.json({ error: "unauthorized" }, 401);
-
   const maxContentBytes = resolveMaxContentBytes(c.env);
   const declaredLength = Number(c.req.header("content-length") ?? "0");
   if (declaredLength > bodyCapFor(maxContentBytes)) {
@@ -213,6 +210,12 @@ api.post("/artifacts", async (c) => {
   } catch {
     return c.json({ error: "request body must be JSON" }, 400);
   }
+
+  // Authorize after the body is buffered so SaaS authorizers can read
+  // visibility/orgId from the same JSON the engine validates (Hono caches
+  // c.req.json()). defaultAuthorizer still stamps public/anonymous ownership.
+  const grant = await c.get("authorizer").authorizeCreate(c);
+  if (!grant) return c.json({ error: "unauthorized" }, 401);
 
   const parsed = validateCreate(body, maxContentBytes);
   if (!parsed.ok) return c.json({ error: parsed.error }, parsed.status);
@@ -427,6 +430,9 @@ api.post("/artifacts/:id/comments", async (c) => {
   const store = storeFrom(c);
   const record = await store.get(c.req.param("id"));
   if (record === null) return c.json({ error: "artifact not found" }, 404);
+  if (!(await c.get("authorizer").authorizeView(c, record))) {
+    return c.json({ error: "artifact not found" }, 404);
+  }
 
   const declaredLength = Number(c.req.header("content-length") ?? "0");
   if (declaredLength > COMMENT_BODY_BYTES) {

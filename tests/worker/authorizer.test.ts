@@ -131,6 +131,34 @@ describe("Authorizer hook", () => {
     );
     expect(rawAllowed.status).toBe(200);
   });
+
+  it("lets authorizeCreate read visibility from the request body", async () => {
+    const authorizer: Authorizer = {
+      async authorizeCreate(c) {
+        const body = (await c.req.json()) as { visibility?: string };
+        return {
+          ownerId: "body-user",
+          orgId: null,
+          visibility: body.visibility === "org" ? "org" : "private",
+        };
+      },
+      async authorizeView() {
+        return true;
+      },
+      async authorizeWrite() {
+        return false;
+      },
+      async canManage() {
+        return true;
+      },
+    };
+    const created = await createWith(authorizer, { visibility: "org" });
+    const meta = await fetchWith(
+      createApp(authorizer),
+      new Request(`${BASE}/api/artifacts/${created.id}`),
+    );
+    expect(meta.status).toBe(200);
+  });
 });
 
 describe("Visibility gate", () => {
@@ -244,6 +272,20 @@ describe("Visibility gate", () => {
       ),
     );
     expect(put.status).toBe(200);
+  });
+
+  it("rejects comment POST on private artifacts when view is denied", async () => {
+    const authorizer = stubAuthorizer({
+      grant: { ownerId: "u1", orgId: null, visibility: "private" },
+    });
+    const created = await createWith(authorizer);
+    const denied = await fetchWith(
+      createApp(authorizer),
+      jsonRequest("POST", `/api/artifacts/${created.id}/comments`, {
+        body: "sneak",
+      }),
+    );
+    expect(denied.status).toBe(404);
   });
 });
 
