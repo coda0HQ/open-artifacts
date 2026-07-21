@@ -3,12 +3,20 @@
     "target": "ES2022",
     "module": "Node16",
     "moduleResolution": "Node16",
-    "lib": ["ES2022"],
-    "types": ["node"],
+    "lib": [
+      "ES2022"
+    ],
+    "types": [
+      "node"
+    ],
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
     "isolatedModules": true
   },
-  "include": ["tests/cli/**/*.ts", "skills/using-open-artifacts/scripts/**/*.mjs"]
+  "include": [
+    "tests/cli/**/*.ts",
+    "skills/using-open-artifacts/scripts/**/*.mjs",
+    "skills/using-open-artifacts/scripts/**/*.d.mts"
+  ]
 }
