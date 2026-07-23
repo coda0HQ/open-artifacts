@@ -19,6 +19,11 @@ Feature: Visibility gate on read paths
     Then the response status is 200
     And the artifact visibility is public
 
+  Scenario: Unauthorized PATCH does not disclose private artifact existence
+    Given a private artifact and an Authorizer that denies canManage
+    When an unauthorized caller PATCHes visibility
+    Then the response status is 404
+
   Scenario: Write token still authorizes PUT without session write
     Given a public artifact with a write token
     When I PUT new content with the write token bearer

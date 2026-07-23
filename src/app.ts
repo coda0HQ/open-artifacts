@@ -13,7 +13,7 @@ import type { VersionMeta } from "./domain";
 import { fontFaceCss, materializeFont, parseSlug } from "./fonts";
 import { brandFor, brandHomepage, hasBrandConfig } from "./home";
 import { renderOgCardPng } from "./og";
-import type { ArtifactRecord, ArtifactStore, StoredContent } from "./store";
+import type { ArtifactRecord, ArtifactStore } from "./store";
 import {
   badVersionPage,
   frameDocument,
@@ -26,26 +26,12 @@ import {
   userContentHeaders,
 } from "./wrap";
 
-// Shared by both /a/:id (the host page) and /a/:id/frame (the artifact
-// frame): resolve the record, the requested ?v= version, and that version's
-// stored content. Each route renders its own failure response — the host
-// page shows a branded status page, the frame returns a bare 404 — so this
-// only reports what went wrong, not how to display it.
-type ResolvedArtifact =
-  | {
-      ok: true;
-      record: ArtifactRecord;
-      version: number;
-      content: StoredContent;
-    }
-  | { ok: false; status: 400 | 404; badVersion: boolean };
-
-// A content-less resolve for the host page: the host never renders the
-// artifact body (the frame sub-route does, and reads it once itself), so
-// pulling the ≤4 MiB body into worker memory here only to drop it would
-// double the storage read on every plain-artifact view. The host needs only
-// the per-version encrypted flag — which listVersions already carries — to
-// pick the unlock shell vs the frame shell.
+// Content-less resolve for the host page: the host never renders the
+// artifact body (the frame sub-route does, and reads it once itself after
+// authorizeView), so pulling the ≤4 MiB body into worker memory here only
+// to drop it would double the storage read on every plain-artifact view.
+// The host needs only the per-version encrypted flag to pick the unlock
+// shell vs the frame shell.
 type ResolvedRecord =
   | {
       ok: true;
@@ -89,29 +75,6 @@ async function resolveRecord(
     encrypted: meta.encrypted,
     versions,
   };
-}
-
-async function resolveArtifact(
-  store: ArtifactStore,
-  id: string,
-  rawVersion: string | undefined,
-): Promise<ResolvedArtifact> {
-  const record = await store.get(id);
-  if (record === null) return { ok: false, status: 404, badVersion: false };
-
-  const version = parseVersionParam(rawVersion, record.currentVersion);
-  if (typeof version !== "number") {
-    return {
-      ok: false,
-      status: version.status,
-      badVersion: version.status === 400,
-    };
-  }
-
-  const content = await store.getContent(record.id, version);
-  if (content === null) return { ok: false, status: 404, badVersion: false };
-
-  return { ok: true, record, version, content };
 }
 
 const WEB_FONT_CACHE_HEADERS = {
@@ -276,25 +239,26 @@ export function createApp(
   });
 
   app.get("/a/:id/frame", async (c) => {
+    // Mirror /raw: authorize before reading body so private denials never
+    // touch R2 content (resolve-then-auth would still load ciphertext).
     const store = storeFrom(c);
     const webFonts = c.env.OPEN_ARTIFACTS_WEB_FONTS === "1";
     const nonce = generateNonce();
-    const resolved = await resolveArtifact(
-      store,
-      c.req.param("id"),
-      c.req.query("v"),
-    );
-
-    if (!resolved.ok) {
-      return new Response("not found", { status: resolved.status });
+    const record = await store.get(c.req.param("id"));
+    if (record === null) {
+      return new Response("not found", { status: 404 });
     }
-
-    if (!(await c.get("authorizer").authorizeView(c, resolved.record))) {
+    if (!(await c.get("authorizer").authorizeView(c, record))) {
       return new Response("not found", { status: 404 });
     }
 
-    const { record, content } = resolved;
-    if (content.encrypted !== null) {
+    const version = parseVersionParam(c.req.query("v"), record.currentVersion);
+    if (typeof version !== "number") {
+      return new Response("not found", { status: version.status });
+    }
+
+    const content = await store.getContent(record.id, version);
+    if (content === null || content.encrypted !== null) {
       return new Response("not found", { status: 404 });
     }
 

@@ -231,6 +231,32 @@ describe("Visibility gate", () => {
     expect(frame.status).toBe(200);
   });
 
+  it("returns 404 on PATCH when canManage is denied (no existence oracle)", async () => {
+    const authorizer = stubAuthorizer({
+      grant: { ownerId: "u1", orgId: null, visibility: "private" },
+      allowManage: false,
+      allowView: false,
+    });
+    const app = createApp(authorizer);
+    const created = await createWith(authorizer);
+
+    const missing = await fetchWith(
+      app,
+      jsonRequest("PATCH", "/api/artifacts/doesnotexist99", {
+        visibility: "public",
+      }),
+    );
+    const denied = await fetchWith(
+      app,
+      jsonRequest("PATCH", `/api/artifacts/${created.id}`, {
+        visibility: "public",
+      }),
+    );
+    expect(missing.status).toBe(404);
+    expect(denied.status).toBe(404);
+    expect(await denied.json()).toEqual({ error: "artifact not found" });
+  });
+
   it("renders a visibility selector when canManage is true", async () => {
     const authorizer = stubAuthorizer({
       grant: { ownerId: "u1", orgId: null, visibility: "private" },

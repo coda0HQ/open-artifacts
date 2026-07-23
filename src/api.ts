@@ -599,9 +599,10 @@ api.patch("/artifacts/:id", async (c) => {
   const store = storeFrom(c);
   const id = c.req.param("id");
   const record = await store.get(id);
-  if (record === null) return c.json({ error: "artifact not found" }, 404);
-  if (!(await c.get("authorizer").canManage(c, record))) {
-    return c.json({ error: "forbidden" }, 403);
+  // Collapse missing and not-manageable to the same 404 so PATCH cannot
+  // probe private artifact existence (matches GET/raw/frame unauthorized).
+  if (record === null || !(await c.get("authorizer").canManage(c, record))) {
+    return c.json({ error: "artifact not found" }, 404);
   }
 
   let body: Record<string, unknown>;

@@ -17,3 +17,13 @@ Feature: CLI SaaS login client
     Given a self-hosted engine without /api/keys/exchange
     When I run artifact login
     Then the command fails with an exchange-unavailable message
+
+  Scenario: whoami prefers stored sk_ over createToken
+    Given credentials.json has an sk_ API key and config has createToken
+    When I run artifact whoami
+    Then the request uses the sk_ bearer token
+
+  Scenario: Login times out if the browser never returns
+    Given a configured SaaS instance URL
+    When I start artifact login and no callback arrives before the timeout
+    Then the command fails with a login timed out message
