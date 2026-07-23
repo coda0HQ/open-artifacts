@@ -2700,4 +2700,41 @@ describe("CLI SaaS login", () => {
       /login failed \(404\)|exchange endpoint unavailable/i,
     );
   });
+
+  it("times out when the browser never hits the callback", async () => {
+    const port = 19878;
+    const result = await run(["login", "--port", String(port)], {
+      env: {
+        OPEN_ARTIFACTS_NO_BROWSER: "1",
+        OPEN_ARTIFACTS_LOGIN_TIMEOUT_MS: "200",
+      },
+      expectFailure: true,
+    });
+    expect(result.stderr).toMatch(/login timed out/i);
+  });
+
+  it("whoami sends stored sk_ even when createToken would win resolveAuthToken", async () => {
+    const sk = `sk_${"w".repeat(40)}`;
+    writeJson(join(projectDir, ".artifacts/credentials.json"), {
+      apiKey: sk,
+    });
+    writeJson(join(projectDir, ".artifacts/config.json"), {
+      apiUrl,
+      createToken: `wt_${"e".repeat(43)}`,
+    });
+    nextResponse = {
+      status: 200,
+      body: { login: "alice", id: "u1" },
+    };
+    const result = await run(["whoami"], {
+      env: { OPEN_ARTIFACTS_URL: apiUrl },
+    });
+    expect(result.code).toBe(0);
+    expect(result.stdout.trim()).toBe("alice");
+    expect(requests[0]).toMatchObject({
+      method: "GET",
+      path: "/api/me",
+      auth: `Bearer ${sk}`,
+    });
+  });
 });

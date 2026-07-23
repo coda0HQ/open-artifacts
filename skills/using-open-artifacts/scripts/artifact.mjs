@@ -1401,7 +1401,29 @@ async function commandLogin(flags) {
   console.error(`opening ${loginUrl}`);
   await openBrowser(loginUrl);
 
-  const code = await callback.code;
+  const loginTimeoutMs = Number(process.env.OPEN_ARTIFACTS_LOGIN_TIMEOUT_MS);
+  const timeoutMs =
+    Number.isFinite(loginTimeoutMs) && loginTimeoutMs > 0
+      ? loginTimeoutMs
+      : 10 * 60 * 1000;
+  let timeoutId;
+  let code;
+  try {
+    code = await Promise.race([
+      callback.code,
+      new Promise((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(new Error("login timed out waiting for browser callback"));
+        }, timeoutMs);
+      }),
+    ]);
+  } catch (error) {
+    callback.close();
+    fail(error instanceof Error ? error.message : "login cancelled");
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
+  }
+
   const { status, json } = await request(
     "POST",
     `${config.apiUrl}/api/keys/exchange`,
@@ -1431,18 +1453,18 @@ function commandLogout() {
 
 async function commandWhoami(flags) {
   const config = loadConfig(flags);
+  // whoami must use an sk_ only — resolveAuthToken may return createToken /
+  // OPEN_ARTIFACTS_TOKEN ahead of a stored API key, so prefer sk_ explicitly.
   const token = resolveAuthToken(flags);
-  if (!token?.startsWith("sk_")) {
-    const stored = loadCredentials().apiKey;
-    if (!stored) {
-      fail("not logged in; run artifact login on a SaaS instance first");
-    }
+  const sk = token?.startsWith("sk_") ? token : loadCredentials().apiKey;
+  if (!sk?.startsWith("sk_")) {
+    fail("not logged in; run artifact login on a SaaS instance first");
   }
   const { status, json } = await request(
     "GET",
     `${config.apiUrl}/api/me`,
     undefined,
-    token,
+    sk,
   );
   if (status !== 200) {
     fail(`whoami failed (${status}): ${json.error ?? "unknown error"}`);
@@ -1495,7 +1517,7 @@ options:
   --hook               (status) emit Claude Code hook JSON instead of text
 
 auth precedence for requests: --token > OPEN_ARTIFACTS_API_KEY > OPEN_ARTIFACTS_TOKEN >
-credentials.json apiKey > config createToken
+config createToken > credentials.json apiKey
 `;
 
 async function main() {
