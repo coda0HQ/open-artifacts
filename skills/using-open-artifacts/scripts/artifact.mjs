@@ -506,7 +506,7 @@ async function commandCreate(recipePath, flags) {
   if (status !== 201 && status !== 200) {
     const hint =
       status === 401
-        ? " - run `artifact login` to authenticate to this instance (references/auth.md)"
+        ? " - run `node artifact.mjs login` to authenticate to this instance (references/auth.md)"
         : "";
     fail(`create failed (${status}): ${json.error ?? "unknown error"}${hint}`);
   }
@@ -1462,7 +1462,9 @@ async function commandWhoami(flags) {
   const token = resolveAuthToken(flags);
   const sk = token?.startsWith("sk_") ? token : loadCredentials().apiKey;
   if (!sk?.startsWith("sk_")) {
-    fail("not logged in; run artifact login on a SaaS instance first");
+    fail(
+      "not logged in; run `node artifact.mjs login` on a SaaS instance first",
+    );
   }
   const { status, json } = await request(
     "GET",

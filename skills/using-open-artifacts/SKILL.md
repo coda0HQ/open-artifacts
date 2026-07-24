@@ -20,7 +20,7 @@ The CLI needs an instance URL, resolved in this order: `--api` flag,
 `~/.config/open-artifacts/config.json`. If none is set, ask the user for their
 instance URL and write `.artifacts/config.json`. If the instance requires a
 create token, put it in `OPEN_ARTIFACTS_TOKEN` or `config.json` `createToken`. If the instance requires login (a hosted/SaaS
-instance like coda0.com), run `artifact login` instead - see
+instance like coda0.com), run `node artifact.mjs login` instead - see
 `${CLAUDE_SKILL_DIR}/references/auth.md` for the flow and the copyable login
 instruction to give the user's coding agent.
 
