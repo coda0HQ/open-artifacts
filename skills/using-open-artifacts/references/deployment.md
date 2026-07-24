@@ -15,7 +15,7 @@ export OPEN_ARTIFACTS_URL=https://coda0.com
 
 - Nothing to deploy; works immediately.
 - Artifact content is stored on that instance's Cloudflare account.
-- Creation is open (rate-limited). Use `--password` for sensitive content —
+- To publish, authenticate with `artifact login --provider google` (see `auth.md`). Reads of public artifacts are open. Use `--password` for sensitive content —
   encryption is client-side, so the server only ever holds ciphertext.
 - Best for: trying the skill out, non-sensitive content, quick shares.
 

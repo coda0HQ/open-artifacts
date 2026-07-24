@@ -504,7 +504,11 @@ async function commandCreate(recipePath, flags) {
     config.authToken,
   );
   if (status !== 201 && status !== 200) {
-    fail(`create failed (${status}): ${json.error ?? "unknown error"}`);
+    const hint =
+      status === 401
+        ? " - run `artifact login` to authenticate to this instance (references/auth.md)"
+        : "";
+    fail(`create failed (${status}): ${json.error ?? "unknown error"}${hint}`);
   }
 
   const targetFile = artifact.local ? MANIFEST.local : MANIFEST.shared;
