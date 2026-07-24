@@ -1,7 +1,4 @@
 {
-  "enabledPlugins": {
-    "frontend@frad-dotclaude": true
-  },
   "hooks": {
     "PostToolUse": [
       {
@@ -14,5 +11,6 @@
         ]
       }
     ]
-  }
+  },
+  "enabledPlugins": {}
 }
