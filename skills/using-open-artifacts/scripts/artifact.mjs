@@ -84,6 +84,13 @@ function resolveAuthToken(flags) {
   if (process.env.OPEN_ARTIFACTS_API_KEY) {
     return process.env.OPEN_ARTIFACTS_API_KEY;
   }
+  // A logged-in sk_ is the valid create credential for a login-gated instance;
+  // it wins over OPEN_ARTIFACTS_TOKEN / config createToken (which are
+  // CREATE_TOKEN-gate secrets for self-hosted instances and would publish as
+  // anonymous on a SaaS instance, hiding the artifact from the user's
+  // dashboard). Explicit --token / OPEN_ARTIFACTS_API_KEY still override it.
+  const credentials = loadCredentials();
+  if (credentials.apiKey) return credentials.apiKey;
   if (process.env.OPEN_ARTIFACTS_TOKEN) {
     return process.env.OPEN_ARTIFACTS_TOKEN;
   }
@@ -97,8 +104,6 @@ function resolveAuthToken(flags) {
   );
   const fromConfig = project.createToken ?? global.createToken;
   if (fromConfig) return fromConfig;
-  const credentials = loadCredentials();
-  if (credentials.apiKey) return credentials.apiKey;
   return null;
 }
 
@@ -476,6 +481,15 @@ function generateChannelToken() {
 async function commandCreate(recipePath, flags) {
   if (!recipePath) fail("usage: artifact.mjs create <recipe.json> [options]");
   const config = loadConfig(flags);
+  if (!config.authToken) {
+    // Non-blocking: an open self-hosted instance legitimately allows anonymous
+    // create. But a login-gated instance (coda0.com) will 401 this request and
+    // even a successful channel-publish lands as anonymous (owner_id empty),
+    // so the artifact won't appear in the user's dashboard. Warn up front.
+    console.error(
+      "tip: no auth token configured; if this instance requires login, run `node artifact.mjs login --provider google` first (references/auth.md)",
+    );
+  }
   const prepared = await prepareRecipePayload(recipePath, flags);
   const { artifact, build, password, payload } = prepared;
   const channel = artifact.channel;

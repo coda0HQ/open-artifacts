@@ -51,12 +51,12 @@ you are logged in as; `node artifact.mjs logout` clears the key.
 ## Token precedence (gotcha)
 
 The CLI picks the auth token in this order: `--token` flag >
-`OPEN_ARTIFACTS_API_KEY` > `OPEN_ARTIFACTS_TOKEN` > `config.json`
-`createToken` > the logged-in `sk_` (`credentials.json` `apiKey`). If
-`OPEN_ARTIFACTS_TOKEN` is set (e.g. left over from a self-hosted instance),
-it **overrides** the login key - the agent would then publish as anonymous
-and could not read its own private artifacts. Unset `OPEN_ARTIFACTS_TOKEN` on
-a hosted instance, or pass `--token sk_...` explicitly.
+`OPEN_ARTIFACTS_API_KEY` > the logged-in `sk_` (`credentials.json` `apiKey`)
+> `OPEN_ARTIFACTS_TOKEN` > `config.json` `createToken`. The logged-in `sk_`
+wins over `OPEN_ARTIFACTS_TOKEN` / `createToken` (which are CREATE_TOKEN-gate
+secrets for self-hosted instances and would publish as anonymous on a hosted
+instance). But `--token` or `OPEN_ARTIFACTS_API_KEY` still overrides `sk_` -
+don't leave them set on a hosted instance unless you mean to.
 
 A `sk_` is a long-lived credential. If one leaks, rotate by logging in again
 from a clean machine and treating the old key as compromised (per-key

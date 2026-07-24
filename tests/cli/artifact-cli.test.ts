@@ -1031,6 +1031,47 @@ describe("Recipe builder", () => {
     expect(result.code).toBe(0);
   });
 
+  it("rejects a bilingual data-en/data-zh attribute convention (attribute injection)", async () => {
+    const recipe = writeRecipe("lang-attrs", {
+      mutate: (r) => {
+        r.artifact.level = 2;
+      },
+      body:
+        "<main>\n" +
+        '  <p data-en="Not supported (docs: replies \\"won\'t be visible\\")" data-zh="不支持（回复 \\"won\'t be visible\\"）">Not supported</p>\n' +
+        "</main>\n",
+    });
+    writeFileSync(
+      recipe.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n',
+    );
+    const result = await run(["validate", recipe.recipePath], {
+      expectFailure: true,
+    });
+    expect(result.stderr).toContain("data-en");
+    expect(result.stderr).toContain("attribute-injection");
+    expect(result.stderr).toContain("one artifact per language");
+    expect(requests).toHaveLength(0);
+  });
+
+  it("passes a quote-bearing sentence in an element text node (no data-<lang>)", async () => {
+    const recipe = writeRecipe("lang-text", {
+      mutate: (r) => {
+        r.artifact.level = 2;
+      },
+      body:
+        "<main>\n" +
+        '  <p>Not supported (docs: replies "won\'t be visible to Copilot")</p>\n' +
+        "</main>\n",
+    });
+    writeFileSync(
+      recipe.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n',
+    );
+    const result = await run(["validate", recipe.recipePath]);
+    expect(result.code).toBe(0);
+  });
+
   it("rejects a decorative side-stripe border-left > 1px", async () => {
     const stripe = writeRecipe("side-stripe", {
       mutate: (r) => {
@@ -2578,7 +2619,7 @@ describe("auth token precedence", () => {
     expect(requests[0].auth).toBe(`Bearer sk_${"d".repeat(40)}`);
   });
 
-  it("prefers config createToken over credentials.json apiKey", async () => {
+  it("prefers credentials.json apiKey over config createToken (login wins on a SaaS instance)", async () => {
     const { recipePath } = writeRecipe();
     writeJson(join(projectDir, ".artifacts/credentials.json"), {
       apiKey: `sk_${"d".repeat(40)}`,
@@ -2590,7 +2631,57 @@ describe("auth token precedence", () => {
     await run(["create", recipePath], {
       env: { OPEN_ARTIFACTS_URL: apiUrl },
     });
+    expect(requests[0].auth).toBe(`Bearer sk_${"d".repeat(40)}`);
+  });
+
+  it("prefers credentials.json apiKey over OPEN_ARTIFACTS_TOKEN (login wins over a self-host create token)", async () => {
+    const { recipePath } = writeRecipe();
+    writeJson(join(projectDir, ".artifacts/credentials.json"), {
+      apiKey: `sk_${"d".repeat(40)}`,
+    });
+    writeJson(join(projectDir, ".artifacts/config.json"), { apiUrl });
+    await run(["create", recipePath], {
+      env: {
+        OPEN_ARTIFACTS_URL: apiUrl,
+        OPEN_ARTIFACTS_TOKEN: `wt_${"e".repeat(43)}`,
+      },
+    });
+    expect(requests[0].auth).toBe(`Bearer sk_${"d".repeat(40)}`);
+  });
+
+  it("falls back to OPEN_ARTIFACTS_TOKEN when not logged in (self-hosted CREATE_TOKEN gate)", async () => {
+    const { recipePath } = writeRecipe();
+    writeJson(join(projectDir, ".artifacts/config.json"), { apiUrl });
+    await run(["create", recipePath], {
+      env: {
+        OPEN_ARTIFACTS_URL: apiUrl,
+        OPEN_ARTIFACTS_TOKEN: `wt_${"e".repeat(43)}`,
+      },
+    });
     expect(requests[0].auth).toBe(`Bearer wt_${"e".repeat(43)}`);
+  });
+
+  it("warns on stderr when no auth token is configured (login-gated instance hint)", async () => {
+    const { recipePath } = writeRecipe();
+    writeJson(join(projectDir, ".artifacts/config.json"), { apiUrl });
+    const result = await run(["create", recipePath], {
+      env: { OPEN_ARTIFACTS_URL: apiUrl },
+    });
+    expect(result.stderr).toContain("node artifact.mjs login");
+    // Still sends the request (self-hosted open instances allow anonymous create).
+    expect(requests[0].auth ?? "").toBe("");
+  });
+
+  it("does not warn when an auth token is configured", async () => {
+    const { recipePath } = writeRecipe();
+    writeJson(join(projectDir, ".artifacts/config.json"), { apiUrl });
+    const result = await run(["create", recipePath], {
+      env: {
+        OPEN_ARTIFACTS_URL: apiUrl,
+        OPEN_ARTIFACTS_API_KEY: `sk_${"a".repeat(40)}`,
+      },
+    });
+    expect(result.stderr).not.toContain("node artifact.mjs login");
   });
 });
 
