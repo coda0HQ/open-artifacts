@@ -3,6 +3,7 @@ import {
   type AppContext,
   api,
   artifactUrl,
+  liveWsUrl,
   ogImageUrl,
   parseVersionParam,
   storeFrom,
@@ -12,6 +13,7 @@ import { defaultAuthorizer } from "./authorizer";
 import type { VersionMeta } from "./domain";
 import { fontFaceCss, materializeFont, parseSlug } from "./fonts";
 import { brandFor, brandHomepage, hasBrandConfig } from "./home";
+import { liveApi } from "./live-api";
 import { renderOgCardPng } from "./og";
 import type { ArtifactRecord, ArtifactStore } from "./store";
 import {
@@ -92,6 +94,9 @@ export function createApp(
     await next();
   });
 
+  // Live variant-editing routes (WS upgrade + agent poll/reply). 404 when the
+  // deploy did not bind LIVE_DO; otherwise self-contained under /api/artifacts/:id/live*.
+  app.route("/api", liveApi);
   app.route("/api", api);
 
   app.get("/", async (c) => {
@@ -234,6 +239,8 @@ export function createApp(
       currentVersion: version,
       canManage,
       visibility: record.visibility,
+      liveEnabled: c.env.LIVE_DO !== undefined,
+      liveWsUrl: liveWsUrl(c, record.id),
     });
     return new Response(page, { headers: hostHeaders(nonce) });
   });

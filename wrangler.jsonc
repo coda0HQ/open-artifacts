@@ -32,5 +32,11 @@
     { "type": "Text", "globs": ["**/*.txt"], "fallthrough": true },
     { "type": "CompiledWasm", "globs": ["**/*.wasm"], "fallthrough": true }
   ],
+  // Live variant editing is OPT-IN: a deploy binds a LIVE_DO Durable Object
+  // namespace whose class_name is the engine's LiveObject (src/live-do.ts).
+  // The engine ships without the binding — self-hosters keep today's viewer
+  // (no Live button, /api/artifacts/:id/live* 404). A SaaS deploy (coda0)
+  // adds it under durable_objects + a new_sqlite_classes migration. See
+  // docs/plans and skills/using-open-artifacts/references/live.md.
   "observability": { "enabled": true }
 }

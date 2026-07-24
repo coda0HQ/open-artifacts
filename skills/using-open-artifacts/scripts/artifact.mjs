@@ -1493,6 +1493,73 @@ async function commandWhoami(flags) {
   console.log(login);
 }
 
+// Live variant editing (SaaS instance with LIVE_DO bound).
+//
+// Two modes, both harness-agnostic (one JSON line on stdout, then exit):
+//
+//   node artifact.mjs live <id>                    # poll: block for one event
+//   node artifact.mjs live <id> --reply <eid> done --version <n>
+//                                                 # reply: ack + broadcast
+//
+// The agent loop: poll -> receive {type:'generate', element, action, count, ...}
+// -> edit the artifact source to add a display:contents variant wrapper with
+// N variants -> `update` to republish -> `--reply <eid> done --version <n>`
+// -> the Worker broadcasts 'done' to the browser, which enters Cycling.
+// On 'accept': update to keep only the chosen variant (drop the wrapper), reply
+// done. On 'discard': update to restore the original, reply done.
+async function commandLive(rest, flags) {
+  const config = loadConfig(flags);
+  const id = rest[0];
+  if (!id)
+    fail(
+      "usage: artifact.mjs live <id> [--reply <eid> <status> --version <n>]",
+    );
+  const token = resolveAuthToken(flags);
+  const sk = token?.startsWith("sk_") ? token : loadCredentials().apiKey;
+  if (!sk?.startsWith("sk_")) {
+    fail(
+      "not logged in; run `node artifact.mjs login` on a SaaS instance first",
+    );
+  }
+  const base = `${config.apiUrl}/api/artifacts/${encodeURIComponent(id)}/live`;
+
+  // Reply mode: POST /reply {id, type, version} then exit.
+  const replyId = flags.reply;
+  if (replyId) {
+    const status = rest[1] ?? "done";
+    const version = flags.version;
+    const { status: httpStatus, json } = await request(
+      "POST",
+      `${base}/reply`,
+      { id: replyId, type: status, version },
+      sk,
+    );
+    if (httpStatus !== 200) {
+      fail(`live reply failed (${httpStatus}): ${json.error ?? "unknown"}`);
+    }
+    console.log(JSON.stringify({ ok: true }));
+    return;
+  }
+
+  // Poll mode: long-poll one event, print JSON, exit.
+  const typesRaw = flags.types;
+  const timeoutMs = Number(process.env.OPEN_ARTIFACTS_LIVE_TIMEOUT_MS);
+  const timeout =
+    Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 270_000;
+  const params = new URLSearchParams({ timeout: String(timeout) });
+  if (typesRaw) params.set("types", typesRaw);
+  const { status: httpStatus, json } = await request(
+    "GET",
+    `${base}/poll?${params}`,
+    undefined,
+    sk,
+  );
+  if (httpStatus !== 200) {
+    fail(`live poll failed (${httpStatus}): ${json.error ?? "unknown"}`);
+  }
+  console.log(JSON.stringify(json));
+}
+
 const HELP = `usage: artifact.mjs <command> [options]
 
 commands:
@@ -1520,6 +1587,8 @@ commands:
                        credentials.json (requires a SaaS instance)
   logout               remove the stored API key from credentials.json
   whoami               print the authenticated SaaS user for the current API key
+  live <id>            live variant editing: poll one event (stdout JSON, exit),
+                       or --reply <eid> <status> --version <n> to ack
 
 options:
   --output <path>      (build) explicit preview/export output path
@@ -1558,6 +1627,9 @@ async function main() {
       force: { type: "boolean" },
       hook: { type: "boolean" },
       v: { type: "string" },
+      reply: { type: "string" },
+      types: { type: "string" },
+      version: { type: "string" },
       help: { type: "boolean" },
     },
   });
@@ -1623,6 +1695,9 @@ async function main() {
       break;
     case "whoami":
       await commandWhoami(flags);
+      break;
+    case "live":
+      await commandLive(rest, flags);
       break;
     default:
       fail(`unknown command: ${command}\n${HELP}`);

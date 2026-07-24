@@ -396,6 +396,11 @@ const SEND_ARROW_SVG =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M12 19V6M6 12l6-6 6 6"/></svg>';
 const BRAND_SVG =
   '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M20.0833 15.1999L21.2854 15.9212C21.5221 16.0633 21.5989 16.3704 21.4569 16.6072C21.4146 16.6776 21.3557 16.7365 21.2854 16.7787L12.5144 22.0412C12.1977 22.2313 11.8021 22.2313 11.4854 22.0412L2.71451 16.7787C2.47772 16.6366 2.40093 16.3295 2.54301 16.0927C2.58523 16.0223 2.64413 15.9634 2.71451 15.9212L3.9166 15.1999L11.9999 20.0499L20.0833 15.1999ZM20.0833 10.4999L21.2854 11.2212C21.5221 11.3633 21.5989 11.6704 21.4569 11.9072C21.4146 11.9776 21.3557 12.0365 21.2854 12.0787L11.9999 17.6499L2.71451 12.0787C2.47772 11.9366 2.40093 11.6295 2.54301 11.3927C2.58523 11.3223 2.64413 11.2634 2.71451 11.2212L3.9166 10.4999L11.9999 15.3499L20.0833 10.4999ZM12.5144 1.30864L21.2854 6.5712C21.5221 6.71327 21.5989 7.0204 21.4569 7.25719C21.4146 7.32757 21.3557 7.38647 21.2854 7.42869L11.9999 12.9999L2.71451 7.42869C2.47772 7.28662 2.40093 6.97949 2.54301 6.7427C2.58523 6.67232 2.64413 6.61343 2.71451 6.5712L11.4854 1.30864C11.8021 1.11864 12.1977 1.11864 12.5144 1.30864ZM11.9999 3.33233L5.88723 6.99995L11.9999 10.6676L18.1126 6.99995L11.9999 3.33233Z"/></svg>';
+// Live editor toggle: a crosshair — the same "pick an element" glyph as
+// impeccable-live's global-bar pick toggle, so the affordance reads
+// identically. Stroke icon to match the toolbar's other outline controls.
+const LIVE_SVG =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>';
 
 function versionPickerHtml(
   versions: VersionMeta[],
@@ -462,6 +467,7 @@ function headerHtml(
   commentsCount = 0,
   canManage = false,
   visibility: Visibility = "public",
+  liveEnabled = false,
 ): string {
   // A primary brand (BRAND_NAME) always names itself and links its own root,
   // ignoring BRAND_URL; a self-hoster without BRAND_NAME shows the neutral
@@ -481,12 +487,19 @@ function headerHtml(
       ? versionPickerHtml(versions, currentVersion, url)
       : "";
   const share = canManage ? visibilityPickerHtml(visibility) : "";
+  // The Live toggle opens the variant-editing bar (host chrome, outside the
+  // sandbox). Only when the deploy bound a LIVE_DO namespace; a self-hoster
+  // without it never sees the button.
+  const live = liveEnabled
+    ? `<button class="oa-live-toggle" type="button" aria-label="Open live editor" aria-expanded="false" aria-controls="oa-live-global-bar"><span aria-hidden="true">${LIVE_SVG}</span></button>`
+    : "";
   return `<header class="oa-header">
   <span class="oa-header-title"><span class="oa-header-fav">${escapeHtml(favicon)}</span>${escapeHtml(title)}</span>
   ${picker}
   ${share}
   ${chip}
   ${comments}
+  ${live}
   <button id="oa-theme-toggle" type="button" aria-label="Toggle theme"></button>
 </header>`;
 }
@@ -721,6 +734,7 @@ ${body}
 <script nonce="${nonce}">${FRAME_BRIDGE_SCRIPT}</script>
 <script nonce="${nonce}">${FRAME_ANCHOR_SCRIPT}</script>
 <script nonce="${nonce}">${FRAME_TEXT_SCRIPT}</script>
+<script nonce="${nonce}">${FRAME_LIVE_PICKER_SCRIPT}</script>
 </body>
 </html>
 `;
@@ -758,6 +772,12 @@ export interface HostShellOptions {
   canManage?: boolean;
   /** Current artifact visibility; drives the share selector. */
   visibility?: Visibility;
+  /** When true the deploy bound a LIVE_DO namespace and the Live button +
+   *  action bar should render. False for self-hosters without the binding. */
+  liveEnabled?: boolean;
+  /** Absolute WebSocket URL for the live channel, e.g. "wss://coda0.com/api/artifacts/<id>/live".
+   *  Only used when liveEnabled is true. */
+  liveWsUrl?: string;
 }
 
 const OG_CARD_W = 1200;
@@ -1006,7 +1026,131 @@ function stampNonceOnUserScripts(html: string, nonce: string): string {
   return out;
 }
 
-// The outer HOST PAGE (GET /a/:id): a normal-origin document holding the
+// Live variant-editing chrome. A global bar (Pick + Exit) fixed at the bottom
+// and an action bar pill that morphs Configure -> Generating -> Cycling ->
+// Confirmed. Hidden until the Live button toggles it open. The host chrome
+// owns the WebSocket (the sandboxed artifact frame cannot — connect-src 'none'
+// + opaque origin); the frame runs the element picker itself, armed via the
+// existing postMessage bridge (window.__oaToFrame).
+function liveChromeHtml(wsUrl: string, artifactId: string): string {
+  return `<div id="oa-live-root" hidden>
+  <div id="oa-live-global-bar" role="toolbar" aria-label="Live editor">
+    <button type="button" id="oa-live-pick-toggle" data-active="false" aria-pressed="false" title="Pick an element"><span class="oa-live-icon" aria-hidden="true">${LIVE_SVG}</span><span class="oa-live-label">Pick</span></button>
+    <button type="button" id="oa-live-exit" title="Exit live editor"><span class="oa-live-icon" aria-hidden="true">${CLOSE_SVG}</span><span class="oa-live-label">Exit</span></button>
+  </div>
+  <div id="oa-live-action-bar" role="dialog" aria-label="Live actions" hidden></div>
+  <script type="application/json" id="oa-live-config">${escapeHtml(JSON.stringify({ wsUrl, artifactId }))}</script>
+</div>`;
+}
+
+const LIVE_SCRIPT = `
+(function(){
+  var cfgEl=document.getElementById('oa-live-config');
+  if(!cfgEl) return;
+  var cfg=JSON.parse(cfgEl.textContent||'{}');
+  var root=document.getElementById('oa-live-root');
+  var gbar=document.getElementById('oa-live-global-bar');
+  var abar=document.getElementById('oa-live-action-bar');
+  var pickBtn=document.getElementById('oa-live-pick-toggle');
+  var exitBtn=document.getElementById('oa-live-exit');
+  var frame=document.getElementById('oa-frame');
+  if(!root||!gbar||!abar||!pickBtn||!exitBtn||!frame) return;
+
+  var ws=null, wsReady=false, sessionId=null, state='IDLE';
+  var pickedCtx=null, action='', freeform='', count=3;
+  var visibleVariant=0, expected=0, arrived=0;
+
+  function toFrame(msg){ try{ if(frame.contentWindow) frame.contentWindow.postMessage(msg,'*'); }catch(e){} }
+  function send(msg){ if(!ws||ws.readyState!==1) return; msg.id=msg.id||sessionId; try{ ws.send(JSON.stringify(msg)); }catch(e){} }
+  function genId(){ return 'ev_'+Math.random().toString(36).slice(2)+Date.now().toString(36); }
+
+  function setState(s){ state=s; renderBar(); }
+
+  // --- bar rendering (Configure / Generating / Cycling / Confirmed) ---
+  function el(tag, cls, html){ var d=document.createElement(tag); if(cls)d.className=cls; if(html!=null)d.innerHTML=html; return d; }
+  function renderBar(){
+    abar.innerHTML='';
+    abar.hidden=false;
+    if(state==='CONFIGURING') abar.appendChild(buildConfigureRow());
+    else if(state==='GENERATING') abar.appendChild(el('div','oa-live-row','<span class="oa-live-spin"></span> Generating…'));
+    else if(state==='CYCLING') abar.appendChild(buildCyclingRow());
+    else if(state==='CONFIRMED') abar.appendChild(el('div','oa-live-row','✓ Applied'));
+    else abar.hidden=true;
+  }
+  function buildConfigureRow(){
+    var r=el('div','oa-live-row');
+    var act=el('select','oa-live-action'); act.innerHTML='<option value="bolder">Bolder</option><option value="quieter">Quieter</option><option value="polish">Polish</option>'; act.value=action; act.onchange=function(){action=act.value;};
+    var ff=el('input','oa-live-freeform'); ff.type='text'; ff.placeholder='freeform prompt'; ff.value=freeform; ff.oninput=function(){freeform=ff.value;};
+    var cnt=el('select','oa-live-count'); cnt.innerHTML='<option>1</option><option selected>2</option><option>3</option><option>4</option>'; cnt.value=String(count); cnt.onchange=function(){count=Number(cnt.value);};
+    var go=el('button','oa-live-go','Go'); go.type='button'; go.onclick=handleGo;
+    r.appendChild(act); r.appendChild(ff); r.appendChild(cnt); r.appendChild(go);
+    return r;
+  }
+  function buildCyclingRow(){
+    var r=el('div','oa-live-row');
+    var prev=el('button','oa-live-prev','←'); prev.type='button'; prev.onclick=function(){ cycleVariant(-1); };
+    var dots=el('span','oa-live-dots',''); for(var i=0;i<expected;i++){ (function(i){var d=el('button','oa-live-dot'+(i===visibleVariant?' active':''),i===visibleVariant?'●':'○'); d.type='button'; d.onclick=function(){selectVariant(i);}; dots.appendChild(d);})(i); }
+    var counter=el('span','oa-live-counter',(visibleVariant+1)+'/'+expected);
+    var next=el('button','oa-live-next','→'); next.type='button'; next.onclick=function(){ cycleVariant(1); };
+    var acc=el('button','oa-live-accept','✓ Accept'); acc.type='button'; acc.onclick=handleAccept;
+    var disc=el('button','oa-live-discard','✕ Discard'); disc.type='button'; disc.onclick=handleDiscard;
+    r.appendChild(prev); r.appendChild(dots); r.appendChild(counter); r.appendChild(next); r.appendChild(acc); r.appendChild(disc);
+    return r;
+  }
+
+  function handleGo(){
+    if(!pickedCtx){ abar.querySelector('.oa-live-freeform')?.focus(); return; }
+    sessionId=genId();
+    setState('GENERATING');
+    send({type:'generate', id:sessionId, action:action, freeform:freeform, count:count, element:pickedCtx});
+  }
+  function cycleVariant(dir){ var n=(visibleVariant+dir+expected)%expected; selectVariant(n); }
+  function selectVariant(n){ visibleVariant=n; toFrame({type:'oa:live:cycle', variant:n}); renderBar(); }
+  function handleAccept(){ setState('GENERATING'); send({type:'accept', id:sessionId, variantId:String(visibleVariant)}); }
+  function handleDiscard(){ setState('GENERATING'); send({type:'discard', id:sessionId}); }
+
+  // --- WebSocket ---
+  function connect(){
+    try{ ws=new WebSocket(cfg.wsUrl); }catch(e){ setTimeout(connect,1000); return; }
+    ws.onopen=function(){ wsReady=true; };
+    ws.onmessage=function(e){
+      var msg; try{ msg=JSON.parse(e.data); }catch(err){ return; }
+      if(msg.type==='done'){ expected=msg.count||count; arrived=expected; setState('CYCLING'); }
+      else if(msg.type==='accept'||msg.type==='complete'){ setState('CONFIRMED'); setTimeout(function(){ reset(); },1500); }
+      else if(msg.type==='discarded'){ reset(); }
+      else if(msg.type==='error'){ setState('CONFIGURING'); }
+    };
+    ws.onclose=function(){ wsReady=false; setTimeout(function(){ if(state!=='IDLE') connect(); },1000); };
+  }
+
+  // --- host<->frame bridge ---
+  window.addEventListener('message', function(e){
+    if(!e.data||typeof e.data.type!=='string') return;
+    var d=e.data;
+    if(d.type==='oa:element:picked'){ pickedCtx=d.element; setState('CONFIGURING'); }
+    else if(d.type==='oa:live:variants:arrived'){ arrived=d.count||arrived; if(state==='GENERATING'&&d.count>=expected) setState('CYCLING'); }
+  });
+
+  // --- global bar ---
+  pickBtn.onclick=function(){
+    var on=pickBtn.getAttribute('aria-pressed')==='true';
+    pickBtn.setAttribute('aria-pressed',String(!on));
+    pickBtn.dataset.active=String(!on);
+    if(!on){ setState('CONFIGURING'); toFrame({type:'oa:live:pick:arm'}); }
+    else{ setState('IDLE'); toFrame({type:'oa:live:pick:disarm'}); }
+  };
+  exitBtn.onclick=function(){ send({type:'exit'}); reset(); ws&&ws.close(); root.hidden=true; };
+
+  function reset(){ state='IDLE'; pickedCtx=null; visibleVariant=0; renderBar(); abar.hidden=true; pickBtn.setAttribute('aria-pressed','false'); pickBtn.dataset.active='false'; toFrame({type:'oa:live:pick:disarm'}); }
+
+  connect();
+})();
+`;
+
+// Close-X glyph for the live global bar's Exit button.
+const CLOSE_SVG =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+
 // crawler-facing <head>, the reused header + comments drawer chrome, and an
 // <iframe> embedding the sandboxed artifact frame below the header. It never
 // renders the artifact body itself — that lives entirely in frameDocument(),
@@ -1028,6 +1172,8 @@ export function hostShell(options: HostShellOptions): string {
     currentVersion,
     canManage = false,
     visibility = "public",
+    liveEnabled = false,
+    liveWsUrl = "",
   } = options;
   const ogDescription = description || title;
   const commentsList = options.comments ?? [];
@@ -1056,9 +1202,10 @@ export function hostShell(options: HostShellOptions): string {
 <style>${RESET_CSS}${COMMENTS_CSS}${HOST_FRAME_CSS}</style>
 </head>
 <body>
-${headerHtml(favicon, title, brand, branded, brandUrl, versions, currentVersion, url, artifactId, openCommentsCount(commentsList), canManage, visibility)}
+${headerHtml(favicon, title, brand, branded, brandUrl, versions, currentVersion, url, artifactId, openCommentsCount(commentsList), canManage, visibility, liveEnabled)}
 <iframe id="oa-frame" src="${escapeHtml(frameSrc)}" sandbox="allow-scripts allow-modals allow-forms allow-popups" title="${escapeHtml(title)}"></iframe>
 ${drawer}
+${liveEnabled ? liveChromeHtml(liveWsUrl ?? "", artifactId) : ""}
 ${commentsDataScript(commentsList)}
 <script nonce="${nonce}">window.__oaViewedVersion=${Number(currentVersion ?? 1)};</script>
 <script nonce="${nonce}">${VERSION_SCRIPT}</script>
@@ -1068,6 +1215,7 @@ ${commentsDataScript(commentsList)}
 <script nonce="${nonce}">${escapeInlineScript(hostBridgeScript(artifactId))}</script>
 <script nonce="${nonce}">${VISIBILITY_SCRIPT}</script>
 <script nonce="${nonce}">${escapeInlineScript(HOST_UI_SCRIPT)}</script>
+${liveEnabled ? `<script nonce="${nonce}">${escapeInlineScript(LIVE_SCRIPT)}</script>` : ""}
 </body>
 </html>
 `;
@@ -1136,6 +1284,139 @@ const FRAME_BRIDGE_SCRIPT = `
   window.__oaMode=(pl&&getComputedStyle(pl).transform!=='none')?'canvas':'text';
   window.__oaOnArm=function(armed){root.classList.toggle('oa-cm-arming',!!armed&&window.__oaMode==='canvas')};
   send({type:"oa:ready",mode:window.__oaMode});
+})();
+`;
+
+// Live element picker + variant cycler, running inside the sandboxed artifact
+// frame. The host page cannot reach into the opaque-origin frame's DOM, so the
+// picker lives here and is armed/disarmed by host postMessage. On pick, sends
+// the element's context (tagName/id/classes/outerHTML/computedStyles/etc.) —
+// NOT a CSS selector — the agent matches it in source by id->class->tag.
+// On oa:live:cycle, toggles which [data-impeccable-variant] child is visible
+// (the wrapper uses display:contents; variants are toggled by an injected
+// stylesheet, mirroring impeccable-live's updateVariantStateStylesheet).
+const FRAME_LIVE_PICKER_SCRIPT = `
+(function(){
+  if(!window.__oaSend)return;
+  var PREFIX='impeccable-live';
+  var armed=false, annotEnabled=false, picked=null, hovered=null;
+  var highlight=null, annotSvg=null, annotPins=null;
+  var annotState={comments:[],strokes:[]};
+  var DRAG_THRESHOLD=5;
+  var TAGS_SKIP=new Set(['SCRIPT','STYLE','LINK','META','HEAD','SVG','PATH']);
+  function own(el){return el&&(el.id&&el.id.indexOf(PREFIX)===0)|| (el.closest&&el.closest('[id^="'+PREFIX+'"]'));}
+  function pickable(el){
+    if(!el||el.nodeType!==1)return false;
+    if(TAGS_SKIP.has(String(el.tagName||'').toUpperCase()))return false;
+    if(own(el))return false;
+    var r=el.getBoundingClientRect();
+    return r.width>=20&&r.height>=20;
+  }
+  function showHighlight(el){
+    if(!highlight){
+      highlight=document.createElement('div');
+      highlight.id=PREFIX+'-highlight';
+      highlight.style.cssText='position:fixed;pointer-events:none;z-index:100001;border:2px solid var(--oa-accent,#6457f0);background:rgba(100,87,240,0.08);transition:opacity .1s';
+      document.body.appendChild(highlight);
+    }
+    var r=el.getBoundingClientRect();
+    highlight.style.left=r.left+'px';highlight.style.top=r.top+'px';
+    highlight.style.width=r.width+'px';highlight.style.height=r.height+'px';
+    highlight.style.display='block';
+  }
+  function hideHighlight(){ if(highlight)highlight.style.display='none'; }
+  function extractContext(el){
+    var cs=getComputedStyle(el), r=el.getBoundingClientRect();
+    var p=el.parentElement;
+    return {tagName:el.tagName.toLowerCase(), id:el.id||null, classes:[].slice.call(el.classList), textContent:(el.textContent||'').slice(0,500), outerHTML:el.outerHTML.slice(0,10000), computedStyles:{'font-family':cs.fontFamily,'font-size':cs.fontSize,'color':cs.color,'background':cs.backgroundColor,'border-radius':cs.borderRadius,'box-shadow':cs.boxShadow}, parentContext:p?('<'+p.tagName.toLowerCase()+(p.id?' #'+p.id:'')+('')+'>'):'', boundingRect:{width:Math.round(r.width),height:Math.round(r.height)}};
+  }
+  function onMove(e){
+    if(!armed)return;
+    var t=document.elementFromPoint(e.clientX,e.clientY);
+    if(!t||!pickable(t)||t===hovered)return;
+    hovered=t; showHighlight(t);
+  }
+  function onClick(e){
+    if(!armed)return;
+    if(own(e.target))return;
+    if(!hovered||!pickable(hovered))return;
+    e.preventDefault();e.stopPropagation();
+    picked=hovered;
+    showHighlight(picked);
+    window.__oaSend({type:'oa:element:picked', element:extractContext(picked)});
+  }
+  function onKey(e){
+    if(!armed)return;
+    var nav=armed?hovered:null;
+    if(nav&&(e.key==='ArrowUp'||e.key==='ArrowDown')){
+      var next=null;
+      if(e.key==='ArrowDown'&&!e.shiftKey){next=nav.nextElementSibling;while(next&&!pickable(next))next=next.nextElementSibling;}
+      else if(e.key==='ArrowUp'&&!e.shiftKey){next=nav.previousElementSibling;while(next&&!pickable(next))next=nav.previousElementSibling;}
+      else if(e.key==='ArrowUp'&&e.shiftKey){next=nav.parentElement;}
+      else if(e.key==='ArrowDown'&&e.shiftKey){next=nav.firstElementChild;}
+      if(next){e.preventDefault();hovered=next;showHighlight(next);next.scrollIntoView({block:'nearest',behavior:'smooth'});}
+    }
+  }
+  function arm(){
+    armed=true;
+    document.addEventListener('mousemove',onMove,true);
+    document.addEventListener('click',onClick,true);
+    document.addEventListener('keydown',onKey,true);
+  }
+  function disarm(){
+    armed=false;
+    document.removeEventListener('mousemove',onMove,true);
+    document.removeEventListener('click',onClick,true);
+    document.removeEventListener('keydown',onKey,true);
+    hideHighlight();
+  }
+  // Variant cycling: toggle which [data-impeccable-variant] is visible.
+  var vstyle=document.createElement('style'); vstyle.id=PREFIX+'-variants'; document.head.appendChild(vstyle);
+  function selectVariant(n){
+    var wrap=document.querySelector('[data-impeccable-variants]');
+    if(!wrap)return;
+    var vs=wrap.querySelectorAll('[data-impeccable-variant]');
+    vstyle.textContent='[data-impeccable-variants] > [data-impeccable-variant]{display:none !important}[data-impeccable-variants] > [data-impeccable-variant="'+n+'"]{display:block !important}';
+    var arrived=vs.length;
+    window.__oaSend({type:'oa:live:variants:arrived', count:arrived});
+  }
+  // Annotation overlay: SVG strokes + comment pins over the picked element.
+  function showAnnot(el){
+    if(annotSvg)return;
+    annotSvg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+    annotSvg.style.cssText='position:absolute;z-index:100002;pointer-events:none';
+    annotPins=document.createElement('div'); annotPins.style.cssText='position:absolute;z-index:100002';
+    document.body.appendChild(annotSvg); document.body.appendChild(annotPins);
+    positionAnnot(el);
+    annotSvg.style.pointerEvents='auto';
+    annotSvg.addEventListener('pointerdown',onAnnotDown);
+    annotSvg.addEventListener('pointermove',onAnnotMove);
+    annotSvg.addEventListener('pointerup',onAnnotUp);
+  }
+  function positionAnnot(el){
+    var r=el.getBoundingClientRect();
+    annotSvg.style.left=r.left+'px';annotSvg.style.top=r.top+'px';annotSvg.setAttribute('width',r.width);annotSvg.setAttribute('height',r.height);
+    annotPins.style.left=r.left+'px';annotPins.style.top=r.top+'px';
+  }
+  function localCoords(e){ var r=annotSvg.getBoundingClientRect(); return [e.clientX-r.left, e.clientY-r.top]; }
+  var drawing=false, curStroke=null;
+  function onAnnotDown(e){ var p=localCoords(e); if(Math.abs(e.movementX||0)<DRAG_THRESHOLD&&Math.abs(e.movementY||0)<DRAG_THRESHOLD){ dropPin(p); } else { drawing=true; curStroke={points:[p]}; } }
+  function onAnnotMove(e){ if(!drawing||!curStroke)return; var p=localCoords(e); curStroke.points.push(p); redrawStrokes(); }
+  function onAnnotUp(e){ if(drawing&&curStroke){ annotState.strokes.push(curStroke); drawing=false; curStroke=null; } }
+  function dropPin(p){ var id='pin_'+Date.now(); annotState.comments.push({x:p[0],y:p[1],text:''}); redrawPins(); }
+  function redrawStrokes(){ if(!annotSvg)return; var ns='http://www.w3.org/2000/svg'; while(annotSvg.firstChild)annotSvg.removeChild(annotSvg.firstChild); annotState.strokes.concat(curStroke?[curStroke]:[]).forEach(function(s){ var p=document.createElementNS(ns,'path'); var d=s.points.map(function(pt,i){return (i?'L':'M')+pt[0]+' '+pt[1];}).join(' '); p.setAttribute('d',d); p.setAttribute('stroke','#6457f0'); p.setAttribute('stroke-width','3'); p.setAttribute('fill','none'); p.setAttribute('stroke-linecap','round'); annotSvg.appendChild(p); }); }
+  function redrawPins(){ if(!annotPins)return; annotPins.innerHTML=''; annotState.comments.forEach(function(c){ var d=document.createElement('div'); d.style.cssText='position:absolute;left:'+(c.x-9)+'px;top:'+(c.y-9)+'px;width:18px;height:18px;border-radius:50% 50% 50% 2px;background:#6457f0;'; annotPins.appendChild(d); }); }
+  window.addEventListener('message',function(e){
+    if(e.source!==window.parent)return;
+    var m=e.data; if(!m||typeof m!=='object')return;
+    if(m.type==='oa:live:pick:arm')arm();
+    else if(m.type==='oa:live:pick:disarm')disarm();
+    else if(m.type==='oa:live:cycle')selectVariant(m.variant);
+    else if(m.type==='oa:live:annot:enable'){annotEnabled=true;if(picked)showAnnot(picked);}
+  });
+  // Detect variant wrappers landing (after agent re-publishes) and report.
+  var mo=new MutationObserver(function(){ var wrap=document.querySelector('[data-impeccable-variants]'); if(wrap){ var n=wrap.querySelectorAll('[data-impeccable-variant]').length; window.__oaSend({type:'oa:live:variants:arrived', count:n}); } });
+  mo.observe(document.body,{childList:true,subtree:true});
 })();
 `;
 
@@ -1974,7 +2255,7 @@ input.focus();
 <style>${RESET_CSS}${UNLOCK_CSS}${COMMENTS_CSS}</style>
 </head>
 <body>
-${headerHtml(favicon, title, brand, branded, brandUrl, versions, currentVersion, url, artifactId, openCommentsCount(commentsList), canManage, visibility)}
+${headerHtml(favicon, title, brand, branded, brandUrl, versions, currentVersion, url, artifactId, openCommentsCount(commentsList), canManage, visibility, false)}
 <div class="oa-unlock">
   <form class="oa-card" id="oa-form">
     <div class="oa-emoji">${escapeHtml(favicon)}</div>

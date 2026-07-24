@@ -39,6 +39,11 @@ export type Bindings = Env & {
   // (docs/architecture.md); a self-hoster on a paid plan raises it to publish
   // larger artifacts. See resolveMaxContentBytes for the parse/fallback rules.
   MAX_CONTENT_MIB?: string;
+  // Live variant editing. Optional: a deploy opts in by binding a Durable
+  // Object namespace named LIVE_DO whose class is the engine's LiveObject
+  // (see src/live-do.ts). When unset, the /api/artifacts/:id/live* routes 404
+  // and the host chrome renders no Live button — today's viewer is unchanged.
+  LIVE_DO?: DurableObjectNamespace;
 };
 export type AppContext = {
   Bindings: Bindings;
@@ -85,6 +90,11 @@ export const artifactUrl = (c: Context<AppContext>, id: string): string =>
 
 export const ogImageUrl = (c: Context<AppContext>, id: string): string =>
   `${baseUrl(c)}/og/${id}`;
+
+// WebSocket URL for the live channel on a given artifact. baseUrl is an
+// absolute http(s) origin; swap the scheme to ws/wss for the WS upgrade route.
+export const liveWsUrl = (c: Context<AppContext>, id: string): string =>
+  `${baseUrl(c).replace(/^http/, "ws")}/api/artifacts/${id}/live`;
 
 function bearerToken(c: Context<AppContext>): string | null {
   const header = c.req.header("authorization");
