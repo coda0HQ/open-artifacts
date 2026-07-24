@@ -345,6 +345,105 @@ function validateCanvas(content) {
   }
 }
 
+// Authoring agents sometimes try to ship a "bilingual" document by inventing a
+// language-parallel attribute convention — every element carries data-en="..."
+// and data-zh="..." (or any data-<lang-code> pair) and a runtime toggle swaps
+// text. The recipe model is single-language: document.language is one string,
+// and a recipe produces one language per build. This convention is not a
+// supported path — and worse, it is a brittle carrier for prose: an unescaped
+// " inside a data-* value prematurely closes the attribute, and the rest of
+// the prose (quotes, code spans, ampersands) pours out as a stream of bogus
+// attributes (won't=" be=" visible=" ...). That is exactly the attribute-
+// injection bug that shipped in the Code Terrier design doc. Stamping the whole
+// paragraph into an attribute value gives quotes zero tolerance, where the same
+// text in an element's text node is safe. The gate refuses the convention so an
+// agent cannot ship it silently; multi-language needs are served by one
+// artifact per language (two recipes, two publishes), not by parallel
+// attributes inside one body. Matches data-<2 or 3 lowercase letters> on a
+// start tag, the ISO 639-1/639-3 shape; common false positives (data-id,
+// data-tour, data-from, data-to, data-url, data-x/y/w/h, data-processed) are
+// excluded by name so a legitimate canvas/interaction attribute is never flagged.
+const LANG_ATTR_RE = /\bdata-([a-z]{2,3})\s*=\s*["']/gi;
+const LANG_ATTR_EXEMPT = new Set([
+  "id",
+  "tour",
+  "from",
+  "to",
+  "url",
+  "src",
+  "key",
+  "val",
+  "var",
+  "ref",
+  "dir",
+  "tag",
+  "num",
+  "cap",
+  "row",
+  "col",
+  "all",
+  "new",
+  "old",
+  "raw",
+  "out",
+  "len",
+  "max",
+  "min",
+  "set",
+  "get",
+  "add",
+  "del",
+  "put",
+  "run",
+  "end",
+  "top",
+  "bot",
+  "mid",
+  "low",
+  "now",
+  "pre",
+  "pro",
+  "con",
+  "tmp",
+  "uid",
+  "gid",
+  "pid",
+  "tid",
+]);
+// ISO 639-1 is two letters; three letters covers 639-3 and common casual codes
+// (zh, en, ja, de, fr, es, ko, ru, it, pt, ar, hi, vi, tr, pl, nl, sv, da, no,
+// fi, he, th, id, ms, uk, cs, el, ro, hu). A 2–3-letter token that is NOT in the
+// exempt set is treated as a language code. This is conservative: a project-
+// specific data-foo (foo not exempt, not a language) would also trip it — which
+// is the point, because shipping prose in ANY data-* attribute value is the
+// injection risk, not just language codes.
+
+function validateNoLangAttributes(authoredBody) {
+  // Strip HTML comments so an example in a comment (<!-- data-en="…" -->) does
+  // not trip the gate, matching every sibling gate.
+  const body = authoredBody.replace(/<!--[\s\S]*?-->/g, "");
+  LANG_ATTR_RE.lastIndex = 0;
+  let match;
+  for (
+    match = LANG_ATTR_RE.exec(body);
+    match !== null;
+    match = LANG_ATTR_RE.exec(body)
+  ) {
+    const code = match[1];
+    if (LANG_ATTR_EXEMPT.has(code)) continue;
+    // Snapshot ~60 chars around the hit so the author can locate the offending
+    // attribute without a separate grep.
+    const at = match.index;
+    const snippet = body.slice(
+      Math.max(0, at - 10),
+      Math.min(body.length, at + 60),
+    );
+    fail(
+      `a start tag carries a data-${code}="…" attribute — language-parallel attributes (data-en/data-zh and any data-<lang-code> pair) are not a supported path. Stamping prose into an attribute value gives quotes zero tolerance: an unescaped " prematurely closes the attribute and the rest of the text pours out as bogus attributes (the attribute-injection bug). The recipe model is single-language; serve multi-language content as one artifact per language (two recipes, two publishes), or keep the text in an element's text node. Offending region: …${snippet}…`,
+    );
+  }
+}
+
 // A "container" rule caps the content measure (max-width) so it does not span
 // the full viewport. This catches the silent defect where CSS defines such a
 // class but the body fragment never applies it — the page then ships at 100%
@@ -1184,6 +1283,7 @@ export function validateBuild(loaded, composed) {
     validateIconAlignment(composed.authoredBody, composed.authoredStyles);
     validateMeasureCap(loaded, composed);
     validateMermaidSyntax(composed.authoredBody);
+    validateNoLangAttributes(composed.authoredBody);
   }
   if (artifact.canvas) validateCanvas(composed.authoredBody);
   const title = artifact.title ?? extractTitle(content, artifact.format);
