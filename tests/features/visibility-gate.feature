@@ -13,6 +13,11 @@ Feature: Visibility gate on read paths
     When an unauthorized viewer requests GET /api/artifacts/:id/raw
     Then the response status is 404
 
+  Scenario: Private artifact returns 404 on OG card
+    Given a private artifact created via a stub Authorizer
+    When an unauthorized viewer requests /og/:id
+    Then the response status is 404
+
   Scenario: Owner can change visibility via PATCH
     Given a private artifact and an Authorizer that allows canManage
     When the owner PATCHes visibility to public

@@ -205,6 +205,17 @@ describe("Visibility gate", () => {
     expect(res.status).toBe(404);
   });
 
+  it("returns 404 on /og for private artifacts when view is denied (no existence oracle)", async () => {
+    const authorizer = stubAuthorizer({
+      grant: { ownerId: "u1", orgId: null, visibility: "private" },
+    });
+    const app = createApp(authorizer);
+    const created = await createWith(authorizer);
+
+    const res = await fetchWith(app, new Request(`${BASE}/og/${created.id}`));
+    expect(res.status).toBe(404);
+  });
+
   it("allows canManage to PATCH visibility", async () => {
     const authorizer = stubAuthorizer({
       grant: { ownerId: "u1", orgId: null, visibility: "private" },

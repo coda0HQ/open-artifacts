@@ -2076,12 +2076,3 @@ export function signInToViewPage(brand: Brand): string {
     linkText: "Sign in",
   });
 }
-
-export function noAccessPage(brand: Brand): string {
-  return statusPage({
-    title: "No access",
-    heading: "You don't have access",
-    body: "You're signed in, but this artifact isn't shared with you.",
-    brand,
-  });
-}

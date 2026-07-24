@@ -285,6 +285,14 @@ export function createApp(
     if (record === null) {
       return new Response("not found", { status: 404 });
     }
+    // Collapse a denied view to the same 404 as a missing artifact so /og
+    // cannot confirm a private artifact's existence (matches /raw, /frame,
+    // and the host route). The isPublic gate below still holds: even an
+    // authorized non-public view renders a brand-only card, so a private
+    // title never lands in the shared OG cache.
+    if (!(await c.get("authorizer").authorizeView(c, record))) {
+      return new Response("not found", { status: 404 });
+    }
     let png: Uint8Array;
     try {
       const isPublic = record.visibility === "public";
