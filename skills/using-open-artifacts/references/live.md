@@ -14,10 +14,11 @@ Copy this block to your agent so it runs the live-edit loop on an artifact:
 ```
 Live-edit artifact <ID> at coda0.com:
 1. Ensure OPEN_ARTIFACTS_URL=https://coda0.com and logged in (node artifact.mjs whoami must succeed).
-2. The user opens https://coda0.com/a/<ID>, clicks Live (this arms the picker immediately), picks an element, picks an action (bolder/quieter/polish) or types a freeform prompt, and hits Go.
+2. The user opens https://coda0.com/a/<ID>, clicks Live (this arms the picker immediately). The user picks one or more elements; for each, they pick an action (bolder/quieter/polish) and type a freeform prompt, pressing Enter (or Add) to commit that element+prompt pair. When all elements are described, they hit Submit.
 3. You poll one event: node artifact.mjs live <ID>
-   - stdout is one JSON line: {type:'generate', id, action, freeform, element:{tagName,id,classes,textContent,outerHTML,computedStyles,parentContext,boundingRect,rect}, comments?, strokes?, screenshot?}
-4. Edit the artifact source to apply the requested change to the picked element (match it in source by id → class → tag → outerHTML content). Do NOT inject variant wrappers — Live is one-shot edit-and-reload, not variant cycling.
+   - stdout is one JSON line: {type:'generate', id, action, items:[{element:{tagName,id,classes,textContent,outerHTML,computedStyles,parentContext,boundingRect,rect}, prompt}], comments?, strokes?, screenshot?}
+   - `action` applies to every item; each item carries its own `element` (full context) and `prompt` (the user's freeform description for that element).
+4. Edit the artifact source to apply each item's requested change to its picked element (match by id → class → tag → outerHTML content). Do NOT inject variant wrappers — Live is one-shot edit-and-reload, not variant cycling.
 5. Publish: node artifact.mjs update <ID>   (use the artifact's recipe, or pass the new recipe)
 6. Ack: node artifact.mjs live <ID> --reply <eid> done --version <new-version>
    - The browser receives `done`, reloads the frame, and shows the republished content. The Live session ends.

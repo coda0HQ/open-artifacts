@@ -1501,11 +1501,12 @@ async function commandWhoami(flags) {
 //   node artifact.mjs live <id> --reply <eid> done --version <n>
 //                                                 # reply: ack + broadcast
 //
-// The agent loop: poll -> receive {type:'generate', element, action, freeform, ...}
-// -> edit the artifact source to apply the requested change to the picked
-// element (no variant wrapper — Live is one-shot edit-and-reload) ->
-// `update` to republish -> `--reply <eid> done --version <n>` -> the Worker
-// broadcasts 'done' to the browser, which reloads the frame. Session ends.
+// The agent loop: poll -> receive {type:'generate', action, items:[{element, prompt}], ...}
+// -> for each item, edit the artifact source to apply its prompt to its element
+// (match by id -> class -> tag -> outerHTML; no variant wrapper — Live is
+// one-shot edit-and-reload) -> `update` to republish -> `--reply <eid> done
+// --version <n>` -> the Worker broadcasts 'done' to the browser, which reloads
+// the frame. Session ends.
 async function commandLive(rest, flags) {
   const config = loadConfig(flags);
   const id = rest[0];

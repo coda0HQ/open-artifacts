@@ -687,9 +687,15 @@ const LIVE_CSS = `
 #oa-live-action-bar .oa-live-row>select,#oa-live-action-bar .oa-live-row>input,#oa-live-action-bar .oa-live-row>button{height:30px;font:inherit;font-size:.8rem;color:var(--oa-fg);background:var(--oa-surface);border:1px solid var(--oa-border);border-radius:8px;padding:0 .55rem}
 #oa-live-action-bar .oa-live-row>input{min-width:12rem}
 #oa-live-action-bar .oa-live-row>select:focus-visible,#oa-live-action-bar .oa-live-row>input:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
-#oa-live-action-bar .oa-live-go{background:var(--oa-accent);border-color:transparent;color:var(--oa-accent-on);font-weight:600;cursor:pointer}
-#oa-live-action-bar .oa-live-go:focus-visible{box-shadow:var(--oa-focus-ring)}
-#oa-live-action-bar .oa-live-go:active{transform:translateY(1px)}
+#oa-live-action-bar .oa-live-go,#oa-live-action-bar .oa-live-add,#oa-live-action-bar .oa-live-submit{background:var(--oa-accent);border-color:transparent;color:var(--oa-accent-on);font-weight:600;cursor:pointer}
+#oa-live-action-bar .oa-live-go:focus-visible,#oa-live-action-bar .oa-live-add:focus-visible,#oa-live-action-bar .oa-live-submit:focus-visible{box-shadow:var(--oa-focus-ring)}
+#oa-live-action-bar .oa-live-go:active,#oa-live-action-bar .oa-live-add:active,#oa-live-action-bar .oa-live-submit:active{transform:translateY(1px)}
+#oa-live-action-bar .oa-live-chip{display:flex;align-items:center;gap:.35rem;max-width:100%;padding:.2rem .35rem;border-radius:6px;background:var(--oa-surface);border:1px solid var(--oa-border);font-size:.75rem}
+#oa-live-action-bar .oa-live-chip-tag{color:var(--oa-accent);font-weight:600;flex-shrink:0}
+#oa-live-action-bar .oa-live-chip-txt{color:var(--oa-fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+#oa-live-action-bar .oa-live-chip-rm{width:18px;height:18px;padding:0;border:0;border-radius:4px;background:transparent;color:var(--oa-muted);cursor:pointer;font-size:14px;line-height:1;flex-shrink:0}
+#oa-live-action-bar .oa-live-chip-rm:hover{color:var(--oa-fg)}
+#oa-live-action-bar .oa-live-chip-rm:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 #oa-live-action-bar .oa-live-spin{display:inline-block;width:12px;height:12px;border:2px solid var(--oa-muted);border-top-color:transparent;border-radius:50%;animation:oa-live-spin .7s linear infinite;vertical-align:-2px}
 @keyframes oa-live-spin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){#oa-live-action-bar .oa-live-spin{animation:none}}
@@ -1117,10 +1123,12 @@ const LIVE_SCRIPT = `
   }
 
   var ws=null, wsReady=false, sessionId=null, state='IDLE';
-  var pickedCtx=null, action='', freeform='';
-  // Last picked element's viewport rect inside the frame (CSS px), used to
-  // float the action bar next to the selection instead of at a fixed spot.
-  var pickRect=null;
+  // Multi-element batch: the user picks N elements, types a prompt for each
+  // (Enter commits that pair), then hits Submit to send one generate event
+  // with the full list. draft is the element currently awaiting a prompt.
+  var items=[]; // [{element, prompt, rect}]
+  var draft=null; // {element, rect} — picked, prompt not yet committed
+  var action='bolder'; // default action applied to all items (bolder/quieter/polish)
 
   function toFrame(msg){ try{ if(frame.contentWindow) frame.contentWindow.postMessage(msg,'*'); }catch(e){} }
   function send(msg){ if(!ws||ws.readyState!==1) return; msg.id=msg.id||sessionId; try{ ws.send(JSON.stringify(msg)); }catch(e){} }
@@ -1128,51 +1136,87 @@ const LIVE_SCRIPT = `
 
   function setState(s){ state=s; renderBar(); }
 
-  // Float the action bar near the picked element. pickRect is the element's
+  // Float the action bar near the drafted element. draft.rect is the element's
   // rect inside the frame (CSS px); add the iframe's offset on the host page
   // to get page coordinates. Falls back to bottom-centered when no rect.
   function positionBar(){
-    if(!pickRect){ abar.style.left=''; abar.style.top=''; abar.style.bottom='4rem'; abar.style.transform='translateX(-50%)'; return; }
+    var rc=draft&&draft.rect;
+    if(!rc){ abar.style.left=''; abar.style.top=''; abar.style.bottom='4rem'; abar.style.transform='translateX(-50%)'; return; }
     var fr=frame.getBoundingClientRect();
-    var x=fr.left+pickRect.x+ (pickRect.width/2);
-    var y=fr.top+pickRect.y+pickRect.height+8;
+    var x=fr.left+rc.x+ (rc.width/2);
+    var y=fr.top+rc.y+rc.height+8;
     abar.style.left=x+'px';
     abar.style.top=y+'px';
     abar.style.bottom='auto';
     abar.style.transform='translateX(-50%)';
-    // Keep on-screen: if the bar would overflow the bottom, flip above.
     var vw=document.documentElement.clientWidth, vh=document.documentElement.clientHeight;
-    if(y>vh-80){ abar.style.top='auto'; abar.style.bottom=(vh-(fr.top+pickRect.y)+8)+'px'; }
+    if(y>vh-80){ abar.style.top='auto'; abar.style.bottom=(vh-(fr.top+rc.y)+8)+'px'; }
     if(x<150){ abar.style.left='150px'; }
     if(x>vw-150){ abar.style.left=(vw-150)+'px'; }
   }
 
-  // --- bar rendering (Pick / Configure / Generating / Confirmed) ---
+  // --- bar rendering (Pick / Compose / Generating / Confirmed) ---
   function el(tag, cls, html){ var d=document.createElement(tag); if(cls)d.className=cls; if(html!=null)d.innerHTML=html; return d; }
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   function renderBar(){
     abar.innerHTML='';
     abar.hidden=false;
-    if(state==='PICKING') abar.appendChild(el('div','oa-live-row','<span class="oa-live-hint">Pick an element in the page</span>'));
-    else if(state==='CONFIGURING') abar.appendChild(buildConfigureRow());
+    if(state==='PICKING') abar.appendChild(buildPickingRow());
+    else if(state==='COMPOSE') abar.appendChild(buildComposeRow());
     else if(state==='GENERATING') abar.appendChild(el('div','oa-live-row','<span class="oa-live-spin"></span> Generating…'));
     else if(state==='CONFIRMED') abar.appendChild(el('div','oa-live-row','✓ Applied'));
     else abar.hidden=true;
     positionBar();
   }
-  function buildConfigureRow(){
+  function buildPickingRow(){
     var r=el('div','oa-live-row');
-    var act=el('select','oa-live-action'); act.innerHTML='<option value="bolder">Bolder</option><option value="quieter">Quieter</option><option value="polish">Polish</option>'; act.value=action; act.onchange=function(){action=act.value;};
-    var ff=el('input','oa-live-freeform'); ff.type='text'; ff.placeholder='freeform prompt'; ff.value=freeform; ff.oninput=function(){freeform=ff.value;};
-    var go=el('button','oa-live-go','Go'); go.type='button'; go.onclick=handleGo;
-    r.appendChild(act); r.appendChild(ff); r.appendChild(go);
+    r.appendChild(el('span','oa-live-hint', items.length? 'Pick another element, or Submit below' : 'Pick an element in the page'));
+    if(items.length){
+      var sub=el('button','oa-live-submit','Submit ('+items.length+')'); sub.type='button'; sub.onclick=handleSubmit;
+      r.appendChild(sub);
+    }
     return r;
   }
-
-  function handleGo(){
-    if(!pickedCtx){ abar.querySelector('.oa-live-freeform')?.focus(); return; }
+  function buildComposeRow(){
+    var r=el('div','oa-live-row');
+    var act=el('select','oa-live-action'); act.innerHTML='<option value="bolder">Bolder</option><option value="quieter">Quieter</option><option value="polish">Polish</option>'; act.value=action; act.onchange=function(){action=act.value;};
+    var ff=el('input','oa-live-freeform'); ff.type='text'; ff.placeholder='describe the change; Enter to commit'; ff.setAttribute('aria-label','prompt for picked element');
+    ff.onkeydown=function(e){ if(e.key==='Enter'){ e.preventDefault(); commitDraft(ff.value); } };
+    var done=el('button','oa-live-add','Add'); done.type='button'; done.onclick=function(){ commitDraft(ff.value); };
+    r.appendChild(act); r.appendChild(ff); r.appendChild(done);
+    // already-collected items, with a remove control each
+    items.forEach(function(it, i){
+      var chip=el('div','oa-live-chip');
+      var tag=el('span','oa-live-chip-tag', esc(it.element.tagName)+(it.element.id?'#'+esc(it.element.id):''));
+      var txt=el('span','oa-live-chip-txt', esc(it.prompt));
+      var rm=el('button','oa-live-chip-rm','×'); rm.type='button'; rm.title='Remove'; rm.onclick=function(){ items.splice(i,1); if(!items.length&&!draft){ setState('PICKING'); } else renderBar(); };
+      chip.appendChild(tag); chip.appendChild(txt); chip.appendChild(rm);
+      r.appendChild(chip);
+    });
+    if(items.length){
+      var sub=el('button','oa-live-submit','Submit ('+items.length+')'); sub.type='button'; sub.onclick=handleSubmit;
+      r.appendChild(sub);
+    }
+    // focus the input after the bar lands
+    setTimeout(function(){ var f=abar.querySelector('.oa-live-freeform'); if(f) f.focus(); },0);
+    return r;
+  }
+  function commitDraft(prompt){
+    if(!draft) return;
+    items.push({element:draft.element, prompt:String(prompt||'').trim(), rect:draft.rect});
+    draft=null;
+    // Back to picking the next element; picker stays armed.
+    setState('PICKING');
+    toFrame({type:'oa:live:pick:arm'});
+  }
+  function handleSubmit(){
+    // If a draft prompt is typed but not committed, commit it first.
+    var ff=abar.querySelector('.oa-live-freeform');
+    if(draft && ff && ff.value.trim()){ commitDraft(ff.value); }
+    if(!items.length){ return; }
     sessionId=genId();
     setState('GENERATING');
-    send({type:'generate', id:sessionId, action:action, freeform:freeform, element:pickedCtx});
+    send({type:'generate', id:sessionId, action:action, items:items});
   }
 
   // --- WebSocket ---
@@ -1184,7 +1228,7 @@ const LIVE_SCRIPT = `
       // 'done' = the agent finished editing + republished. Reload the frame
       // to show the new content; no variant cycling anymore.
       if(msg.type==='done'){ setState('CONFIRMED'); setTimeout(function(){ reloadFrame(); reset(); },1200); }
-      else if(msg.type==='error'){ setState('CONFIGURING'); }
+      else if(msg.type==='error'){ setState(draft?'COMPOSE':'PICKING'); }
     };
     ws.onclose=function(){ wsReady=false; setTimeout(function(){ if(state!=='IDLE') connect(); },1000); };
   }
@@ -1196,7 +1240,7 @@ const LIVE_SCRIPT = `
     if(!e.data||typeof e.data.type!=='string') return;
     if(e.source!==frame.contentWindow) return;
     var d=e.data;
-    if(d.type==='oa:element:picked'){ pickedCtx=d.element; pickRect=(d.element&&d.element.rect)||d.rect||null; setState('CONFIGURING'); }
+    if(d.type==='oa:element:picked'){ draft={element:d.element, rect:(d.element&&d.element.rect)||d.rect||null}; setState('COMPOSE'); }
   });
 
   // --- global bar ---
@@ -1211,7 +1255,7 @@ const LIVE_SCRIPT = `
   };
   exitBtn.onclick=function(){ send({type:'exit'}); reset(); ws&&ws.close(); root.hidden=true; if(liveToggle) liveToggle.setAttribute('aria-expanded','false'); };
 
-  function reset(){ state='IDLE'; pickedCtx=null; pickRect=null; renderBar(); abar.hidden=true; pickBtn.setAttribute('aria-pressed','false'); pickBtn.dataset.active='false'; toFrame({type:'oa:live:pick:disarm'}); }
+  function reset(){ state='IDLE'; items=[]; draft=null; renderBar(); abar.hidden=true; pickBtn.setAttribute('aria-pressed','false'); pickBtn.dataset.active='false'; toFrame({type:'oa:live:pick:disarm'}); }
 
   connect();
 })();
