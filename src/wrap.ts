@@ -686,7 +686,8 @@ const LIVE_CSS = `
 #oa-live-chips .oa-live-chip-rm{position:absolute;width:24px;height:24px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--oa-muted);cursor:pointer;font-size:18px;line-height:1;top:.4rem;right:.35rem;transition:color .12s,background .12s}
 #oa-live-chips .oa-live-chip-rm:hover{color:var(--oa-fg);background:color-mix(in oklab,var(--oa-fg),transparent 92%)}
 #oa-live-chips .oa-live-chip-rm:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
-#oa-live-controls{display:flex;align-items:center;gap:.35rem;flex-shrink:0;padding-top:.5rem;border-top:1px solid color-mix(in oklab,var(--oa-border),transparent 50%)}
+#oa-live-controls{display:flex;align-items:center;gap:.35rem;flex-shrink:0;padding-bottom:.5rem;border-bottom:1px solid color-mix(in oklab,var(--oa-border),transparent 50%)}
+#oa-live-dock:not(:has(#oa-live-chips:not(:empty))) #oa-live-controls{padding-bottom:0;border-bottom:0}
 #oa-live-controls button{position:relative;display:inline-flex;align-items:center;gap:.35rem;height:30px;padding:0 .5rem;border-radius:7px;border:1px solid transparent;background:transparent;color:var(--oa-fg);font:inherit;font-weight:500;line-height:1;cursor:pointer;opacity:.7;transition:opacity .15s,background .15s,border-color .15s}
 #oa-live-controls button:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 #oa-live-controls button:active{transform:translateY(1px)}
@@ -694,7 +695,8 @@ const LIVE_CSS = `
 #oa-live-controls button .oa-live-icon svg{width:14px;height:14px;display:block}
 #oa-live-controls button[aria-pressed="true"]{background:color-mix(in oklab,var(--oa-accent),transparent 88%);border-color:color-mix(in oklab,var(--oa-accent),transparent 60%);color:var(--oa-accent);opacity:1}
 @media (hover:hover) and (pointer:fine){#oa-live-controls button:hover{opacity:1;background:color-mix(in oklab,var(--oa-fg),transparent 94%)}}
-#oa-live-submit-wrap{margin-left:auto}
+#oa-live-exit{margin-left:auto}
+#oa-live-submit-wrap{margin-left:.35rem}
 #oa-live-submit-wrap:empty{display:none}
 #oa-live-submit-wrap .oa-live-submit{height:32px;padding:0 1rem;border:0;border-radius:7px;background:var(--oa-accent);color:var(--oa-accent-on);font:inherit;font-weight:600;font-size:.85rem;cursor:pointer;transition:background .15s,transform .06s}
 #oa-live-submit-wrap .oa-live-submit:hover{background:color-mix(in oklab,var(--oa-accent),var(--oa-fg) 8%)}
@@ -1100,12 +1102,12 @@ function stampNonceOnUserScripts(html: string, nonce: string): string {
 function liveChromeHtml(wsUrl: string, artifactId: string): string {
   return `<div id="oa-live-root" hidden>
   <div id="oa-live-dock">
-    <div id="oa-live-chips" role="list" aria-label="Collected changes"></div>
     <div id="oa-live-controls" role="toolbar" aria-label="Live editor">
       <button type="button" id="oa-live-pick-toggle" data-active="false" aria-pressed="false" title="Pick an element"><span class="oa-live-icon" aria-hidden="true">${LIVE_SVG}</span><span class="oa-live-label">Pick</span></button>
       <button type="button" id="oa-live-exit" title="Exit live editor"><span class="oa-live-icon" aria-hidden="true">${CLOSE_SVG}</span><span class="oa-live-label">Exit</span></button>
       <div id="oa-live-submit-wrap"></div>
     </div>
+    <div id="oa-live-chips" role="list" aria-label="Collected changes"></div>
   </div>
   <div id="oa-live-action-bar" role="dialog" aria-label="Live actions" hidden></div>
   <script type="application/json" id="oa-live-config">${jsonForInlineScript({ wsUrl, artifactId })}</script>
