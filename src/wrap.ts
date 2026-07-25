@@ -700,6 +700,7 @@ const LIVE_CSS = `
 @keyframes oa-live-spin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){#oa-live-action-bar .oa-live-spin{animation:none}}
 #oa-live-action-bar .oa-live-hint{color:var(--oa-muted);font-size:.8rem;padding:0 .3rem}
+#oa-live-action-bar .oa-live-stall{color:var(--oa-danger);font-size:.8rem;padding:0 .3rem}
 `;
 
 // Positions the embedded artifact frame below the sticky service header
@@ -1129,6 +1130,9 @@ const LIVE_SCRIPT = `
   var items=[]; // [{element, prompt, rect}]
   var draft=null; // {element, rect} — picked, prompt not yet committed
   var action='bolder'; // default action applied to all items (bolder/quieter/polish)
+  var ackTimer=null;
+  // How long to wait for an agent ack before showing the stall hint.
+  var ACK_TIMEOUT=120000; // 2 min — generous for an agent spinning up
 
   function toFrame(msg){ try{ if(frame.contentWindow) frame.contentWindow.postMessage(msg,'*'); }catch(e){} }
   function send(msg){ if(!ws||ws.readyState!==1) return; msg.id=msg.id||sessionId; try{ ws.send(JSON.stringify(msg)); }catch(e){} }
@@ -1163,7 +1167,9 @@ const LIVE_SCRIPT = `
     abar.hidden=false;
     if(state==='PICKING') abar.appendChild(buildPickingRow());
     else if(state==='COMPOSE') abar.appendChild(buildComposeRow());
-    else if(state==='GENERATING') abar.appendChild(el('div','oa-live-row','<span class="oa-live-spin"></span> Generating…'));
+    else if(state==='GENERATING') abar.appendChild(el('div','oa-live-row','<span class="oa-live-spin"></span> Sent — waiting for agent…'));
+    else if(state==='WORKING') abar.appendChild(el('div','oa-live-row','<span class="oa-live-spin"></span> Agent is editing…'));
+    else if(state==='STALLED') abar.appendChild(el('div','oa-live-row','<span class="oa-live-stall">No agent picked up. Is your CLI watcher running?</span>'));
     else if(state==='CONFIRMED') abar.appendChild(el('div','oa-live-row','✓ Applied'));
     else abar.hidden=true;
     positionBar();
@@ -1217,6 +1223,10 @@ const LIVE_SCRIPT = `
     sessionId=genId();
     setState('GENERATING');
     send({type:'generate', id:sessionId, action:action, items:items});
+    // If no agent picks up within ACK_TIMEOUT, show a hint instead of
+    // spinning forever — the user likely forgot to start the CLI watcher.
+    clearTimeout(ackTimer);
+    ackTimer=setTimeout(function(){ if(state==='GENERATING') setState('STALLED'); }, ACK_TIMEOUT);
   }
 
   // --- WebSocket ---
@@ -1225,10 +1235,11 @@ const LIVE_SCRIPT = `
     ws.onopen=function(){ wsReady=true; };
     ws.onmessage=function(e){
       var msg; try{ msg=JSON.parse(e.data); }catch(err){ return; }
-      // 'done' = the agent finished editing + republished. Reload the frame
-      // to show the new content; no variant cycling anymore.
-      if(msg.type==='done'){ setState('CONFIRMED'); setTimeout(function(){ reloadFrame(); reset(); },1200); }
-      else if(msg.type==='error'){ setState(draft?'COMPOSE':'PICKING'); }
+      // 'ack' = agent picked up the event, is editing. Clear the stall timer.
+      if(msg.type==='ack'){ clearTimeout(ackTimer); setState('WORKING'); }
+      // 'done' = the agent finished editing + republished. Reload the frame.
+      else if(msg.type==='done'){ clearTimeout(ackTimer); setState('CONFIRMED'); setTimeout(function(){ reloadFrame(); reset(); },1200); }
+      else if(msg.type==='error'){ clearTimeout(ackTimer); setState(draft?'COMPOSE':'PICKING'); }
     };
     ws.onclose=function(){ wsReady=false; setTimeout(function(){ if(state!=='IDLE') connect(); },1000); };
   }

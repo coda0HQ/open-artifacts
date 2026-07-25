@@ -10,19 +10,21 @@ import { DurableObject } from "cloudflare:workers";
 //   Browser (host) ── ws.send(generate/exit) ──▶ LiveObject
 //   Agent (CLI)    ── rpc.poll()  ──▶ drains pendingEvents (blocks)
 //   Agent          ◀── rpc.poll() returns one event (generate)
-//   Agent          ── rpc.reply(id, done) ──▶ LiveObject
-//   LiveObject     ── ws.send(done) ──▶ Browser (broadcasts; host reloads frame)
+//   Agent          ── rpc.reply(id, ack)  ──▶ LiveObject broadcasts ack
+//   Agent          ── rpc.reply(id, done) ──▶ LiveObject broadcasts done
+//   LiveObject     ── ws.send(ack/done) ──▶ Browser (broadcasts)
 //
-// Minimal subset (no carbonize/journal/scaffold): in-memory state is fine. On
-// hibernation broadcast() uses ctx.getWebSockets() (runtime-tracked, survives);
-// the pendingEvents queue and poll waiters reset, which is acceptable — the
-// agent re-polls and the browser re-sends if no ack arrives.
+// Persistence: the pending queue lives in the DO's SQLite storage
+// (ctx.storage), so events survive hibernation. A user who submits `generate`
+// while no agent is polling won't lose the event — it sits in SQLite until the
+// agent connects or the entry ages out (GC). waiters and nextSeq stay
+// in-memory (a missed wake after hibernation just means the agent re-polls).
 //
 // Hibernatable WebSockets: acceptWebSocket keeps the DO cheap when idle; a
 // message wakes it. webSocketMessage/webSocketClose are the hibernation handlers.
 
 export type LiveEvent = {
-  type: "generate" | "exit" | "done" | "error";
+  type: "generate" | "exit" | "ack" | "done" | "error";
   id: string;
   [key: string]: unknown;
 };
@@ -35,7 +37,15 @@ function eventPriority(type: LiveEvent["type"]): number {
   return 2;
 }
 
-type QueueEntry = { event: LiveEvent; seq: number; leasedUntil: number };
+type QueueRow = {
+  id: string;
+  type: string;
+  payload: string; // JSON
+  seq: number;
+  leased_until: number;
+  created_at: number;
+};
+
 type PollWaiter = {
   resolve: (e: LiveEvent | { type: "timeout" }) => void;
   types: Set<LiveEvent["type"]> | null; // null = any
@@ -44,12 +54,13 @@ type PollWaiter = {
 
 const DEFAULT_POLL_TIMEOUT_MS = 270_000; // under undici's 300s header ceiling
 const LEASE_MS = 30_000; // a poll holds an event for 30s before re-offering it
+const GC_AGE_MS = 3600_000; // drop undelivered events after 1h
+const SCHEMA_KEY = "live:v1";
 
-export class LiveObject extends DurableObject {
-  // In-memory; resets on hibernation. Acceptable for the minimal loop.
-  private pending: QueueEntry[] = [];
+export class LiveObject extends DurableObject<Record<string, unknown>> {
+  // In-memory only; a missed wake after hibernation just re-polls.
   private waiters: PollWaiter[] = [];
-  private nextSeq = 1;
+  private schemaReady = false;
 
   // --- WebSocket (browser host chrome) ---
 
@@ -79,11 +90,15 @@ export class LiveObject extends DurableObject {
 
     if (msg.type === "exit") {
       // Browser session ended — drop the connection; agent will see exit.
-      this.enqueue(msg);
-      ws.close();
+      await this.enqueue(msg);
+      try {
+        ws.close();
+      } catch {
+        // already closed
+      }
       return;
     }
-    this.enqueue(msg);
+    await this.enqueue(msg);
   }
 
   async webSocketClose(
@@ -92,8 +107,6 @@ export class LiveObject extends DurableObject {
     reason: string,
     _wasClean: boolean,
   ) {
-    // With web_socket_auto_reply_to_close (compat date >= 2026-04-07) the
-    // runtime auto-replies; close() is safe and a no-op there.
     try {
       ws.close(code, reason);
     } catch {
@@ -104,14 +117,15 @@ export class LiveObject extends DurableObject {
   // --- Agent (CLI) RPC ---
 
   // Block until a matching event arrives or timeout. Lease prevents
-  // double-delivery: the entry is marked leased for LEASE_MS; if the agent
+  // double-delivery: the row is marked leased for LEASE_MS; if the agent
   // never replies, a later poll can re-acquire it.
   async rpcPoll(
     types: LiveEvent["type"][] | null,
     timeoutMs: number = DEFAULT_POLL_TIMEOUT_MS,
   ): Promise<LiveEvent | { type: "timeout" }> {
+    await this.ensureSchema();
     const want = types ? new Set(types) : null;
-    const available = this.pickAvailable(want, Date.now());
+    const available = await this.pickAvailable(want, Date.now());
     if (available) return available;
 
     return new Promise<LiveEvent | { type: "timeout" }>((resolve) => {
@@ -124,59 +138,119 @@ export class LiveObject extends DurableObject {
     });
   }
 
-  // Agent replies to a generate (with `done`): broadcast to all subscribed
-  // browsers and drop the original event from the queue.
+  // Agent replies to an event: `ack` = "picked up, working" (broadcast but
+  // keep the row); `done` = "finished, republished" (broadcast + drop the row).
   async rpcReply(
     id: string,
     type: LiveEvent["type"],
     payload: Record<string, unknown> = {},
   ) {
-    this.acknowledge(id);
+    if (type === "done" || type === "error") {
+      await this.acknowledge(id);
+    }
     this.broadcast({ type, id, ...payload } as LiveEvent);
   }
 
   // --- internals ---
 
-  private enqueue(event: LiveEvent) {
-    // Dedupe by id+type so a re-send doesn't duplicate.
-    if (
-      this.pending.some(
-        (e) => e.event.id === event.id && e.event.type === event.type,
-      )
-    ) {
-      return;
-    }
-    this.pending.push({ event, seq: this.nextSeq++, leasedUntil: 0 });
-    this.flushWaiters();
+  private async ensureSchema(): Promise<void> {
+    if (this.schemaReady) return;
+    const sql = this.ctx.storage.sql;
+    sql.exec(
+      `CREATE TABLE IF NOT EXISTS pending (
+        id TEXT NOT NULL,
+        type TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        seq INTEGER NOT NULL,
+        leased_until INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (id, type)
+      )`,
+    );
+    sql.exec(`CREATE INDEX IF NOT EXISTS pending_seq ON pending(seq)`);
+    this.schemaReady = true;
   }
 
-  private acknowledge(id: string) {
-    this.pending = this.pending.filter((e) => e.event.id !== id);
+  private async enqueue(event: LiveEvent): Promise<void> {
+    await this.ensureSchema();
+    // GC old undelivered events so a forgotten submit doesn't live forever.
+    const cutoff = Date.now() - GC_AGE_MS;
+    await this.ctx.storage.sql.exec(
+      `DELETE FROM pending WHERE created_at < ?`,
+      cutoff,
+    );
+    // Dedupe by id+type.
+    const exists =
+      this.ctx.storage.sql
+        .exec<{ c: number }>(
+          `SELECT COUNT(*) AS c FROM pending WHERE id = ? AND type = ?`,
+          event.id,
+          event.type,
+        )
+        .toArray()[0]?.c ?? 0;
+    if (exists > 0) return;
+    const seq = Date.now(); // monotonic-ish; ties broken by created_at
+    await this.ctx.storage.sql.exec(
+      `INSERT INTO pending (id, type, payload, seq, leased_until, created_at) VALUES (?, ?, ?, ?, 0, ?)`,
+      event.id,
+      event.type,
+      JSON.stringify(event),
+      seq,
+      Date.now(),
+    );
+    await this.flushWaiters();
   }
 
-  private pickAvailable(
+  private async acknowledge(id: string): Promise<void> {
+    await this.ctx.storage.sql.exec(`DELETE FROM pending WHERE id = ?`, id);
+  }
+
+  private async pickAvailable(
     want: Set<LiveEvent["type"]> | null,
     now: number,
-  ): LiveEvent | null {
-    const candidates = this.pending
-      .filter((e) => e.leasedUntil <= now)
-      .filter((e) => want === null || want.has(e.event.type))
-      .sort(
-        (a, b) =>
-          eventPriority(a.event.type) - eventPriority(b.event.type) ||
-          a.seq - b.seq,
-      );
-    const winner = candidates[0];
+  ): Promise<LiveEvent | null> {
+    await this.ensureSchema();
+    const rows = this.ctx.storage.sql
+      .exec<QueueRow>(
+        `SELECT id, type, payload, seq, leased_until, created_at FROM pending WHERE leased_until <= ? ORDER BY seq ASC`,
+        now,
+      )
+      .toArray();
+    // Sort in JS by priority then seq (priority is small; SQL ORDER BY can't
+    // see the JS function). Terminal types (exit) first, then generate.
+    const sorted = rows.sort(
+      (a, b) =>
+        eventPriority(a.type as LiveEvent["type"]) -
+          eventPriority(b.type as LiveEvent["type"]) || a.seq - b.seq,
+    );
+    const winner = sorted.find(
+      (r) => want === null || want.has(r.type as LiveEvent["type"]),
+    );
     if (!winner) return null;
-    winner.leasedUntil = now + LEASE_MS;
-    return winner.event;
+    await this.ctx.storage.sql.exec(
+      `UPDATE pending SET leased_until = ? WHERE id = ? AND type = ?`,
+      now + LEASE_MS,
+      winner.id,
+      winner.type,
+    );
+    try {
+      return JSON.parse(winner.payload) as LiveEvent;
+    } catch {
+      // corrupted row — drop it so it doesn't block the queue
+      await this.ctx.storage.sql.exec(
+        `DELETE FROM pending WHERE id = ? AND type = ?`,
+        winner.id,
+        winner.type,
+      );
+      return null;
+    }
   }
 
-  private flushWaiters() {
+  private async flushWaiters(): Promise<void> {
     if (this.waiters.length === 0) return;
     const now = Date.now();
     for (const waiter of [...this.waiters]) {
-      const evt = this.pickAvailable(waiter.types, now);
+      const evt = await this.pickAvailable(waiter.types, now);
       if (evt) {
         clearTimeout(waiter.timer);
         this.waiters = this.waiters.filter((w) => w !== waiter);

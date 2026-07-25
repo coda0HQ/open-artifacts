@@ -14,18 +14,22 @@ Copy this block to your agent so it runs the live-edit loop on an artifact:
 ```
 Live-edit artifact <ID> at coda0.com:
 1. Ensure OPEN_ARTIFACTS_URL=https://coda0.com and logged in (node artifact.mjs whoami must succeed).
-2. The user opens https://coda0.com/a/<ID>, clicks Live (this arms the picker immediately). The user picks one or more elements; for each, they pick an action (bolder/quieter/polish) and type a freeform prompt, pressing Enter (or Add) to commit that element+prompt pair. When all elements are described, they hit Submit.
-3. You poll one event: node artifact.mjs live <ID>
-   - stdout is one JSON line: {type:'generate', id, action, items:[{element:{tagName,id,classes,textContent,outerHTML,computedStyles,parentContext,boundingRect,rect}, prompt}], comments?, strokes?, screenshot?}
+2. Start the watcher (stays online for the whole session):
+   node artifact.mjs live <ID> --watch
+   - Prints one JSON line per event on stdout (blocks until next event).
+   - Auto-replies `ack` on each `generate` so the host shows "agent is editing".
+3. The user opens https://coda0.com/a/<ID>, clicks Live (this arms the picker immediately). The user picks one or more elements; for each, they pick an action (bolder/quieter/polish) and type a freeform prompt, pressing Enter (or Add) to commit that element+prompt pair. When all elements are described, they hit Submit.
+4. Your watcher prints a generate event:
+   {type:'generate', id, action, items:[{element:{tagName,id,classes,textContent,outerHTML,computedStyles,parentContext,boundingRect,rect}, prompt}], comments?, strokes?, screenshot?}
    - `action` applies to every item; each item carries its own `element` (full context) and `prompt` (the user's freeform description for that element).
-4. Edit the artifact source to apply each item's requested change to its picked element (match by id → class → tag → outerHTML content). Do NOT inject variant wrappers — Live is one-shot edit-and-reload, not variant cycling.
-5. Publish: node artifact.mjs update <ID>   (use the artifact's recipe, or pass the new recipe)
-6. Ack: node artifact.mjs live <ID> --reply <eid> done --version <new-version>
-   - The browser receives `done`, reloads the frame, and shows the republished content. The Live session ends.
+5. Edit the artifact source to apply each item's requested change to its picked element (match by id → class → tag → outerHTML content). Do NOT inject variant wrappers — Live is one-shot edit-and-reload, not variant cycling.
+6. Publish: node artifact.mjs update <ID>   (use the artifact's recipe, or pass the new recipe)
+7. Ack: node artifact.mjs live <ID> --reply <eid> done --version <new-version>
+   - The browser receives `done`, reloads the frame, and shows the republished content.
+8. The watcher keeps polling for the next event (another generate, or `exit` when the browser closes the session). Stop it with Ctrl-C.
 ```
 
-There is no follow-up poll loop — the edit is complete once you reply `done`.
-If the user wants another change, they start a new Live session.
+If you can't keep the watcher running, the one-shot `node artifact.mjs live <ID>` still works — but you must be polling before the user hits Submit, because a `generate` event you miss stays in the LiveObject's SQLite queue (survives hibernation) but won't wake you.
 
 ## Harness note
 
