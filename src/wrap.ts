@@ -1118,6 +1118,7 @@ const LIVE_SCRIPT = `
   if(!cfgEl) return;
   var cfg=JSON.parse(cfgEl.textContent||'{}');
   var root=document.getElementById('oa-live-root');
+  var dock=document.getElementById('oa-live-dock');
   var chipsEl=document.getElementById('oa-live-chips');
   var submitEl=document.getElementById('oa-live-submit-wrap');
   var abar=document.getElementById('oa-live-action-bar');
@@ -1125,7 +1126,7 @@ const LIVE_SCRIPT = `
   var exitBtn=document.getElementById('oa-live-exit');
   var frame=document.getElementById('oa-frame');
   var liveToggle=document.querySelector('.oa-live-toggle');
-  if(!root||!chipsEl||!submitEl||!abar||!pickBtn||!exitBtn||!frame) return;
+  if(!root||!dock||!chipsEl||!submitEl||!abar||!pickBtn||!exitBtn||!frame) return;
 
   if(liveToggle){
     liveToggle.addEventListener('click', function(){
@@ -1165,7 +1166,11 @@ const LIVE_SCRIPT = `
   // to get page coordinates. Falls back to bottom-centered when no rect.
   function positionBar(){
     var rc=draft&&draft.rect;
-    if(!rc){ abar.style.left=''; abar.style.top=''; abar.style.bottom='4rem'; abar.style.transform='translateX(-50%)'; return; }
+    // Fallback (no picked element): sit just above the dock, never overlapping it.
+    // Measure the dock's actual height (chips may grow it) + 1rem gap.
+    var dh=dock.getBoundingClientRect().height;
+    var fallbackBottom=(1+dh/16+0.5)+'rem'; // 1rem (dock offset) + dock height + .5rem gap
+    if(!rc){ abar.style.left='50%'; abar.style.top=''; abar.style.bottom=fallbackBottom; abar.style.transform='translateX(-50%)'; return; }
     var fr=frame.getBoundingClientRect();
     var x=fr.left+rc.x+ (rc.width/2);
     var y=fr.top+rc.y+rc.height+8;
