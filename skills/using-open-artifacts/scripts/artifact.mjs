@@ -1501,7 +1501,7 @@ async function commandWhoami(flags) {
 //   node artifact.mjs live <id> --reply <eid> done --version <n>
 //                                                 # reply: ack + broadcast
 //
-// The agent loop: poll -> receive {type:'generate', action, items:[{element, prompt}], ...}
+// The agent loop: poll -> receive {type:'generate', items:[{element, prompt}], ...}
 // -> for each item, edit the artifact source to apply its prompt to its element
 // (match by id -> class -> tag -> outerHTML; no variant wrapper — Live is
 // one-shot edit-and-reload) -> `update` to republish -> `--reply <eid> done
@@ -1546,14 +1546,39 @@ async function commandLive(rest, flags) {
   const timeoutMs = Number(process.env.OPEN_ARTIFACTS_LIVE_TIMEOUT_MS);
   const timeout =
     Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 270_000;
+  // Inline fetch wrapper that does NOT process.exit on network error — watch
+  // mode must survive transient failures and retry. (`request()` below calls
+  // fail()/process.exit on fetch throw, which would kill the watcher.)
+  const headers = {
+    "content-type": "application/json",
+    authorization: `Bearer ${sk}`,
+  };
+  const fetchJson = async (method, url, body) => {
+    let response;
+    try {
+      response = await fetch(url, {
+        method,
+        headers,
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+    } catch (cause) {
+      throw new Error(`cannot reach ${url}: ${cause.message}`);
+    }
+    const text = await response.text();
+    let json = {};
+    try {
+      json = text ? JSON.parse(text) : {};
+    } catch {
+      json = { error: text.slice(0, 200) };
+    }
+    return { status: response.status, json };
+  };
   const pollOnce = async () => {
     const params = new URLSearchParams({ timeout: String(timeout) });
     if (typesRaw) params.set("types", typesRaw);
-    const { status: httpStatus, json } = await request(
+    const { status: httpStatus, json } = await fetchJson(
       "GET",
       `${base}/poll?${params}`,
-      undefined,
-      sk,
     );
     if (httpStatus !== 200) {
       throw new Error(
@@ -1563,11 +1588,10 @@ async function commandLive(rest, flags) {
     return json;
   };
   const reply = async (eid, type, version) => {
-    const { status: httpStatus, json } = await request(
+    const { status: httpStatus, json } = await fetchJson(
       "POST",
       `${base}/reply`,
       { id: eid, type, version },
-      sk,
     );
     if (httpStatus !== 200) {
       throw new Error(

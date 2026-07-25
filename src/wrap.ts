@@ -1129,7 +1129,7 @@ const LIVE_SCRIPT = `
   // with the full list. draft is the element currently awaiting a prompt.
   var items=[]; // [{element, prompt, rect}]
   var draft=null; // {element, rect} — picked, prompt not yet committed
-  var action='bolder'; // default action applied to all items (bolder/quieter/polish)
+  // (no preset action — each item carries its own freeform prompt)
   var ackTimer=null;
   // How long to wait for an agent ack before showing the stall hint.
   var ACK_TIMEOUT=120000; // 2 min — generous for an agent spinning up
@@ -1185,11 +1185,10 @@ const LIVE_SCRIPT = `
   }
   function buildComposeRow(){
     var r=el('div','oa-live-row');
-    var act=el('select','oa-live-action'); act.innerHTML='<option value="bolder">Bolder</option><option value="quieter">Quieter</option><option value="polish">Polish</option>'; act.value=action; act.onchange=function(){action=act.value;};
     var ff=el('input','oa-live-freeform'); ff.type='text'; ff.placeholder='describe the change; Enter to commit'; ff.setAttribute('aria-label','prompt for picked element');
     ff.onkeydown=function(e){ if(e.key==='Enter'){ e.preventDefault(); commitDraft(ff.value); } };
     var done=el('button','oa-live-add','Add'); done.type='button'; done.onclick=function(){ commitDraft(ff.value); };
-    r.appendChild(act); r.appendChild(ff); r.appendChild(done);
+    r.appendChild(ff); r.appendChild(done);
     // already-collected items, with a remove control each
     items.forEach(function(it, i){
       var chip=el('div','oa-live-chip');
@@ -1222,7 +1221,7 @@ const LIVE_SCRIPT = `
     if(!items.length){ return; }
     sessionId=genId();
     setState('GENERATING');
-    send({type:'generate', id:sessionId, action:action, items:items});
+    send({type:'generate', id:sessionId, items:items});
     // If no agent picks up within ACK_TIMEOUT, show a hint instead of
     // spinning forever — the user likely forgot to start the CLI watcher.
     clearTimeout(ackTimer);
