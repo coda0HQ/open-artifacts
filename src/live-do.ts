@@ -55,7 +55,6 @@ type PollWaiter = {
 const DEFAULT_POLL_TIMEOUT_MS = 270_000; // under undici's 300s header ceiling
 const LEASE_MS = 30_000; // a poll holds an event for 30s before re-offering it
 const GC_AGE_MS = 3600_000; // drop undelivered events after 1h
-const SCHEMA_KEY = "live:v1";
 
 export class LiveObject extends DurableObject<Record<string, unknown>> {
   // In-memory only; a missed wake after hibernation just re-polls.
