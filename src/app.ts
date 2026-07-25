@@ -94,7 +94,7 @@ export function createApp(
     await next();
   });
 
-  // Live variant-editing routes (WS upgrade + agent poll/reply). 404 when the
+  // Live edit routes (WS upgrade + agent poll/reply). 404 when the
   // deploy did not bind LIVE_DO; otherwise self-contained under /api/artifacts/:id/live*.
   app.route("/api", liveApi);
   app.route("/api", api);

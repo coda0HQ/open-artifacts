@@ -4,7 +4,7 @@ import type { AppContext } from "./api";
 import { storeFrom } from "./api";
 import type { LiveEvent, LiveObject } from "./live-do";
 
-// Live variant-editing routes. All 404 when the deploy did not bind a
+// Live edit routes. All 404 when the deploy did not bind a
 // LIVE_DO Durable Object namespace — the engine stays usable without it.
 //
 //   GET  /api/artifacts/:id/live        WebSocket upgrade (browser host chrome)

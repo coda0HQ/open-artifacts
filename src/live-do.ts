@@ -1,47 +1,36 @@
 import { DurableObject } from "cloudflare:workers";
 
-// LiveObject — the per-artifact coordination point for live variant editing.
+// LiveObject — the per-artifact coordination point for live editing.
 //
 // One LiveObject instance per artifact id (keyed by getByName(artifactId)). It
 // holds the WebSocket channel to the viewing browser (host chrome, outside the
 // sandboxed iframe) and the long-poll queue the authoring agent CLI drains.
 //
-// The three-party loop:
-//   Browser (host) ── ws.send(generate/accept/discard/exit) ──▶ LiveObject
+// The three-party loop (one-shot edit-and-reload):
+//   Browser (host) ── ws.send(generate/exit) ──▶ LiveObject
 //   Agent (CLI)    ── rpc.poll()  ──▶ drains pendingEvents (blocks)
-//   Agent          ◀── rpc.poll() returns one event
-//   Agent          ── rpc.reply(id, done/accept/discard, payload) ──▶ LiveObject
-//   LiveObject     ── ws.send(done/accept/discard) ──▶ Browser (broadcasts)
+//   Agent          ◀── rpc.poll() returns one event (generate)
+//   Agent          ── rpc.reply(id, done) ──▶ LiveObject
+//   LiveObject     ── ws.send(done) ──▶ Browser (broadcasts; host reloads frame)
 //
 // Minimal subset (no carbonize/journal/scaffold): in-memory state is fine. On
 // hibernation broadcast() uses ctx.getWebSockets() (runtime-tracked, survives);
-// the
-// pendingEvents queue and poll waiters reset, which is acceptable — the agent
-// re-polls and the browser re-sends if no ack arrives. Critical accept/discard
-// are idempotent on the agent side (re-update is a no-op once applied).
+// the pendingEvents queue and poll waiters reset, which is acceptable — the
+// agent re-polls and the browser re-sends if no ack arrives.
 //
 // Hibernatable WebSockets: acceptWebSocket keeps the DO cheap when idle; a
 // message wakes it. webSocketMessage/webSocketClose are the hibernation handlers.
 
 export type LiveEvent = {
-  type:
-    | "generate"
-    | "accept"
-    | "discard"
-    | "exit"
-    | "done"
-    | "complete"
-    | "discarded"
-    | "error";
+  type: "generate" | "exit" | "done" | "error";
   id: string;
   [key: string]: unknown;
 };
 
-// Priority: terminal user actions first (so a late accept isn't stuck behind a
-// generate), then generate, then everything else. Mirrors impeccable-live's
-// poll-lanes.mjs with a reduced set.
+// Priority: terminal user actions first (a late exit shouldn't sit behind a
+// generate), then generate, then everything else.
 function eventPriority(type: LiveEvent["type"]): number {
-  if (type === "accept" || type === "discard" || type === "exit") return 0;
+  if (type === "exit") return 0;
   if (type === "generate") return 1;
   return 2;
 }
@@ -135,7 +124,7 @@ export class LiveObject extends DurableObject {
     });
   }
 
-  // Agent replies to a generate/accept/discard: broadcast to all subscribed
+  // Agent replies to a generate (with `done`): broadcast to all subscribed
   // browsers and drop the original event from the queue.
   async rpcReply(
     id: string,

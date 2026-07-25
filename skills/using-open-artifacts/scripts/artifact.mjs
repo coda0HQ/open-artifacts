@@ -1493,7 +1493,7 @@ async function commandWhoami(flags) {
   console.log(login);
 }
 
-// Live variant editing (SaaS instance with LIVE_DO bound).
+// Live editing (SaaS instance with LIVE_DO bound).
 //
 // Two modes, both harness-agnostic (one JSON line on stdout, then exit):
 //
@@ -1501,12 +1501,11 @@ async function commandWhoami(flags) {
 //   node artifact.mjs live <id> --reply <eid> done --version <n>
 //                                                 # reply: ack + broadcast
 //
-// The agent loop: poll -> receive {type:'generate', element, action, count, ...}
-// -> edit the artifact source to add a display:contents variant wrapper with
-// N variants -> `update` to republish -> `--reply <eid> done --version <n>`
-// -> the Worker broadcasts 'done' to the browser, which enters Cycling.
-// On 'accept': update to keep only the chosen variant (drop the wrapper), reply
-// done. On 'discard': update to restore the original, reply done.
+// The agent loop: poll -> receive {type:'generate', element, action, freeform, ...}
+// -> edit the artifact source to apply the requested change to the picked
+// element (no variant wrapper — Live is one-shot edit-and-reload) ->
+// `update` to republish -> `--reply <eid> done --version <n>` -> the Worker
+// broadcasts 'done' to the browser, which reloads the frame. Session ends.
 async function commandLive(rest, flags) {
   const config = loadConfig(flags);
   const id = rest[0];
@@ -1587,7 +1586,7 @@ commands:
                        credentials.json (requires a SaaS instance)
   logout               remove the stored API key from credentials.json
   whoami               print the authenticated SaaS user for the current API key
-  live <id>            live variant editing: poll one event (stdout JSON, exit),
+  live <id>            live editing: poll one event (stdout JSON, exit),
                        or --reply <eid> <status> --version <n> to ack
 
 options:

@@ -487,7 +487,7 @@ function headerHtml(
       ? versionPickerHtml(versions, currentVersion, url)
       : "";
   const share = canManage ? visibilityPickerHtml(visibility) : "";
-  // The Live toggle opens the variant-editing bar (host chrome, outside the
+  // The Live toggle opens the live-edit bar (host chrome, outside the
   // sandbox). Only when the deploy bound a LIVE_DO namespace; a self-hoster
   // without it never sees the button.
   const live = liveEnabled
@@ -656,12 +656,13 @@ const LAYOUT_SCRIPT = `
 })();
 `;
 
-// Live variant-editing chrome styles. Mirrors the comments-toggle language
+// Live edit chrome styles. Mirrors the comments-toggle language
 // (.oa-cm-toggle: 28px square, surface bg, border, focus ring, hover lift)
 // so the Live button reads as a sibling of the comments toggle in the header.
 // The global bar is a fixed bottom toolbar (Figma/Linear style); the action
-// bar is a centered pill that morphs Configure -> Generating -> Cycling ->
-// Confirmed. Quiet chrome, single --accent, both themes, no decorative motion.
+// bar is a centered pill that floats next to the picked element and morphs
+// Pick -> Configure -> Generating -> Confirmed. Quiet chrome, single
+// --accent, both themes, no decorative motion.
 const LIVE_CSS = `
 .oa-live-toggle{position:relative;width:28px;height:28px;border-radius:6px;border:1px solid var(--oa-border);background:var(--oa-surface);color:var(--oa-fg);font-size:13px;line-height:1;cursor:pointer;opacity:.8;transition:opacity .15s,border-color .15s,background .15s;flex-shrink:0}
 .oa-live-toggle::before{content:"";position:absolute;inset:-6px}
