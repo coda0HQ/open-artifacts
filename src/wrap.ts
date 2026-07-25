@@ -673,7 +673,8 @@ const LIVE_CSS = `
 @media (hover:hover) and (pointer:fine){.oa-live-toggle:hover{opacity:1;border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 25%)}}
 #oa-live-root[hidden]{display:none}
 #oa-live-root{position:fixed;inset:0;z-index:2147483645;pointer-events:none;font-family:var(--oa-font);font-size:.8rem}
-#oa-live-chips{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(2.75rem + .4rem);width:min(28rem,92vw);max-height:40vh;overflow-y:auto;display:flex;flex-direction:column;gap:.4rem;pointer-events:auto;z-index:2147483645}
+#oa-live-dock{position:fixed;left:50%;transform:translateX(-50%);bottom:1rem;width:min(28rem,92vw);max-height:calc(100dvh - 6rem);display:flex;flex-direction:column;gap:.4rem;padding:.45rem;border-radius:12px;border:1px solid var(--oa-border);background:color-mix(in oklab,var(--oa-bg),transparent 6%);backdrop-filter:blur(10px);box-shadow:0 4px 20px color-mix(in oklab,var(--oa-fg),transparent 88%);pointer-events:auto;z-index:2147483645}
+#oa-live-chips{display:flex;flex-direction:column;gap:.4rem;min-height:0;overflow-y:auto}
 #oa-live-chips:empty{display:none}
 #oa-live-chips .oa-live-chip{position:relative;display:block;padding:.45rem .55rem;border-radius:8px;background:var(--oa-surface);border:1px solid var(--oa-border);font-size:.8rem}
 #oa-live-chips .oa-live-chip-tag{display:block;color:var(--oa-accent);font-weight:600;font-size:.72rem;margin-bottom:.15rem}
@@ -681,7 +682,7 @@ const LIVE_CSS = `
 #oa-live-chips .oa-live-chip-rm{position:absolute;width:20px;height:20px;padding:0;border:0;border-radius:4px;background:transparent;color:var(--oa-muted);cursor:pointer;font-size:16px;line-height:1;top:.35rem;right:.35rem}
 #oa-live-chips .oa-live-chip-rm:hover{color:var(--oa-fg)}
 #oa-live-chips .oa-live-chip-rm:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
-#oa-live-controls{position:fixed;left:50%;transform:translateX(-50%);bottom:1rem;display:flex;align-items:center;gap:.4rem;padding:.35rem .45rem;border-radius:12px;border:1px solid var(--oa-border);background:color-mix(in oklab,var(--oa-bg),transparent 6%);backdrop-filter:blur(10px);box-shadow:0 4px 20px color-mix(in oklab,var(--oa-fg),transparent 88%);pointer-events:auto;z-index:2147483645}
+#oa-live-controls{display:flex;align-items:center;gap:.4rem;flex-shrink:0}
 #oa-live-controls button{position:relative;display:inline-flex;align-items:center;gap:.35rem;height:30px;padding:0 .55rem;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--oa-fg);font:inherit;font-weight:500;line-height:1;cursor:pointer;opacity:.85;transition:opacity .15s,background .15s,border-color .15s}
 #oa-live-controls button:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 #oa-live-controls button:active{transform:translateY(1px)}
@@ -1090,11 +1091,13 @@ function stampNonceOnUserScripts(html: string, nonce: string): string {
 // no variant cycling.
 function liveChromeHtml(wsUrl: string, artifactId: string): string {
   return `<div id="oa-live-root" hidden>
-  <div id="oa-live-chips" role="list" aria-label="Collected changes"></div>
-  <div id="oa-live-controls" role="toolbar" aria-label="Live editor">
-    <button type="button" id="oa-live-pick-toggle" data-active="false" aria-pressed="false" title="Pick an element"><span class="oa-live-icon" aria-hidden="true">${LIVE_SVG}</span><span class="oa-live-label">Pick</span></button>
-    <button type="button" id="oa-live-exit" title="Exit live editor"><span class="oa-live-icon" aria-hidden="true">${CLOSE_SVG}</span><span class="oa-live-label">Exit</span></button>
-    <div id="oa-live-submit-wrap"></div>
+  <div id="oa-live-dock">
+    <div id="oa-live-chips" role="list" aria-label="Collected changes"></div>
+    <div id="oa-live-controls" role="toolbar" aria-label="Live editor">
+      <button type="button" id="oa-live-pick-toggle" data-active="false" aria-pressed="false" title="Pick an element"><span class="oa-live-icon" aria-hidden="true">${LIVE_SVG}</span><span class="oa-live-label">Pick</span></button>
+      <button type="button" id="oa-live-exit" title="Exit live editor"><span class="oa-live-icon" aria-hidden="true">${CLOSE_SVG}</span><span class="oa-live-label">Exit</span></button>
+      <div id="oa-live-submit-wrap"></div>
+    </div>
   </div>
   <div id="oa-live-action-bar" role="dialog" aria-label="Live actions" hidden></div>
   <script type="application/json" id="oa-live-config">${jsonForInlineScript({ wsUrl, artifactId })}</script>
