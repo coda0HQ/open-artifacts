@@ -673,26 +673,24 @@ const LIVE_CSS = `
 @media (hover:hover) and (pointer:fine){.oa-live-toggle:hover{opacity:1;border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 25%)}}
 #oa-live-root[hidden]{display:none}
 #oa-live-root{position:fixed;inset:0;z-index:2147483645;pointer-events:none;font-family:var(--oa-font);font-size:.8rem}
-#oa-live-sidebar{position:fixed;top:var(--oa-header-h,2.5rem);right:0;bottom:0;width:min(20rem,92vw);display:flex;flex-direction:column;gap:.5rem;padding:.6rem;overflow-y:auto;background:color-mix(in oklab,var(--oa-bg),transparent 4%);backdrop-filter:blur(10px);border-left:1px solid var(--oa-border);box-shadow:-4px 0 24px color-mix(in oklab,var(--oa-fg),transparent 90%);pointer-events:auto;z-index:2147483645}
-#oa-live-controls{display:flex;gap:.4rem;flex-shrink:0}
-#oa-live-controls button{position:relative;display:inline-flex;align-items:center;gap:.35rem;height:30px;padding:0 .55rem;border-radius:8px;border:1px solid var(--oa-border);background:var(--oa-surface);color:var(--oa-fg);font:inherit;font-weight:500;line-height:1;cursor:pointer;opacity:.85;transition:opacity .15s,background .15s,border-color .15s}
+#oa-live-chips{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(2.75rem + .4rem);width:min(28rem,92vw);max-height:40vh;overflow-y:auto;display:flex;flex-direction:column;gap:.4rem;pointer-events:auto;z-index:2147483645}
+#oa-live-chips:empty{display:none}
+#oa-live-chips .oa-live-chip{position:relative;display:block;padding:.45rem .55rem;border-radius:8px;background:var(--oa-surface);border:1px solid var(--oa-border);font-size:.8rem}
+#oa-live-chips .oa-live-chip-tag{display:block;color:var(--oa-accent);font-weight:600;font-size:.72rem;margin-bottom:.15rem}
+#oa-live-chips .oa-live-chip-txt{display:block;color:var(--oa-fg);white-space:normal;word-break:break-word;line-height:1.4;padding-right:1.2rem}
+#oa-live-chips .oa-live-chip-rm{position:absolute;width:20px;height:20px;padding:0;border:0;border-radius:4px;background:transparent;color:var(--oa-muted);cursor:pointer;font-size:16px;line-height:1;top:.35rem;right:.35rem}
+#oa-live-chips .oa-live-chip-rm:hover{color:var(--oa-fg)}
+#oa-live-chips .oa-live-chip-rm:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+#oa-live-controls{position:fixed;left:50%;transform:translateX(-50%);bottom:1rem;display:flex;align-items:center;gap:.4rem;padding:.35rem .45rem;border-radius:12px;border:1px solid var(--oa-border);background:color-mix(in oklab,var(--oa-bg),transparent 6%);backdrop-filter:blur(10px);box-shadow:0 4px 20px color-mix(in oklab,var(--oa-fg),transparent 88%);pointer-events:auto;z-index:2147483645}
+#oa-live-controls button{position:relative;display:inline-flex;align-items:center;gap:.35rem;height:30px;padding:0 .55rem;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--oa-fg);font:inherit;font-weight:500;line-height:1;cursor:pointer;opacity:.85;transition:opacity .15s,background .15s,border-color .15s}
 #oa-live-controls button:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 #oa-live-controls button:active{transform:translateY(1px)}
 #oa-live-controls button .oa-live-icon{display:inline-flex;align-items:center}
 #oa-live-controls button .oa-live-icon svg{width:14px;height:14px;display:block}
-#oa-live-controls button[aria-pressed="true"]{border-color:var(--oa-accent);color:var(--oa-accent);opacity:1}
-@media (hover:hover) and (pointer:fine){#oa-live-controls button:hover{opacity:1}}
-#oa-live-chips{display:flex;flex-direction:column;gap:.4rem;flex:1;min-height:0;overflow-y:auto}
-#oa-live-chips:empty{display:none}
-#oa-live-chips .oa-live-chip{display:block;padding:.45rem .55rem;border-radius:8px;background:var(--oa-surface);border:1px solid var(--oa-border);font-size:.8rem}
-#oa-live-chips .oa-live-chip-tag{display:block;color:var(--oa-accent);font-weight:600;font-size:.72rem;margin-bottom:.15rem}
-#oa-live-chips .oa-live-chip-txt{display:block;color:var(--oa-fg);white-space:normal;word-break:break-word;line-height:1.4;padding-right:1.2rem}
-#oa-live-chips .oa-live-chip-rm{position:absolute;width:20px;height:20px;padding:0;border:0;border-radius:4px;background:transparent;color:var(--oa-muted);cursor:pointer;font-size:16px;line-height:1;top:.35rem;right:.35rem}
-#oa-live-chips .oa-live-chip{position:relative}
-#oa-live-chips .oa-live-chip-rm:hover{color:var(--oa-fg)}
-#oa-live-chips .oa-live-chip-rm:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
-#oa-live-submit-wrap{flex-shrink:0}
-#oa-live-submit-wrap .oa-live-submit{width:100%;height:34px;border:0;border-radius:8px;background:var(--oa-accent);color:var(--oa-accent-on);font:inherit;font-weight:600;font-size:.85rem;cursor:pointer}
+#oa-live-controls button[aria-pressed="true"]{background:var(--oa-surface);border-color:var(--oa-border);color:var(--oa-accent);opacity:1}
+@media (hover:hover) and (pointer:fine){#oa-live-controls button:hover{opacity:1;background:var(--oa-surface)}}
+#oa-live-submit-wrap{margin-left:auto}
+#oa-live-submit-wrap .oa-live-submit{height:30px;padding:0 .8rem;border:0;border-radius:8px;background:var(--oa-accent);color:var(--oa-accent-on);font:inherit;font-weight:600;font-size:.85rem;cursor:pointer}
 #oa-live-submit-wrap .oa-live-submit:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 #oa-live-submit-wrap .oa-live-submit:active{transform:translateY(1px)}
 #oa-live-action-bar{position:fixed;left:50%;transform:translateX(-50%);bottom:4rem;display:flex;pointer-events:auto;z-index:2147483645}
@@ -1092,14 +1090,12 @@ function stampNonceOnUserScripts(html: string, nonce: string): string {
 // no variant cycling.
 function liveChromeHtml(wsUrl: string, artifactId: string): string {
   return `<div id="oa-live-root" hidden>
-  <aside id="oa-live-sidebar" aria-label="Live editor">
-    <div id="oa-live-controls" role="toolbar" aria-label="Live controls">
-      <button type="button" id="oa-live-pick-toggle" data-active="false" aria-pressed="false" title="Pick an element"><span class="oa-live-icon" aria-hidden="true">${LIVE_SVG}</span><span class="oa-live-label">Pick</span></button>
-      <button type="button" id="oa-live-exit" title="Exit live editor"><span class="oa-live-icon" aria-hidden="true">${CLOSE_SVG}</span><span class="oa-live-label">Exit</span></button>
-    </div>
-    <div id="oa-live-chips" role="list" aria-label="Collected changes"></div>
+  <div id="oa-live-chips" role="list" aria-label="Collected changes"></div>
+  <div id="oa-live-controls" role="toolbar" aria-label="Live editor">
+    <button type="button" id="oa-live-pick-toggle" data-active="false" aria-pressed="false" title="Pick an element"><span class="oa-live-icon" aria-hidden="true">${LIVE_SVG}</span><span class="oa-live-label">Pick</span></button>
+    <button type="button" id="oa-live-exit" title="Exit live editor"><span class="oa-live-icon" aria-hidden="true">${CLOSE_SVG}</span><span class="oa-live-label">Exit</span></button>
     <div id="oa-live-submit-wrap"></div>
-  </aside>
+  </div>
   <div id="oa-live-action-bar" role="dialog" aria-label="Live actions" hidden></div>
   <script type="application/json" id="oa-live-config">${jsonForInlineScript({ wsUrl, artifactId })}</script>
 </div>`;
