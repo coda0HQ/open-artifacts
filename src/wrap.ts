@@ -656,6 +656,55 @@ const LAYOUT_SCRIPT = `
 })();
 `;
 
+// Live variant-editing chrome styles. Mirrors the comments-toggle language
+// (.oa-cm-toggle: 28px square, surface bg, border, focus ring, hover lift)
+// so the Live button reads as a sibling of the comments toggle in the header.
+// The global bar is a fixed bottom toolbar (Figma/Linear style); the action
+// bar is a centered pill that morphs Configure -> Generating -> Cycling ->
+// Confirmed. Quiet chrome, single --accent, both themes, no decorative motion.
+const LIVE_CSS = `
+.oa-live-toggle{position:relative;width:28px;height:28px;border-radius:6px;border:1px solid var(--oa-border);background:var(--oa-surface);color:var(--oa-fg);font-size:13px;line-height:1;cursor:pointer;opacity:.8;transition:opacity .15s,border-color .15s,background .15s;flex-shrink:0}
+.oa-live-toggle::before{content:"";position:absolute;inset:-6px}
+.oa-live-toggle:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+.oa-live-toggle:active{transform:translateY(1px)}
+.oa-live-toggle svg{display:block;width:15px;height:15px;margin:auto}
+.oa-live-toggle[aria-expanded="true"]{opacity:1;border-color:color-mix(in oklab,var(--oa-border),var(--oa-accent) 40%);color:var(--oa-accent)}
+@media (hover:hover) and (pointer:fine){.oa-live-toggle:hover{opacity:1;border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 25%)}}
+#oa-live-root[hidden]{display:none}
+#oa-live-root{position:fixed;inset:0;z-index:2147483645;pointer-events:none;font-family:var(--oa-font);font-size:.8rem}
+#oa-live-global-bar{position:fixed;left:50%;transform:translateX(-50%);bottom:1rem;display:flex;align-items:center;gap:.4rem;padding:.35rem .45rem;border-radius:12px;border:1px solid var(--oa-border);background:color-mix(in oklab,var(--oa-bg),transparent 6%);backdrop-filter:blur(10px);box-shadow:0 4px 20px color-mix(in oklab,var(--oa-fg),transparent 88%);pointer-events:auto}
+#oa-live-global-bar button{position:relative;display:inline-flex;align-items:center;gap:.35rem;height:30px;padding:0 .55rem;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--oa-fg);font:inherit;font-weight:500;line-height:1;cursor:pointer;opacity:.85;transition:opacity .15s,background .15s,border-color .15s}
+#oa-live-global-bar button:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+#oa-live-global-bar button:active{transform:translateY(1px)}
+#oa-live-global-bar button .oa-live-icon{display:inline-flex;align-items:center}
+#oa-live-global-bar button .oa-live-icon svg{width:14px;height:14px;display:block}
+#oa-live-global-bar button[aria-pressed="true"]{background:var(--oa-surface);border-color:var(--oa-border);color:var(--oa-accent);opacity:1}
+@media (hover:hover) and (pointer:fine){#oa-live-global-bar button:hover{opacity:1;background:var(--oa-surface)}}
+#oa-live-action-bar{position:fixed;left:50%;transform:translateX(-50%);bottom:4rem;display:flex;pointer-events:auto}
+#oa-live-action-bar[hidden]{display:none}
+#oa-live-action-bar .oa-live-row{display:flex;align-items:center;gap:.4rem;padding:.35rem .45rem;border-radius:12px;border:1px solid var(--oa-border);background:color-mix(in oklab,var(--oa-bg),transparent 6%);backdrop-filter:blur(10px);box-shadow:0 4px 20px color-mix(in oklab,var(--oa-fg),transparent 88%)}
+#oa-live-action-bar .oa-live-row>select,#oa-live-action-bar .oa-live-row>input,#oa-live-action-bar .oa-live-row>button{height:30px;font:inherit;font-size:.8rem;color:var(--oa-fg);background:var(--oa-surface);border:1px solid var(--oa-border);border-radius:8px;padding:0 .55rem}
+#oa-live-action-bar .oa-live-row>input{min-width:12rem}
+#oa-live-action-bar .oa-live-row>select:focus-visible,#oa-live-action-bar .oa-live-row>input:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+#oa-live-action-bar .oa-live-go{background:var(--oa-accent);border-color:transparent;color:var(--oa-accent-on);font-weight:600;cursor:pointer}
+#oa-live-action-bar .oa-live-go:focus-visible{box-shadow:var(--oa-focus-ring)}
+#oa-live-action-bar .oa-live-go:active{transform:translateY(1px)}
+#oa-live-action-bar .oa-live-spin{display:inline-block;width:12px;height:12px;border:2px solid var(--oa-muted);border-top-color:transparent;border-radius:50%;animation:oa-live-spin .7s linear infinite;vertical-align:-2px}
+@keyframes oa-live-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){#oa-live-action-bar .oa-live-spin{animation:none}}
+#oa-live-action-bar .oa-live-dots{display:inline-flex;align-items:center;gap:.15rem}
+#oa-live-action-bar .oa-live-dot{width:22px;height:22px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--oa-muted);cursor:pointer;font-size:11px;line-height:1}
+#oa-live-action-bar .oa-live-dot.active{color:var(--oa-accent)}
+#oa-live-action-bar .oa-live-dot:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+#oa-live-action-bar .oa-live-counter{font-variant-numeric:tabular-nums;color:var(--oa-muted);font-size:.75rem;padding:0 .2rem}
+#oa-live-action-bar .oa-live-prev,#oa-live-action-bar .oa-live-next{width:28px;height:30px;padding:0;font-size:14px;background:var(--oa-surface);border:1px solid var(--oa-border);color:var(--oa-fg);cursor:pointer;border-radius:8px}
+#oa-live-action-bar .oa-live-prev:focus-visible,#oa-live-action-bar .oa-live-next:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+#oa-live-action-bar .oa-live-accept{background:var(--oa-accent);border-color:transparent;color:var(--oa-accent-on);font-weight:600;cursor:pointer}
+#oa-live-action-bar .oa-live-discard{background:var(--oa-surface);border:1px solid var(--oa-border);color:var(--oa-fg);cursor:pointer}
+#oa-live-action-bar .oa-live-accept:focus-visible,#oa-live-action-bar .oa-live-discard:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+#oa-live-action-bar .oa-live-accept:active,#oa-live-action-bar .oa-live-discard:active{transform:translateY(1px)}
+`;
+
 // Positions the embedded artifact frame below the sticky service header
 // rather than covering it — the header's actual rendered height is measured
 // at runtime into --oa-header-h (LAYOUT_SCRIPT); the CSS default (2.5rem)
@@ -1208,7 +1257,7 @@ export function hostShell(options: HostShellOptions): string {
 <meta name="twitter:title" content="${escapeHtml(title)}">
 <meta name="twitter:description" content="${escapeHtml(ogDescription)}">
 <meta name="twitter:image" content="${escapeHtml(ogImage)}">
-<style>${RESET_CSS}${COMMENTS_CSS}${HOST_FRAME_CSS}</style>
+<style>${RESET_CSS}${COMMENTS_CSS}${liveEnabled ? LIVE_CSS : ""}${HOST_FRAME_CSS}</style>
 </head>
 <body>
 ${headerHtml(favicon, title, brand, branded, brandUrl, versions, currentVersion, url, artifactId, openCommentsCount(commentsList), canManage, visibility, liveEnabled)}
