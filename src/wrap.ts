@@ -1088,7 +1088,7 @@ function liveChromeHtml(wsUrl: string, artifactId: string): string {
     <button type="button" id="oa-live-exit" title="Exit live editor"><span class="oa-live-icon" aria-hidden="true">${CLOSE_SVG}</span><span class="oa-live-label">Exit</span></button>
   </div>
   <div id="oa-live-action-bar" role="dialog" aria-label="Live actions" hidden></div>
-  <script type="application/json" id="oa-live-config">${escapeHtml(JSON.stringify({ wsUrl, artifactId }))}</script>
+  <script type="application/json" id="oa-live-config">${jsonForInlineScript({ wsUrl, artifactId })}</script>
 </div>`;
 }
 
