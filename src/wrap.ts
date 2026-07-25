@@ -1195,7 +1195,7 @@ const LIVE_SCRIPT = `
     if(!e.data||typeof e.data.type!=='string') return;
     if(e.source!==frame.contentWindow) return;
     var d=e.data;
-    if(d.type==='oa:element:picked'){ pickedCtx=d.element; pickRect=d.rect||null; setState('CONFIGURING'); }
+    if(d.type==='oa:element:picked'){ pickedCtx=d.element; pickRect=(d.element&&d.element.rect)||d.rect||null; setState('CONFIGURING'); }
   });
 
   // --- global bar ---
