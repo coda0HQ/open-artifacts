@@ -713,11 +713,13 @@ const LIVE_CSS = `
 #oa-live-action-bar .oa-live-add:hover{background:color-mix(in oklab,var(--oa-accent),var(--oa-fg) 8%)}
 #oa-live-action-bar .oa-live-add:focus-visible{box-shadow:var(--oa-focus-ring)}
 #oa-live-action-bar .oa-live-add:active{transform:translateY(1px)}
-#oa-live-action-bar .oa-live-hint{color:var(--oa-muted);font-size:.8rem;padding:0 .35rem}
-#oa-live-action-bar .oa-live-stall{color:var(--oa-danger);font-size:.8rem;padding:0 .35rem;display:flex;align-items:center;gap:.35rem}
-#oa-live-action-bar .oa-live-spin{display:inline-block;width:12px;height:12px;border:2px solid color-mix(in oklab,var(--oa-fg),transparent 70%);border-top-color:var(--oa-accent);border-radius:50%;animation:oa-live-spin .7s linear infinite;vertical-align:-2px}
+#oa-live-status{color:var(--oa-muted);font-size:.78rem;line-height:1.4;padding:0 .15rem .5rem;display:flex;align-items:center;gap:.35rem;min-height:1.2rem}
+#oa-live-status[hidden]{display:none}
+#oa-live-status .oa-live-stall{color:var(--oa-danger)}
+#oa-live-status .oa-live-spin{display:inline-block;width:11px;height:11px;border:2px solid color-mix(in oklab,var(--oa-fg),transparent 70%);border-top-color:var(--oa-accent);border-radius:50%;animation:oa-live-spin .7s linear infinite;vertical-align:-1px;flex-shrink:0}
 @keyframes oa-live-spin{to{transform:rotate(360deg)}}
-@media (prefers-reduced-motion:reduce){#oa-live-action-bar .oa-live-spin{animation:none}}
+@media (prefers-reduced-motion:reduce){#oa-live-status .oa-live-spin{animation:none}}
+#oa-live-action-bar .oa-live-spin{display:inline-block;width:12px;height:12px;border:2px solid color-mix(in oklab,var(--oa-fg),transparent 70%);border-top-color:var(--oa-accent);border-radius:50%;animation:oa-live-spin .7s linear infinite;vertical-align:-2px;flex-shrink:0}
 `;
 
 // Positions the embedded artifact frame below the sticky service header
@@ -1102,6 +1104,7 @@ function stampNonceOnUserScripts(html: string, nonce: string): string {
 function liveChromeHtml(wsUrl: string, artifactId: string): string {
   return `<div id="oa-live-root" hidden>
   <div id="oa-live-dock">
+    <div id="oa-live-status" role="status" aria-live="polite"></div>
     <div id="oa-live-controls" role="toolbar" aria-label="Live editor">
       <button type="button" id="oa-live-pick-toggle" data-active="false" aria-pressed="false" title="Pick an element"><span class="oa-live-icon" aria-hidden="true">${LIVE_SVG}</span><span class="oa-live-label">Pick</span></button>
       <button type="button" id="oa-live-exit" title="Exit live editor"><span class="oa-live-icon" aria-hidden="true">${CLOSE_SVG}</span><span class="oa-live-label">Exit</span></button>
@@ -1121,6 +1124,7 @@ const LIVE_SCRIPT = `
   var cfg=JSON.parse(cfgEl.textContent||'{}');
   var root=document.getElementById('oa-live-root');
   var dock=document.getElementById('oa-live-dock');
+  var statusEl=document.getElementById('oa-live-status');
   var chipsEl=document.getElementById('oa-live-chips');
   var submitEl=document.getElementById('oa-live-submit-wrap');
   var abar=document.getElementById('oa-live-action-bar');
@@ -1128,7 +1132,7 @@ const LIVE_SCRIPT = `
   var exitBtn=document.getElementById('oa-live-exit');
   var frame=document.getElementById('oa-frame');
   var liveToggle=document.querySelector('.oa-live-toggle');
-  if(!root||!dock||!chipsEl||!submitEl||!abar||!pickBtn||!exitBtn||!frame) return;
+  if(!root||!dock||!statusEl||!chipsEl||!submitEl||!abar||!pickBtn||!exitBtn||!frame) return;
 
   if(liveToggle){
     liveToggle.addEventListener('click', function(){
@@ -1165,14 +1169,12 @@ const LIVE_SCRIPT = `
 
   // Float the action bar near the drafted element. draft.rect is the element's
   // rect inside the frame (CSS px); add the iframe's offset on the host page
-  // to get page coordinates. Falls back to bottom-centered when no rect.
+  // to get page coordinates. Only called in COMPOSE state (which always has a
+  // draft); if no rect, hide the bar — the status row in the dock carries the
+  // hint, so nothing overlaps.
   function positionBar(){
     var rc=draft&&draft.rect;
-    // Fallback (no picked element): sit just above the dock, never overlapping it.
-    // Measure the dock's actual height (chips may grow it) + 1rem gap.
-    var dh=dock.getBoundingClientRect().height;
-    var fallbackBottom=(1+dh/16+0.5)+'rem'; // 1rem (dock offset) + dock height + .5rem gap
-    if(!rc){ abar.style.left='50%'; abar.style.top=''; abar.style.bottom=fallbackBottom; abar.style.transform='translateX(-50%)'; return; }
+    if(!rc){ abar.hidden=true; abar.style.left=''; abar.style.top=''; abar.style.bottom=''; abar.style.transform=''; return; }
     var fr=frame.getBoundingClientRect();
     var x=fr.left+rc.x+ (rc.width/2);
     var y=fr.top+rc.y+rc.height+8;
@@ -1190,18 +1192,26 @@ const LIVE_SCRIPT = `
   function el(tag, cls, html){ var d=document.createElement(tag); if(cls)d.className=cls; if(html!=null)d.innerHTML=html; return d; }
   function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   function renderBar(){
-    // Action bar: current draft row only (Pick hint / prompt input / status).
+    // Status row lives INSIDE the dock — it can never overlap the controls.
+    var status='';
+    if(state==='PICKING') status= items.length? 'Pick another element, or Submit below' : 'Pick an element in the page';
+    else if(state==='GENERATING') status='<span class="oa-live-spin"></span> Sent — waiting for agent…';
+    else if(state==='WORKING') status='<span class="oa-live-spin"></span> Agent is editing…';
+    else if(state==='STALLED') status='<span class="oa-live-stall">No agent picked up — is your CLI watcher running?</span>';
+    else if(state==='CONFIRMED') status='✓ Applied';
+    statusEl.innerHTML=status||'';
+    statusEl.hidden=!status;
+    // Floating action bar: ONLY for COMPOSE (prompt input + Add), pinned to
+    // the picked element. All other states are text in the dock status row.
     abar.innerHTML='';
-    abar.hidden=false;
-    if(state==='PICKING') abar.appendChild(buildPickingRow());
-    else if(state==='COMPOSE') abar.appendChild(buildComposeRow());
-    else if(state==='GENERATING') abar.appendChild(el('div','oa-live-row','<span class="oa-live-spin"></span> Sent — waiting for agent…'));
-    else if(state==='WORKING') abar.appendChild(el('div','oa-live-row','<span class="oa-live-spin"></span> Agent is editing…'));
-    else if(state==='STALLED') abar.appendChild(el('div','oa-live-row','<span class="oa-live-stall">No agent picked up. Is your CLI watcher running?</span>'));
-    else if(state==='CONFIRMED') abar.appendChild(el('div','oa-live-row','✓ Applied'));
-    else abar.hidden=true;
-    positionBar();
-    // Global bar: collected chips + Submit live here (alongside Pick/Exit).
+    if(state==='COMPOSE'){
+      abar.hidden=false;
+      abar.appendChild(buildComposeRow());
+      positionBar();
+    }else{
+      abar.hidden=true;
+      abar.style.left=''; abar.style.top=''; abar.style.bottom=''; abar.style.transform='';
+    }
     renderChips();
   }
   function renderChips(){
@@ -1219,11 +1229,6 @@ const LIVE_SCRIPT = `
     });
     var sub=el('button','oa-live-submit','Submit ('+items.length+')'); sub.type='button'; sub.onclick=handleSubmit;
     submitEl.appendChild(sub);
-  }
-  function buildPickingRow(){
-    var r=el('div','oa-live-row');
-    r.appendChild(el('span','oa-live-hint', items.length? 'Pick another element, or Submit below' : 'Pick an element in the page'));
-    return r;
   }
   function buildComposeRow(){
     var r=el('div','oa-live-row');
