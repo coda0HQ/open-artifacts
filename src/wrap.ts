@@ -681,6 +681,13 @@ const LIVE_CSS = `
 #oa-live-global-bar button .oa-live-icon svg{width:14px;height:14px;display:block}
 #oa-live-global-bar button[aria-pressed="true"]{background:var(--oa-surface);border-color:var(--oa-border);color:var(--oa-accent);opacity:1}
 @media (hover:hover) and (pointer:fine){#oa-live-global-bar button:hover{opacity:1;background:var(--oa-surface)}}
+#oa-live-global-bar .oa-live-chip{display:inline-flex;align-items:center;gap:.3rem;height:30px;padding:0 .4rem;border-radius:8px;background:var(--oa-surface);border:1px solid var(--oa-border);font-size:.75rem;font-weight:500;opacity:1}
+#oa-live-global-bar .oa-live-chip-tag{color:var(--oa-accent);font-weight:600;flex-shrink:0}
+#oa-live-global-bar .oa-live-chip-txt{color:var(--oa-fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:14rem;min-width:0}
+#oa-live-global-bar .oa-live-chip-rm{width:18px;height:18px;padding:0;border:0;border-radius:4px;background:transparent;color:var(--oa-muted);cursor:pointer;font-size:14px;line-height:1;flex-shrink:0;margin-left:.1rem}
+#oa-live-global-bar .oa-live-chip-rm:hover{color:var(--oa-fg)}
+#oa-live-global-bar .oa-live-submit{background:var(--oa-accent);border-color:transparent;color:var(--oa-accent-on);font-weight:600;opacity:1}
+#oa-live-global-bar .oa-live-submit:hover{background:var(--oa-accent)}
 #oa-live-action-bar{position:fixed;left:50%;transform:translateX(-50%);bottom:4rem;display:flex;pointer-events:auto}
 #oa-live-action-bar[hidden]{display:none}
 #oa-live-action-bar .oa-live-row{display:flex;align-items:center;gap:.4rem;padding:.35rem .45rem;border-radius:12px;border:1px solid var(--oa-border);background:color-mix(in oklab,var(--oa-bg),transparent 6%);backdrop-filter:blur(10px);box-shadow:0 4px 20px color-mix(in oklab,var(--oa-fg),transparent 88%)}
@@ -1163,6 +1170,7 @@ const LIVE_SCRIPT = `
   function el(tag, cls, html){ var d=document.createElement(tag); if(cls)d.className=cls; if(html!=null)d.innerHTML=html; return d; }
   function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   function renderBar(){
+    // Action bar: current draft row only (Pick hint / prompt input / status).
     abar.innerHTML='';
     abar.hidden=false;
     if(state==='PICKING') abar.appendChild(buildPickingRow());
@@ -1173,14 +1181,29 @@ const LIVE_SCRIPT = `
     else if(state==='CONFIRMED') abar.appendChild(el('div','oa-live-row','✓ Applied'));
     else abar.hidden=true;
     positionBar();
+    // Global bar: collected chips + Submit live here (alongside Pick/Exit).
+    renderChips();
+  }
+  function renderChips(){
+    // clear any previously-injected chips/submit (keep Pick/Exit buttons)
+    var old=gbar.querySelectorAll('.oa-live-chip, .oa-live-submit');
+    old.forEach(function(n){ n.remove(); });
+    if(!items.length) return;
+    items.forEach(function(it, i){
+      var chip=el('div','oa-live-chip');
+      chip.appendChild(el('span','oa-live-chip-tag', esc(it.element.tagName)+(it.element.id?'#'+esc(it.element.id):'')));
+      chip.appendChild(el('span','oa-live-chip-txt', esc(it.prompt)));
+      var rm=el('button','oa-live-chip-rm','×'); rm.type='button'; rm.title='Remove';
+      rm.onclick=function(){ items.splice(i,1); if(!items.length&&!draft){ setState('PICKING'); } else renderBar(); };
+      chip.appendChild(rm);
+      gbar.appendChild(chip);
+    });
+    var sub=el('button','oa-live-submit','Submit ('+items.length+')'); sub.type='button'; sub.onclick=handleSubmit;
+    gbar.appendChild(sub);
   }
   function buildPickingRow(){
     var r=el('div','oa-live-row');
     r.appendChild(el('span','oa-live-hint', items.length? 'Pick another element, or Submit below' : 'Pick an element in the page'));
-    if(items.length){
-      var sub=el('button','oa-live-submit','Submit ('+items.length+')'); sub.type='button'; sub.onclick=handleSubmit;
-      r.appendChild(sub);
-    }
     return r;
   }
   function buildComposeRow(){
@@ -1189,19 +1212,6 @@ const LIVE_SCRIPT = `
     ff.onkeydown=function(e){ if(e.key==='Enter'){ e.preventDefault(); commitDraft(ff.value); } };
     var done=el('button','oa-live-add','Add'); done.type='button'; done.onclick=function(){ commitDraft(ff.value); };
     r.appendChild(ff); r.appendChild(done);
-    // already-collected items, with a remove control each
-    items.forEach(function(it, i){
-      var chip=el('div','oa-live-chip');
-      var tag=el('span','oa-live-chip-tag', esc(it.element.tagName)+(it.element.id?'#'+esc(it.element.id):''));
-      var txt=el('span','oa-live-chip-txt', esc(it.prompt));
-      var rm=el('button','oa-live-chip-rm','×'); rm.type='button'; rm.title='Remove'; rm.onclick=function(){ items.splice(i,1); if(!items.length&&!draft){ setState('PICKING'); } else renderBar(); };
-      chip.appendChild(tag); chip.appendChild(txt); chip.appendChild(rm);
-      r.appendChild(chip);
-    });
-    if(items.length){
-      var sub=el('button','oa-live-submit','Submit ('+items.length+')'); sub.type='button'; sub.onclick=handleSubmit;
-      r.appendChild(sub);
-    }
     // focus the input after the bar lands
     setTimeout(function(){ var f=abar.querySelector('.oa-live-freeform'); if(f) f.focus(); },0);
     return r;
