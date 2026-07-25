@@ -692,17 +692,7 @@ const LIVE_CSS = `
 #oa-live-action-bar .oa-live-spin{display:inline-block;width:12px;height:12px;border:2px solid var(--oa-muted);border-top-color:transparent;border-radius:50%;animation:oa-live-spin .7s linear infinite;vertical-align:-2px}
 @keyframes oa-live-spin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){#oa-live-action-bar .oa-live-spin{animation:none}}
-#oa-live-action-bar .oa-live-dots{display:inline-flex;align-items:center;gap:.15rem}
-#oa-live-action-bar .oa-live-dot{width:22px;height:22px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--oa-muted);cursor:pointer;font-size:11px;line-height:1}
-#oa-live-action-bar .oa-live-dot.active{color:var(--oa-accent)}
-#oa-live-action-bar .oa-live-dot:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
-#oa-live-action-bar .oa-live-counter{font-variant-numeric:tabular-nums;color:var(--oa-muted);font-size:.75rem;padding:0 .2rem}
-#oa-live-action-bar .oa-live-prev,#oa-live-action-bar .oa-live-next{width:28px;height:30px;padding:0;font-size:14px;background:var(--oa-surface);border:1px solid var(--oa-border);color:var(--oa-fg);cursor:pointer;border-radius:8px}
-#oa-live-action-bar .oa-live-prev:focus-visible,#oa-live-action-bar .oa-live-next:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
-#oa-live-action-bar .oa-live-accept{background:var(--oa-accent);border-color:transparent;color:var(--oa-accent-on);font-weight:600;cursor:pointer}
-#oa-live-action-bar .oa-live-discard{background:var(--oa-surface);border:1px solid var(--oa-border);color:var(--oa-fg);cursor:pointer}
-#oa-live-action-bar .oa-live-accept:focus-visible,#oa-live-action-bar .oa-live-discard:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
-#oa-live-action-bar .oa-live-accept:active,#oa-live-action-bar .oa-live-discard:active{transform:translateY(1px)}
+#oa-live-action-bar .oa-live-hint{color:var(--oa-muted);font-size:.8rem;padding:0 .3rem}
 `;
 
 // Positions the embedded artifact frame below the sticky service header
@@ -1075,12 +1065,15 @@ function stampNonceOnUserScripts(html: string, nonce: string): string {
   return out;
 }
 
-// Live variant-editing chrome. A global bar (Pick + Exit) fixed at the bottom
-// and an action bar pill that morphs Configure -> Generating -> Cycling ->
-// Confirmed. Hidden until the Live button toggles it open. The host chrome
-// owns the WebSocket (the sandboxed artifact frame cannot — connect-src 'none'
-// + opaque origin); the frame runs the element picker itself, armed via the
-// existing postMessage bridge (window.__oaToFrame).
+// Live edit chrome. A global bar (Pick + Exit) and an action bar pill that
+// morphs Pick -> Configure -> Generating -> Confirmed, floating next to the
+// picked element. Hidden until the Live button toggles it open. The host
+// chrome owns the WebSocket (the sandboxed artifact frame cannot —
+// connect-src 'none' + opaque origin); the frame runs the element picker
+// itself, armed via the existing postMessage bridge. On Go the host sends
+// `generate` to the LiveObject; the agent edits source, republishes, and
+// replies `done`; the host reloads the frame to show the result. One shot,
+// no variant cycling.
 function liveChromeHtml(wsUrl: string, artifactId: string): string {
   return `<div id="oa-live-root" hidden>
   <div id="oa-live-global-bar" role="toolbar" aria-label="Live editor">
@@ -1110,12 +1103,23 @@ const LIVE_SCRIPT = `
     liveToggle.addEventListener('click', function(){
       root.removeAttribute('hidden');
       liveToggle.setAttribute('aria-expanded','true');
+      // Clicking Live = enter pick mode immediately. The global bar's Pick
+      // button is the same affordance; arming here saves a click and matches
+      // the user's mental model (Live on -> go pick what to change).
+      if(state==='IDLE'){
+        pickBtn.setAttribute('aria-pressed','true');
+        pickBtn.dataset.active='true';
+        setState('PICKING');
+        toFrame({type:'oa:live:pick:arm'});
+      }
     });
   }
 
   var ws=null, wsReady=false, sessionId=null, state='IDLE';
-  var pickedCtx=null, action='', freeform='', count=3;
-  var visibleVariant=0, expected=0, arrived=0;
+  var pickedCtx=null, action='', freeform='';
+  // Last picked element's viewport rect inside the frame (CSS px), used to
+  // float the action bar next to the selection instead of at a fixed spot.
+  var pickRect=null;
 
   function toFrame(msg){ try{ if(frame.contentWindow) frame.contentWindow.postMessage(msg,'*'); }catch(e){} }
   function send(msg){ if(!ws||ws.readyState!==1) return; msg.id=msg.id||sessionId; try{ ws.send(JSON.stringify(msg)); }catch(e){} }
@@ -1123,35 +1127,43 @@ const LIVE_SCRIPT = `
 
   function setState(s){ state=s; renderBar(); }
 
-  // --- bar rendering (Configure / Generating / Cycling / Confirmed) ---
+  // Float the action bar near the picked element. pickRect is the element's
+  // rect inside the frame (CSS px); add the iframe's offset on the host page
+  // to get page coordinates. Falls back to bottom-centered when no rect.
+  function positionBar(){
+    if(!pickRect){ abar.style.left=''; abar.style.top=''; abar.style.bottom='4rem'; abar.style.transform='translateX(-50%)'; return; }
+    var fr=frame.getBoundingClientRect();
+    var x=fr.left+pickRect.x+ (pickRect.width/2);
+    var y=fr.top+pickRect.y+pickRect.height+8;
+    abar.style.left=x+'px';
+    abar.style.top=y+'px';
+    abar.style.bottom='auto';
+    abar.style.transform='translateX(-50%)';
+    // Keep on-screen: if the bar would overflow the bottom, flip above.
+    var vw=document.documentElement.clientWidth, vh=document.documentElement.clientHeight;
+    if(y>vh-80){ abar.style.top='auto'; abar.style.bottom=(vh-(fr.top+pickRect.y)+8)+'px'; }
+    if(x<150){ abar.style.left='150px'; }
+    if(x>vw-150){ abar.style.left=(vw-150)+'px'; }
+  }
+
+  // --- bar rendering (Pick / Configure / Generating / Confirmed) ---
   function el(tag, cls, html){ var d=document.createElement(tag); if(cls)d.className=cls; if(html!=null)d.innerHTML=html; return d; }
   function renderBar(){
     abar.innerHTML='';
     abar.hidden=false;
-    if(state==='CONFIGURING') abar.appendChild(buildConfigureRow());
+    if(state==='PICKING') abar.appendChild(el('div','oa-live-row','<span class="oa-live-hint">Pick an element in the page</span>'));
+    else if(state==='CONFIGURING') abar.appendChild(buildConfigureRow());
     else if(state==='GENERATING') abar.appendChild(el('div','oa-live-row','<span class="oa-live-spin"></span> Generating…'));
-    else if(state==='CYCLING') abar.appendChild(buildCyclingRow());
     else if(state==='CONFIRMED') abar.appendChild(el('div','oa-live-row','✓ Applied'));
     else abar.hidden=true;
+    positionBar();
   }
   function buildConfigureRow(){
     var r=el('div','oa-live-row');
     var act=el('select','oa-live-action'); act.innerHTML='<option value="bolder">Bolder</option><option value="quieter">Quieter</option><option value="polish">Polish</option>'; act.value=action; act.onchange=function(){action=act.value;};
     var ff=el('input','oa-live-freeform'); ff.type='text'; ff.placeholder='freeform prompt'; ff.value=freeform; ff.oninput=function(){freeform=ff.value;};
-    var cnt=el('select','oa-live-count'); cnt.innerHTML='<option>1</option><option selected>2</option><option>3</option><option>4</option>'; cnt.value=String(count); cnt.onchange=function(){count=Number(cnt.value);};
     var go=el('button','oa-live-go','Go'); go.type='button'; go.onclick=handleGo;
-    r.appendChild(act); r.appendChild(ff); r.appendChild(cnt); r.appendChild(go);
-    return r;
-  }
-  function buildCyclingRow(){
-    var r=el('div','oa-live-row');
-    var prev=el('button','oa-live-prev','←'); prev.type='button'; prev.onclick=function(){ cycleVariant(-1); };
-    var dots=el('span','oa-live-dots',''); for(var i=0;i<expected;i++){ (function(i){var d=el('button','oa-live-dot'+(i===visibleVariant?' active':''),i===visibleVariant?'●':'○'); d.type='button'; d.onclick=function(){selectVariant(i);}; dots.appendChild(d);})(i); }
-    var counter=el('span','oa-live-counter',(visibleVariant+1)+'/'+expected);
-    var next=el('button','oa-live-next','→'); next.type='button'; next.onclick=function(){ cycleVariant(1); };
-    var acc=el('button','oa-live-accept','✓ Accept'); acc.type='button'; acc.onclick=handleAccept;
-    var disc=el('button','oa-live-discard','✕ Discard'); disc.type='button'; disc.onclick=handleDiscard;
-    r.appendChild(prev); r.appendChild(dots); r.appendChild(counter); r.appendChild(next); r.appendChild(acc); r.appendChild(disc);
+    r.appendChild(act); r.appendChild(ff); r.appendChild(go);
     return r;
   }
 
@@ -1159,12 +1171,8 @@ const LIVE_SCRIPT = `
     if(!pickedCtx){ abar.querySelector('.oa-live-freeform')?.focus(); return; }
     sessionId=genId();
     setState('GENERATING');
-    send({type:'generate', id:sessionId, action:action, freeform:freeform, count:count, element:pickedCtx});
+    send({type:'generate', id:sessionId, action:action, freeform:freeform, element:pickedCtx});
   }
-  function cycleVariant(dir){ var n=(visibleVariant+dir+expected)%expected; selectVariant(n); }
-  function selectVariant(n){ visibleVariant=n; toFrame({type:'oa:live:cycle', variant:n}); renderBar(); }
-  function handleAccept(){ setState('GENERATING'); send({type:'accept', id:sessionId, variantId:String(visibleVariant)}); }
-  function handleDiscard(){ setState('GENERATING'); send({type:'discard', id:sessionId}); }
 
   // --- WebSocket ---
   function connect(){
@@ -1172,34 +1180,37 @@ const LIVE_SCRIPT = `
     ws.onopen=function(){ wsReady=true; };
     ws.onmessage=function(e){
       var msg; try{ msg=JSON.parse(e.data); }catch(err){ return; }
-      if(msg.type==='done'){ expected=msg.count||count; arrived=expected; setState('CYCLING'); }
-      else if(msg.type==='accept'||msg.type==='complete'){ setState('CONFIRMED'); setTimeout(function(){ reset(); },1500); }
-      else if(msg.type==='discarded'){ reset(); }
+      // 'done' = the agent finished editing + republished. Reload the frame
+      // to show the new content; no variant cycling anymore.
+      if(msg.type==='done'){ setState('CONFIRMED'); setTimeout(function(){ reloadFrame(); reset(); },1200); }
       else if(msg.type==='error'){ setState('CONFIGURING'); }
     };
     ws.onclose=function(){ wsReady=false; setTimeout(function(){ if(state!=='IDLE') connect(); },1000); };
   }
+
+  function reloadFrame(){ try{ if(frame.contentWindow) frame.contentWindow.location.reload(); }catch(e){ /* cross-origin: fall back to src resubmit */ frame.src=frame.src; } }
 
   // --- host<->frame bridge ---
   window.addEventListener('message', function(e){
     if(!e.data||typeof e.data.type!=='string') return;
     if(e.source!==frame.contentWindow) return;
     var d=e.data;
-    if(d.type==='oa:element:picked'){ pickedCtx=d.element; setState('CONFIGURING'); }
-    else if(d.type==='oa:live:variants:arrived'){ arrived=d.count||arrived; if(state==='GENERATING'&&d.count>=expected) setState('CYCLING'); }
+    if(d.type==='oa:element:picked'){ pickedCtx=d.element; pickRect=d.rect||null; setState('CONFIGURING'); }
   });
 
   // --- global bar ---
+  // Pick button toggles the picker on/off. When off (IDLE/CONFIRMED), turn it
+  // on and arm; when on, turn off and disarm back to IDLE.
   pickBtn.onclick=function(){
     var on=pickBtn.getAttribute('aria-pressed')==='true';
     pickBtn.setAttribute('aria-pressed',String(!on));
     pickBtn.dataset.active=String(!on);
-    if(!on){ setState('CONFIGURING'); toFrame({type:'oa:live:pick:arm'}); }
+    if(!on){ setState('PICKING'); toFrame({type:'oa:live:pick:arm'}); }
     else{ setState('IDLE'); toFrame({type:'oa:live:pick:disarm'}); }
   };
   exitBtn.onclick=function(){ send({type:'exit'}); reset(); ws&&ws.close(); root.hidden=true; if(liveToggle) liveToggle.setAttribute('aria-expanded','false'); };
 
-  function reset(){ state='IDLE'; pickedCtx=null; visibleVariant=0; renderBar(); abar.hidden=true; pickBtn.setAttribute('aria-pressed','false'); pickBtn.dataset.active='false'; toFrame({type:'oa:live:pick:disarm'}); }
+  function reset(){ state='IDLE'; pickedCtx=null; pickRect=null; renderBar(); abar.hidden=true; pickBtn.setAttribute('aria-pressed','false'); pickBtn.dataset.active='false'; toFrame({type:'oa:live:pick:disarm'}); }
 
   connect();
 })();
@@ -1345,14 +1356,14 @@ const FRAME_BRIDGE_SCRIPT = `
 })();
 `;
 
-// Live element picker + variant cycler, running inside the sandboxed artifact
-// frame. The host page cannot reach into the opaque-origin frame's DOM, so the
-// picker lives here and is armed/disarmed by host postMessage. On pick, sends
-// the element's context (tagName/id/classes/outerHTML/computedStyles/etc.) —
-// NOT a CSS selector — the agent matches it in source by id->class->tag.
-// On oa:live:cycle, toggles which [data-impeccable-variant] child is visible
-// (the wrapper uses display:contents; variants are toggled by an injected
-// stylesheet, mirroring impeccable-live's updateVariantStateStylesheet).
+// Live element picker, running inside the sandboxed artifact frame. The host
+// page cannot reach into the opaque-origin frame's DOM, so the picker lives
+// here and is armed/disarmed by host postMessage. On pick, sends the element's
+// context (tagName/id/classes/outerHTML/computedStyles/etc.) + its viewport
+// rect so the host can float the action bar next to it — NOT a CSS selector,
+// the agent matches it in source by id->class->tag. The agent edits source
+// and republishes; the host reloads the frame to show the result. No variant
+// cycling, no wrapper injection — Live is a one-shot edit-and-reload.
 const FRAME_LIVE_PICKER_SCRIPT = `
 (function(){
   if(!window.__oaSend)return;
@@ -1386,7 +1397,7 @@ const FRAME_LIVE_PICKER_SCRIPT = `
   function extractContext(el){
     var cs=getComputedStyle(el), r=el.getBoundingClientRect();
     var p=el.parentElement;
-    return {tagName:el.tagName.toLowerCase(), id:el.id||null, classes:[].slice.call(el.classList), textContent:(el.textContent||'').slice(0,500), outerHTML:el.outerHTML.slice(0,10000), computedStyles:{'font-family':cs.fontFamily,'font-size':cs.fontSize,'color':cs.color,'background':cs.backgroundColor,'border-radius':cs.borderRadius,'box-shadow':cs.boxShadow}, parentContext:p?('<'+p.tagName.toLowerCase()+(p.id?' #'+p.id:'')+('')+'>'):'', boundingRect:{width:Math.round(r.width),height:Math.round(r.height)}};
+    return {tagName:el.tagName.toLowerCase(), id:el.id||null, classes:[].slice.call(el.classList), textContent:(el.textContent||'').slice(0,500), outerHTML:el.outerHTML.slice(0,10000), computedStyles:{'font-family':cs.fontFamily,'font-size':cs.fontSize,'color':cs.color,'background':cs.backgroundColor,'border-radius':cs.borderRadius,'box-shadow':cs.boxShadow}, parentContext:p?('<'+p.tagName.toLowerCase()+(p.id?' #'+p.id:'')+('')+'>'):'', boundingRect:{width:Math.round(r.width),height:Math.round(r.height)}, rect:{x:Math.round(r.left),y:Math.round(r.top),width:Math.round(r.width),height:Math.round(r.height)}};
   }
   function onMove(e){
     if(!armed)return;
@@ -1428,16 +1439,6 @@ const FRAME_LIVE_PICKER_SCRIPT = `
     document.removeEventListener('keydown',onKey,true);
     hideHighlight();
   }
-  // Variant cycling: toggle which [data-impeccable-variant] is visible.
-  var vstyle=document.createElement('style'); vstyle.id=PREFIX+'-variants'; document.head.appendChild(vstyle);
-  function selectVariant(n){
-    var wrap=document.querySelector('[data-impeccable-variants]');
-    if(!wrap)return;
-    var vs=wrap.querySelectorAll('[data-impeccable-variant]');
-    vstyle.textContent='[data-impeccable-variants] > [data-impeccable-variant]{display:none !important}[data-impeccable-variants] > [data-impeccable-variant="'+n+'"]{display:block !important}';
-    var arrived=vs.length;
-    window.__oaSend({type:'oa:live:variants:arrived', count:arrived});
-  }
   // Annotation overlay: SVG strokes + comment pins over the picked element.
   function showAnnot(el){
     if(annotSvg)return;
@@ -1469,12 +1470,8 @@ const FRAME_LIVE_PICKER_SCRIPT = `
     var m=e.data; if(!m||typeof m!=='object')return;
     if(m.type==='oa:live:pick:arm')arm();
     else if(m.type==='oa:live:pick:disarm')disarm();
-    else if(m.type==='oa:live:cycle')selectVariant(m.variant);
     else if(m.type==='oa:live:annot:enable'){annotEnabled=true;if(picked)showAnnot(picked);}
   });
-  // Detect variant wrappers landing (after agent re-publishes) and report.
-  var mo=new MutationObserver(function(){ var wrap=document.querySelector('[data-impeccable-variants]'); if(wrap){ var n=wrap.querySelectorAll('[data-impeccable-variant]').length; window.__oaSend({type:'oa:live:variants:arrived', count:n}); } });
-  mo.observe(document.body,{childList:true,subtree:true});
 })();
 `;
 
