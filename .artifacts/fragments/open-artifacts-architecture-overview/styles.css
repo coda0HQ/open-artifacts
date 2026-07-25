@@ -6,7 +6,7 @@
 
 .oa-nav {
   position: sticky;
-  top: var(--oa-header-h, 2.5rem);
+  top: 0;
   z-index: 10;
   background: var(--bg);
   border-bottom: 1px solid var(--border);
@@ -544,4 +544,15 @@ h1.oa-title {
   .oa-flow {
     padding: var(--space-3);
   }
+}
+
+/* No horizontal scrollbar on the nav list — let it wrap and reflow
+   instead of scrolling. */
+.oa-nav-list {
+  overflow: visible;
+  flex-wrap: wrap;
+  -webkit-overflow-scrolling: auto;
+}
+.oa-nav-list::-webkit-scrollbar {
+  display: none;
 }
