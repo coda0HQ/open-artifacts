@@ -97,21 +97,32 @@
 }
 
 .oa-mast {
-  margin-bottom: var(--space-12);
+  margin: 0 0 var(--space-12);
+  padding-top: var(--space-6);
 }
 
 .oa-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
   font-size: var(--text-xs);
   letter-spacing: var(--tracking-caps);
   text-transform: uppercase;
   color: var(--muted);
-  margin: 0 0 var(--space-3);
+  margin: 0 0 var(--space-4);
+}
+.oa-kicker::before{
+  content:"";
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: inline-block;
 }
 
 h1.oa-title {
-  font-size: var(--text-3xl);
+  font-size: var(--text-4xl);
   line-height: var(--leading-display);
-  letter-spacing: -0.02em;
+  letter-spacing: -0.025em;
   margin: 0 0 var(--space-4);
   text-wrap: balance;
   font-weight: 700;
@@ -119,8 +130,8 @@ h1.oa-title {
 
 .oa-standfirst {
   font-size: var(--text-lg);
-  line-height: 1.5;
-  color: var(--muted);
+  line-height: 1.55;
+  color: color-mix(in oklab, var(--fg), transparent 22%);
   max-width: 70ch;
   margin: 0 0 var(--space-6);
   text-wrap: pretty;
@@ -147,6 +158,15 @@ h1.oa-title {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-pill);
+  transition: color .15s, border-color .15s, background .15s;
+}
+.oa-chip:first-child{
+  color: var(--accent);
+  border-color: color-mix(in oklab, var(--accent), transparent 55%);
+  background: color-mix(in oklab, var(--accent), transparent 90%);
+}
+@media (hover:hover) and (pointer:fine){
+  .oa-chip:hover{color:var(--fg);border-color:color-mix(in oklab,var(--border),var(--fg) 20%)}
 }
 
 .oa-section {
@@ -465,6 +485,8 @@ h1.oa-title {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
+  min-width: 0;
+  overflow: hidden;
 }
 
 .oa-stat-display {
@@ -474,12 +496,14 @@ h1.oa-title {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
 }
 
 .oa-stat-label {
   font-size: var(--text-xs);
   color: var(--muted);
   line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .oa-footer {

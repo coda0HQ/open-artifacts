@@ -94,11 +94,11 @@
     {
       "id": "9bG94htMRttn",
       "url": "https://coda0.com/a/9bG94htMRttn",
-      "version": 10,
+      "version": 12,
       "recipe": ".artifacts/recipes/open-artifacts-architecture-overview.recipe.json",
       "recipeHash": "sha256:6352d03e60423a5f0e2d8df4fa8dc11f5526b5e57c92a59d331c91ece4ecbe07",
-      "inputHash": "sha256:b08a3dee02df6b5ad3812b47abb01fb9d5a6339e43eacc27b6cb9963f32e23c8",
-      "outputHash": "sha256:99e28fb49224e67ec3a15d5082859d4e7496bbe033279659fd5627c8eebbd11d",
+      "inputHash": "sha256:040c9b873edeeceec393403d0592cd5f6d9585c77e01bd78ba61254d3141024d",
+      "outputHash": "sha256:dc35c549bbb0fcca68d836ef9c8265b1f6edf5dcde24fdca0f05ac1cc92853f0",
       "strategy": "direct",
       "autoUpdate": false,
       "snapshot": {
@@ -110,10 +110,10 @@
         "src/domain.ts": "7b55beb714c5c75c8ec526d90ba271987b79944bd362be22ba43598db3c58092",
         "src/index.ts": "7a87f0b753905c1cd88950bc4c4cde291ff581fdb4100d8e00c3096f37382816",
         "src/store.ts": "01e5d59bbfc27a1f09425a5acb5167e78ed85cb0b23f167b71e5355559fc5bd0",
-        "src/wrap.ts": "585bbc5e49d015395371121d63100a6582a901cab578313d15a905b51e2eda73",
+        "src/wrap.ts": "5719333fdc1be5764c1331d74a4be3ae4556a8a600154744670163f188a524b0",
         "wrangler.jsonc": "9a07f04e8e0cfe656f054c644c9546ef59aa8697666b960616d0d58b8b672e48"
       },
-      "updatedAt": "2026-07-25T11:36:14.854Z"
+      "updatedAt": "2026-07-25T16:05:35.406Z"
     }
   ]
 }
