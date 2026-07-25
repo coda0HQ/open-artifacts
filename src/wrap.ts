@@ -673,36 +673,37 @@ const LIVE_CSS = `
 @media (hover:hover) and (pointer:fine){.oa-live-toggle:hover{opacity:1;border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 25%)}}
 #oa-live-root[hidden]{display:none}
 #oa-live-root{position:fixed;inset:0;z-index:2147483645;pointer-events:none;font-family:var(--oa-font);font-size:.8rem}
-#oa-live-global-bar{position:fixed;left:50%;transform:translateX(-50%);bottom:1rem;display:flex;align-items:center;gap:.4rem;padding:.35rem .45rem;border-radius:12px;border:1px solid var(--oa-border);background:color-mix(in oklab,var(--oa-bg),transparent 6%);backdrop-filter:blur(10px);box-shadow:0 4px 20px color-mix(in oklab,var(--oa-fg),transparent 88%);pointer-events:auto}
-#oa-live-global-bar button{position:relative;display:inline-flex;align-items:center;gap:.35rem;height:30px;padding:0 .55rem;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--oa-fg);font:inherit;font-weight:500;line-height:1;cursor:pointer;opacity:.85;transition:opacity .15s,background .15s,border-color .15s}
-#oa-live-global-bar button:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
-#oa-live-global-bar button:active{transform:translateY(1px)}
-#oa-live-global-bar button .oa-live-icon{display:inline-flex;align-items:center}
-#oa-live-global-bar button .oa-live-icon svg{width:14px;height:14px;display:block}
-#oa-live-global-bar button[aria-pressed="true"]{background:var(--oa-surface);border-color:var(--oa-border);color:var(--oa-accent);opacity:1}
-@media (hover:hover) and (pointer:fine){#oa-live-global-bar button:hover{opacity:1;background:var(--oa-surface)}}
-#oa-live-global-bar .oa-live-chip{display:inline-flex;align-items:center;gap:.3rem;height:30px;padding:0 .4rem;border-radius:8px;background:var(--oa-surface);border:1px solid var(--oa-border);font-size:.75rem;font-weight:500;opacity:1}
-#oa-live-global-bar .oa-live-chip-tag{color:var(--oa-accent);font-weight:600;flex-shrink:0}
-#oa-live-global-bar .oa-live-chip-txt{color:var(--oa-fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:14rem;min-width:0}
-#oa-live-global-bar .oa-live-chip-rm{width:18px;height:18px;padding:0;border:0;border-radius:4px;background:transparent;color:var(--oa-muted);cursor:pointer;font-size:14px;line-height:1;flex-shrink:0;margin-left:.1rem}
-#oa-live-global-bar .oa-live-chip-rm:hover{color:var(--oa-fg)}
-#oa-live-global-bar .oa-live-submit{background:var(--oa-accent);border-color:transparent;color:var(--oa-accent-on);font-weight:600;opacity:1}
-#oa-live-global-bar .oa-live-submit:hover{background:var(--oa-accent)}
-#oa-live-action-bar{position:fixed;left:50%;transform:translateX(-50%);bottom:4rem;display:flex;pointer-events:auto}
+#oa-live-sidebar{position:fixed;top:var(--oa-header-h,2.5rem);right:0;bottom:0;width:min(20rem,92vw);display:flex;flex-direction:column;gap:.5rem;padding:.6rem;overflow-y:auto;background:color-mix(in oklab,var(--oa-bg),transparent 4%);backdrop-filter:blur(10px);border-left:1px solid var(--oa-border);box-shadow:-4px 0 24px color-mix(in oklab,var(--oa-fg),transparent 90%);pointer-events:auto;z-index:2147483645}
+#oa-live-controls{display:flex;gap:.4rem;flex-shrink:0}
+#oa-live-controls button{position:relative;display:inline-flex;align-items:center;gap:.35rem;height:30px;padding:0 .55rem;border-radius:8px;border:1px solid var(--oa-border);background:var(--oa-surface);color:var(--oa-fg);font:inherit;font-weight:500;line-height:1;cursor:pointer;opacity:.85;transition:opacity .15s,background .15s,border-color .15s}
+#oa-live-controls button:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+#oa-live-controls button:active{transform:translateY(1px)}
+#oa-live-controls button .oa-live-icon{display:inline-flex;align-items:center}
+#oa-live-controls button .oa-live-icon svg{width:14px;height:14px;display:block}
+#oa-live-controls button[aria-pressed="true"]{border-color:var(--oa-accent);color:var(--oa-accent);opacity:1}
+@media (hover:hover) and (pointer:fine){#oa-live-controls button:hover{opacity:1}}
+#oa-live-chips{display:flex;flex-direction:column;gap:.4rem;flex:1;min-height:0;overflow-y:auto}
+#oa-live-chips:empty{display:none}
+#oa-live-chips .oa-live-chip{display:block;padding:.45rem .55rem;border-radius:8px;background:var(--oa-surface);border:1px solid var(--oa-border);font-size:.8rem}
+#oa-live-chips .oa-live-chip-tag{display:block;color:var(--oa-accent);font-weight:600;font-size:.72rem;margin-bottom:.15rem}
+#oa-live-chips .oa-live-chip-txt{display:block;color:var(--oa-fg);white-space:normal;word-break:break-word;line-height:1.4;padding-right:1.2rem}
+#oa-live-chips .oa-live-chip-rm{position:absolute;width:20px;height:20px;padding:0;border:0;border-radius:4px;background:transparent;color:var(--oa-muted);cursor:pointer;font-size:16px;line-height:1;top:.35rem;right:.35rem}
+#oa-live-chips .oa-live-chip{position:relative}
+#oa-live-chips .oa-live-chip-rm:hover{color:var(--oa-fg)}
+#oa-live-chips .oa-live-chip-rm:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+#oa-live-submit-wrap{flex-shrink:0}
+#oa-live-submit-wrap .oa-live-submit{width:100%;height:34px;border:0;border-radius:8px;background:var(--oa-accent);color:var(--oa-accent-on);font:inherit;font-weight:600;font-size:.85rem;cursor:pointer}
+#oa-live-submit-wrap .oa-live-submit:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+#oa-live-submit-wrap .oa-live-submit:active{transform:translateY(1px)}
+#oa-live-action-bar{position:fixed;left:50%;transform:translateX(-50%);bottom:4rem;display:flex;pointer-events:auto;z-index:2147483645}
 #oa-live-action-bar[hidden]{display:none}
 #oa-live-action-bar .oa-live-row{display:flex;align-items:center;gap:.4rem;padding:.35rem .45rem;border-radius:12px;border:1px solid var(--oa-border);background:color-mix(in oklab,var(--oa-bg),transparent 6%);backdrop-filter:blur(10px);box-shadow:0 4px 20px color-mix(in oklab,var(--oa-fg),transparent 88%)}
-#oa-live-action-bar .oa-live-row>select,#oa-live-action-bar .oa-live-row>input,#oa-live-action-bar .oa-live-row>button{height:30px;font:inherit;font-size:.8rem;color:var(--oa-fg);background:var(--oa-surface);border:1px solid var(--oa-border);border-radius:8px;padding:0 .55rem}
+#oa-live-action-bar .oa-live-row>input,#oa-live-action-bar .oa-live-row>button{height:30px;font:inherit;font-size:.8rem;color:var(--oa-fg);background:var(--oa-surface);border:1px solid var(--oa-border);border-radius:8px;padding:0 .55rem}
 #oa-live-action-bar .oa-live-row>input{min-width:12rem}
-#oa-live-action-bar .oa-live-row>select:focus-visible,#oa-live-action-bar .oa-live-row>input:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
-#oa-live-action-bar .oa-live-go,#oa-live-action-bar .oa-live-add,#oa-live-action-bar .oa-live-submit{background:var(--oa-accent);border-color:transparent;color:var(--oa-accent-on);font-weight:600;cursor:pointer}
-#oa-live-action-bar .oa-live-go:focus-visible,#oa-live-action-bar .oa-live-add:focus-visible,#oa-live-action-bar .oa-live-submit:focus-visible{box-shadow:var(--oa-focus-ring)}
-#oa-live-action-bar .oa-live-go:active,#oa-live-action-bar .oa-live-add:active,#oa-live-action-bar .oa-live-submit:active{transform:translateY(1px)}
-#oa-live-action-bar .oa-live-chip{display:flex;align-items:center;gap:.35rem;max-width:100%;padding:.2rem .35rem;border-radius:6px;background:var(--oa-surface);border:1px solid var(--oa-border);font-size:.75rem}
-#oa-live-action-bar .oa-live-chip-tag{color:var(--oa-accent);font-weight:600;flex-shrink:0}
-#oa-live-action-bar .oa-live-chip-txt{color:var(--oa-fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
-#oa-live-action-bar .oa-live-chip-rm{width:18px;height:18px;padding:0;border:0;border-radius:4px;background:transparent;color:var(--oa-muted);cursor:pointer;font-size:14px;line-height:1;flex-shrink:0}
-#oa-live-action-bar .oa-live-chip-rm:hover{color:var(--oa-fg)}
-#oa-live-action-bar .oa-live-chip-rm:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+#oa-live-action-bar .oa-live-row>input:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+#oa-live-action-bar .oa-live-add{background:var(--oa-accent);border-color:transparent;color:var(--oa-accent-on);font-weight:600;cursor:pointer}
+#oa-live-action-bar .oa-live-add:focus-visible{box-shadow:var(--oa-focus-ring)}
+#oa-live-action-bar .oa-live-add:active{transform:translateY(1px)}
 #oa-live-action-bar .oa-live-spin{display:inline-block;width:12px;height:12px;border:2px solid var(--oa-muted);border-top-color:transparent;border-radius:50%;animation:oa-live-spin .7s linear infinite;vertical-align:-2px}
 @keyframes oa-live-spin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){#oa-live-action-bar .oa-live-spin{animation:none}}
@@ -1091,10 +1092,14 @@ function stampNonceOnUserScripts(html: string, nonce: string): string {
 // no variant cycling.
 function liveChromeHtml(wsUrl: string, artifactId: string): string {
   return `<div id="oa-live-root" hidden>
-  <div id="oa-live-global-bar" role="toolbar" aria-label="Live editor">
-    <button type="button" id="oa-live-pick-toggle" data-active="false" aria-pressed="false" title="Pick an element"><span class="oa-live-icon" aria-hidden="true">${LIVE_SVG}</span><span class="oa-live-label">Pick</span></button>
-    <button type="button" id="oa-live-exit" title="Exit live editor"><span class="oa-live-icon" aria-hidden="true">${CLOSE_SVG}</span><span class="oa-live-label">Exit</span></button>
-  </div>
+  <aside id="oa-live-sidebar" aria-label="Live editor">
+    <div id="oa-live-controls" role="toolbar" aria-label="Live controls">
+      <button type="button" id="oa-live-pick-toggle" data-active="false" aria-pressed="false" title="Pick an element"><span class="oa-live-icon" aria-hidden="true">${LIVE_SVG}</span><span class="oa-live-label">Pick</span></button>
+      <button type="button" id="oa-live-exit" title="Exit live editor"><span class="oa-live-icon" aria-hidden="true">${CLOSE_SVG}</span><span class="oa-live-label">Exit</span></button>
+    </div>
+    <div id="oa-live-chips" role="list" aria-label="Collected changes"></div>
+    <div id="oa-live-submit-wrap"></div>
+  </aside>
   <div id="oa-live-action-bar" role="dialog" aria-label="Live actions" hidden></div>
   <script type="application/json" id="oa-live-config">${jsonForInlineScript({ wsUrl, artifactId })}</script>
 </div>`;
@@ -1106,13 +1111,14 @@ const LIVE_SCRIPT = `
   if(!cfgEl) return;
   var cfg=JSON.parse(cfgEl.textContent||'{}');
   var root=document.getElementById('oa-live-root');
-  var gbar=document.getElementById('oa-live-global-bar');
+  var chipsEl=document.getElementById('oa-live-chips');
+  var submitEl=document.getElementById('oa-live-submit-wrap');
   var abar=document.getElementById('oa-live-action-bar');
   var pickBtn=document.getElementById('oa-live-pick-toggle');
   var exitBtn=document.getElementById('oa-live-exit');
   var frame=document.getElementById('oa-frame');
   var liveToggle=document.querySelector('.oa-live-toggle');
-  if(!root||!gbar||!abar||!pickBtn||!exitBtn||!frame) return;
+  if(!root||!chipsEl||!submitEl||!abar||!pickBtn||!exitBtn||!frame) return;
 
   if(liveToggle){
     liveToggle.addEventListener('click', function(){
@@ -1185,9 +1191,8 @@ const LIVE_SCRIPT = `
     renderChips();
   }
   function renderChips(){
-    // clear any previously-injected chips/submit (keep Pick/Exit buttons)
-    var old=gbar.querySelectorAll('.oa-live-chip, .oa-live-submit');
-    old.forEach(function(n){ n.remove(); });
+    chipsEl.innerHTML='';
+    submitEl.innerHTML='';
     if(!items.length) return;
     items.forEach(function(it, i){
       var chip=el('div','oa-live-chip');
@@ -1196,10 +1201,10 @@ const LIVE_SCRIPT = `
       var rm=el('button','oa-live-chip-rm','×'); rm.type='button'; rm.title='Remove';
       rm.onclick=function(){ items.splice(i,1); if(!items.length&&!draft){ setState('PICKING'); } else renderBar(); };
       chip.appendChild(rm);
-      gbar.appendChild(chip);
+      chipsEl.appendChild(chip);
     });
     var sub=el('button','oa-live-submit','Submit ('+items.length+')'); sub.type='button'; sub.onclick=handleSubmit;
-    gbar.appendChild(sub);
+    submitEl.appendChild(sub);
   }
   function buildPickingRow(){
     var r=el('div','oa-live-row');
