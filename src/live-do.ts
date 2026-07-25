@@ -200,8 +200,15 @@ export class LiveObject extends DurableObject<Record<string, unknown>> {
     await this.flushWaiters();
   }
 
+  // Acknowledge a `done`/`error` reply: drop the fulfilled event row(s) for
+  // this id, but preserve any queued `exit` — the agent's watch loop only
+  // terminates on `exit`, and a `done` that races a user's Exit click must not
+  // strand it (the row would sit until GC, the watcher hanging up to 1h).
   private async acknowledge(id: string): Promise<void> {
-    await this.ctx.storage.sql.exec(`DELETE FROM pending WHERE id = ?`, id);
+    await this.ctx.storage.sql.exec(
+      `DELETE FROM pending WHERE id = ? AND type != 'exit'`,
+      id,
+    );
   }
 
   private async pickAvailable(
