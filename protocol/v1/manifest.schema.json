@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-artifacts.dev/protocol/v1/manifest.schema.json",
+  "title": "Open Artifacts CLI Manifest v2",
+  "type": "object",
+  "required": ["manifestVersion", "artifacts"],
+  "properties": {
+    "manifestVersion": { "const": 2 },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "url", "version"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "url": { "type": "string", "minLength": 1 },
+          "version": { "type": "integer", "minimum": 1 },
+          "recipe": { "type": "string" },
+          "recipeHash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+          "inputHash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+          "outputHash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+          "strategy": { "type": "string" },
+          "autoUpdate": { "type": "boolean" },
+          "snapshot": { "type": "object" },
+          "updatedAt": { "type": "string" },
+          "visibility": { "enum": ["public", "org", "private"] },
+          "orgId": { "type": ["string", "null"] },
+          "migrationPending": { "type": "boolean" },
+          "draft": {
+            "type": "object",
+            "required": ["revision", "baseVersion", "state"],
+            "properties": {
+              "revision": { "type": "integer", "minimum": 1 },
+              "baseVersion": { "type": "integer", "minimum": 1 },
+              "state": { "enum": ["active", "checkpointed", "conflict", "expired"] },
+              "checkpointVersion": { "type": "integer", "minimum": 1 },
+              "updatedAt": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "_state": {
+      "type": "object",
+      "required": ["schemaVersion", "checksum"],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "checksum": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

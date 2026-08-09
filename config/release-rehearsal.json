@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "environment": "isolated-local",
+  "stages": [
+    {
+      "id": "migration",
+      "commands": [["pnpm", "test:migrations"]],
+      "validation": "Fresh apply reaches schema v5 and a repeated apply is a no-op.",
+      "decisionPoint": "Stop before deploy if schema compatibility or idempotence fails."
+    },
+    {
+      "id": "application-rollback-rollforward",
+      "commands": [
+        ["pnpm", "check:environments"],
+        ["pnpm", "vitest", "run", "tests/worker/schema-compatibility.test.ts", "tests/worker/live-draft-api.test.ts"]
+      ],
+      "validation": "Old code fails closed on incompatible schema; rollback creates a new immutable checkpoint.",
+      "decisionPoint": "Code rollback is allowed only across an additive compatible schema; otherwise roll forward."
+    },
+    {
+      "id": "d1-backup-restore",
+      "commands": [
+        ["pnpm", "vitest", "run", "--config", "vitest.ops.config.ts", "tests/ops/backup.test.ts", "tests/ops/restore.test.ts"]
+      ],
+      "validation": "Encrypted backup verifies and restore accepts only a new isolated database with matching rows and hashes.",
+      "decisionPoint": "Never switch a binding until schema, row, hash, read, and denied-write probes pass."
+    },
+    {
+      "id": "r2-repair",
+      "commands": [
+        ["pnpm", "vitest", "run", "--config", "vitest.ops.config.ts", "tests/ops/repair.test.ts"],
+        ["pnpm", "vitest", "run", "tests/worker/reconcile.test.ts", "tests/worker/reconcile-api.test.ts"]
+      ],
+      "validation": "Repair is dry-run first, confirmation-bound, resumable, audited, and preserves the latest readable version.",
+      "decisionPoint": "Freeze writes and escalate if a committed object cannot be restored to its recorded hash."
+    },
+    {
+      "id": "token-rotation",
+      "commands": [
+        ["pnpm", "vitest", "run", "tests/worker/credential-service.test.ts", "tests/worker/credentials-api.test.ts"],
+        ["pnpm", "vitest", "run", "--config", "vitest.cli.config.ts", "tests/cli/credentials-command.test.ts", "tests/cli/secret-store.test.ts"]
+      ],
+      "validation": "Active, grace, revoked, recovery, atomic local persistence, and raw-secret redaction paths pass.",
+      "decisionPoint": "Revoke immediately after exposure; use owner recovery only when every capability is lost."
+    }
+  ]
+}

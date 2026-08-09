@@ -25,23 +25,32 @@ Fork https://github.com/coda0HQ/open-artifacts, then from your clone:
 
 ```sh
 pnpm install
-npx wrangler d1 create open-artifacts          # put database_id into wrangler.jsonc
+npx wrangler d1 create open-artifacts          # put database_id into wrangler.production.jsonc
 npx wrangler r2 bucket create open-artifacts-content
-npx wrangler deploy
+pnpm check:environments                         # validates isolated configs and dry-runs
 ```
 
-The schema initializes itself on first request — no migration step. Point
-the skill at your instance:
+Provision the distinct D1/R2/DO/Analytics/rate-limit resources named in the
+Preview, Staging, and Production configs. Store `IDEMPOTENCY_SECRET` and
+`REPAIR_TOKEN` as environment-scoped Worker secrets, never committed vars. Use
+the repository's gated deploy workflow for application promotion; direct
+`pnpm run deploy` is intentionally refused. Production requests never create
+or alter schema: the workflow applies all numbered migrations before the
+Worker is deployed.
+Point the skill at your instance:
 
 ```sh
 export OPEN_ARTIFACTS_URL=https://open-artifacts.<your-subdomain>.workers.dev
 ```
 
 - Content stays on your own Cloudflare account.
-- To restrict who can create artifacts, set a create token and give it to
-  trusted users:
+- Production requires explicit `PUBLIC_CREATE_MODE`, `ANONYMOUS_COMMENTS`,
+  `RATE_LIMIT_MODE`, and a 32+ byte `IDEMPOTENCY_SECRET`; invalid or missing
+  configuration fails readiness. To use token-gated creation, set
+  `PUBLIC_CREATE_MODE=token`, then set a create token and give it to trusted
+  users:
   ```sh
-  npx wrangler secret put CREATE_TOKEN
+  npx wrangler secret put CREATE_TOKEN --config wrangler.production.jsonc
   ```
   Then clients set `OPEN_ARTIFACTS_TOKEN=<same value>` (or put
   `createToken` in `.artifacts/config.json`).
@@ -51,7 +60,7 @@ export OPEN_ARTIFACTS_URL=https://open-artifacts.<your-subdomain>.workers.dev
 
 ## C — Team shared instance
 
-One person deploys (mode B), optionally sets `CREATE_TOKEN`, and shares the
+One operator deploys (mode B), configures production policy/secrets, and shares the
 URL (and create token, if set) with the team. Everyone else just sets
 `OPEN_ARTIFACTS_URL` (and `OPEN_ARTIFACTS_TOKEN` if gated). Updates are
 still per-artifact: each artifact's write token lives in each user's
@@ -73,9 +82,10 @@ them independently:
   the Live Durable Object.
 
 For local development with Live and owner permissions, use the repository's
-`wrangler.dev.jsonc` (`wrangler dev -c wrangler.dev.jsonc`). A production
-deployment should configure the Durable Object migration and authorization
-explicitly rather than copying local-development shortcuts.
+`wrangler.dev.jsonc` (`wrangler dev -c wrangler.dev.jsonc`). Production must
+use distinct D1/R2/DO identities, a declarative Durable Object migration,
+explicit authorization/rate policies, a metrics binding, and kill switches;
+never copy local-development resources or shortcuts.
 
 ## Custom domain (canonical links)
 

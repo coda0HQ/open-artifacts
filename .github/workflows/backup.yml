@@ -1,0 +1,71 @@
+name: Encrypted production D1 backup
+
+on:
+  schedule:
+    - cron: "23 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backup-production-d1
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    environment: production-backup
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Export, encrypt, upload, and verify
+        run: |
+          backup_dir="${RUNNER_TEMP}/open-artifacts-backup"
+          mkdir -p "${backup_dir}"
+          node scripts/backup-d1.mjs \
+            --environment production \
+            --database "${OPEN_ARTIFACTS_DATABASE}" \
+            --database-id "${OPEN_ARTIFACTS_DATABASE_ID}" \
+            --source-account-id "${CLOUDFLARE_ACCOUNT_ID}" \
+            --content-bucket "${OPEN_ARTIFACTS_CONTENT_BUCKET}" \
+            --backup-account-id "${OPEN_ARTIFACTS_BACKUP_ACCOUNT_ID}" \
+            --backup-bucket "${OPEN_ARTIFACTS_BACKUP_BUCKET}" \
+            --output-dir "${backup_dir}" \
+            --config wrangler.production.jsonc \
+            --key-id "${OPEN_ARTIFACTS_BACKUP_KEY_ID}" \
+            --retention-days 90 \
+            --upload | tee "${backup_dir}/receipt.json"
+          manifest_path="$(find "${backup_dir}" -name '*.manifest.json' -type f -maxdepth 1 -print -quit)"
+          test -n "${manifest_path}"
+          cp "${manifest_path}" backup.manifest.json
+          cp "${backup_dir}/receipt.json" backup.receipt.json
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_BACKUP_READ_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_PRIMARY_ACCOUNT_ID }}
+          OPEN_ARTIFACTS_DATABASE: ${{ vars.OPEN_ARTIFACTS_DATABASE }}
+          OPEN_ARTIFACTS_DATABASE_ID: ${{ vars.OPEN_ARTIFACTS_DATABASE_ID }}
+          OPEN_ARTIFACTS_CONTENT_BUCKET: ${{ vars.OPEN_ARTIFACTS_CONTENT_BUCKET }}
+          OPEN_ARTIFACTS_BACKUP_ACCOUNT_ID: ${{ vars.OPEN_ARTIFACTS_BACKUP_ACCOUNT_ID }}
+          OPEN_ARTIFACTS_BACKUP_BUCKET: ${{ vars.OPEN_ARTIFACTS_BACKUP_BUCKET }}
+          OPEN_ARTIFACTS_BACKUP_KEY_ID: ${{ vars.OPEN_ARTIFACTS_BACKUP_KEY_ID }}
+          OPEN_ARTIFACTS_BACKUP_KEY: ${{ secrets.OPEN_ARTIFACTS_BACKUP_KEY }}
+          OPEN_ARTIFACTS_BACKUP_UPLOAD_TOKEN: ${{ secrets.OPEN_ARTIFACTS_BACKUP_UPLOAD_TOKEN }}
+      - name: Upload non-secret backup receipt
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: backup-receipt-${{ github.run_id }}
+          path: |
+            backup.manifest.json
+            backup.receipt.json
+          if-no-files-found: error
+          retention-days: 90

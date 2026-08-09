@@ -44,15 +44,14 @@ and previews are gitignored. On the **first `create` in a project**, ask
 whether the artifact should be local and **recommend local**. Record the
 choice in `artifact.local` and place the Recipe/fragments accordingly.
 
-**Run state-mutating commands one at a time — never concurrently.** This
-includes `create`, `update`, `delete`, `migrate`, `ack`, `auto-update`,
-`login`, and `logout`; `install-hook` also writes project settings.
-`credentials.json` and the manifests are updated with an unlocked
-read-modify-write. The write re-reads immediately beforehand, which closes the
-window around each command's network round-trip, but two commands whose writes
-truly interleave can still lose one. A lost write token is unrecoverable — no
-endpoint re-issues one — so serialize them. This matters most for a
-"regenerate everything" pass: loop, don't fan out.
+State-mutating commands use per-file cross-process locks and crash-safe atomic
+writes for Manifest, Config, and Credentials. Independent artifacts may be
+updated concurrently; commands contending for the same state file wait for a
+bounded lock and report the owner/recovery path on timeout. Do not delete a
+live `.lock` file manually. A dead local owner is recovered only after the
+stale threshold. State files carry a checksum; damaged files are quarantined
+as `*.corrupt-*` instead of being silently overwritten. `install-hook` writes
+Claude settings outside this state layer, so run that command separately.
 
 If the user has no instance yet, point them at
 [deployment.md](references/deployment.md) — it has the three ways to get
@@ -197,8 +196,9 @@ links, plus the frame and freeform contracts and a canvas ship-gate.
 
 Live editing is available only when the instance binds `LIVE_DO`; it requires
 the artifact owner's `sk_` session and edits local Recipe sources before an
-in-place `update --live`. Read [live.md](references/live.md) before starting a
-live session. A deploy with `OPEN_ARTIFACTS_HANDOFF=1` may also expose host-side
+`update --live` Draft save and explicit `live checkpoint`. Read
+[live.md](references/live.md) before starting a live session. A deploy with
+`OPEN_ARTIFACTS_HANDOFF=1` may also expose host-side
 webcam/microphone recording and playback; it is viewer chrome, not a Recipe
 format or an artifact-side API. Both surfaces are optional and may be absent
 on self-hosted instances.
@@ -358,8 +358,10 @@ first; review the current version and use `--force` only when overwriting it is
 intentional. `--label` is capped at 60 UTF-8 bytes.
 
 For a change requested through Live, use `node "$ARTIFACT_CLI" update <id> --live`
-after editing the Recipe. This replaces the currently served version in place:
-an artifact at v10 remains v10, and a later ordinary `update` creates v11.
+after editing the Recipe. This saves a CAS-protected Draft revision and leaves
+all published versions unchanged. After review or validation, run
+`node "$ARTIFACT_CLI" live checkpoint <id>` to atomically create the next
+immutable version. A stale base preserves the Draft and returns a conflict.
 
 `build <recipe> --output <path>` writes an explicit local preview; add
 `--standalone` only for an HTML Recipe. `list`, `show <id> [--v N]`, and

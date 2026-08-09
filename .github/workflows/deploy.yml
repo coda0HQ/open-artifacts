@@ -1,0 +1,82 @@
+name: Gated deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Deployment environment
+        required: true
+        type: choice
+        options: [preview, staging, production]
+      commit:
+        description: Full commit SHA already reviewed for deployment
+        required: true
+        type: string
+      promotion_phase:
+        description: Environment or progressive Production phase
+        required: true
+        type: choice
+        options: [preview, staging, canary, expanded, general-team]
+      evidence_sha256:
+        description: SHA-256 of the approved release or prior-phase receipt
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  deployments: write
+  id-token: write
+
+concurrency:
+  group: deploy-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  verify-and-deploy:
+    name: Verify and deploy ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Require a full immutable commit SHA
+        env:
+          RELEASE_COMMIT: ${{ inputs.commit }}
+          DEPLOY_ENVIRONMENT: ${{ inputs.environment }}
+          PROMOTION_PHASE: ${{ inputs.promotion_phase }}
+          EVIDENCE_SHA256: ${{ inputs.evidence_sha256 }}
+        run: |
+          test "${#RELEASE_COMMIT}" -eq 40
+          test "${#EVIDENCE_SHA256}" -eq 64
+          test "$(printf '%s' "$EVIDENCE_SHA256" | tr -cd '0-9a-fA-F')" = "$EVIDENCE_SHA256"
+          if test "$DEPLOY_ENVIRONMENT" = production; then
+            printf '%s' "$PROMOTION_PHASE" | grep -Eq '^(canary|expanded|general-team)$'
+          else
+            test "$DEPLOY_ENVIRONMENT" = "$PROMOTION_PHASE"
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.commit }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm verify
+      - run: pnpm check:environments
+      - name: Build immutable deployment bundle
+        run: pnpm exec wrangler deploy --dry-run --outdir dist/worker -c wrangler.${{ inputs.environment }}.jsonc
+      - name: Apply numbered D1 migrations before Worker code
+        run: pnpm exec wrangler d1 migrations apply DB --remote -c wrangler.${{ inputs.environment }}.jsonc
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Deploy the verified commit
+        run: pnpm exec wrangler deploy -c wrangler.${{ inputs.environment }}.jsonc
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

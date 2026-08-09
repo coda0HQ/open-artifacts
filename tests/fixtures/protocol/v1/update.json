@@ -1,0 +1,11 @@
+{
+  "content": "<main>protocol fixture v2</main>",
+  "format": "html",
+  "title": "Protocol fixture",
+  "description": "A v1 update request",
+  "favicon": "🧪",
+  "label": "revision",
+  "encrypted": null,
+  "baseVersion": 1,
+  "force": false
+}

@@ -1,237 +1,79 @@
-# Open Artifacts — Architecture
+# Open Artifacts Foundation architecture
 
-Open-source clone of Claude Code Artifacts, self-hosted entirely on Cloudflare.
-An agent skill (installed via `npx skills add`) lets any coding agent publish
-self-contained HTML/Markdown pages to a URL, share them (optionally
-password-encrypted, zero-knowledge), and keep them updated as the project they
-describe evolves.
+Open Artifacts Foundation is a maintainable, self-hosted Artifact lifecycle engine pinned to upstream baseline `a03a8c3721dd0021c78ea24533d6f7a7f4af07b3`. An Agent builds deterministic Recipe sources, the CLI publishes them, and a Cloudflare Worker serves immutable versions through a constrained Viewer. The first production boundary is a private/team-scoped deployment; a public multi-tenant service is a separate product decision.
 
-## Components
+## System map
 
-```
-                 npx skills add coda0HQ/open-artifacts
-                                │
-┌─ user's project ──────────────▼─────────────┐
-│  .claude/skills/using-open-artifacts/       │
-│    SKILL.md            (agent instructions) │
-│    scripts/artifact.mjs (publish CLI)       │
-│  Recipe JSON + ordered fragments (sources)  │
-│  .artifacts/manifest.json  (Manifest v2)    │
-│  .artifacts/credentials.json (gitignored)   │
-└──────────────┬───────────────────────────────┘
-               │ HTTPS JSON (bearer tokens)
-┌─ Cloudflare ─▼───────────────────────────────┐
-│  Worker (Hono)                               │
-│    POST /api/artifacts        create         │
-│    PUT  /api/artifacts/:id    update         │
-│    GET  /api/artifacts/:id    metadata       │
-│    GET  /api/artifacts/:id/raw raw content   │
-│    DELETE /api/artifacts/:id  delete         │
-│    GET  /a/:id                viewer page    │
-│    GET  /                     landing (asset)│
-│  D1: metadata, token hashes, version index   │
-│  R2: content bodies content/<id>/<version>   │
-│  Abuse: optional CREATE_TOKEN bearer gate   │
-└──────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+  Agent[Agent + Recipe fragments] --> CLI[CLI composition + commands]
+  CLI --> API[Hono API]
+  API --> Auth[Authorizer + RateLimiter + QuotaLedger]
+  Auth --> Pub[Publication Service]
+  Pub --> Meta[MetadataStore / D1]
+  Pub --> Blob[BlobStore / R2]
+  API --> Live[RealtimeSessionStore / Durable Object]
+  Meta --> Viewer[Host Viewer]
+  Blob --> Viewer
+  Viewer --> Frame[Opaque-origin Artifact Frame]
+  Pub --> Repair[Reconcile + repair]
+  Meta --> Ops[Migration + backup + restore + telemetry]
 ```
 
-## Storage (D1 + R2)
+The domain-facing ports are `MetadataStore`, `BlobStore`, `RateLimiter`, `QuotaLedger`, `RealtimeSessionStore`, `Clock`, and `IdGenerator`. Memory and Cloudflare implementations run shared contracts. Cloudflare-specific construction and feature flags live in `src/adapters/cloudflare/composition.ts`; domain services do not read Cloudflare globals.
 
-KV was rejected: eventual consistency up to 60 s cross-colo, 1 write/s/key,
-1,000 writes/day free — wrong for frequently-updated artifacts. D1 is strongly
-consistent (metadata, pointers), R2 is strongly consistent read-after-write via
-bindings (bodies). D1's 2 MB row cap forbids storing HTML in D1.
+## Publication and version invariants
 
-- `artifacts(id, token_hash, title, description, favicon, format, encrypted,
-  current_version, created_at, updated_at)`
-- `versions(artifact_id, version, label, size, created_at)`
-- R2 object `content/<id>/<v>`: plaintext body, or for encrypted artifacts a
-  JSON envelope `{v, alg: "AES-GCM", kdf: "PBKDF2-SHA256", iterations, salt,
-  iv, ciphertext}` (all base64).
+D1 and R2 cannot share a physical transaction. Atomic visibility therefore uses an explicit Publication state machine:
 
-Schema is applied lazily at first request (`CREATE TABLE IF NOT EXISTS`,
-memoized per isolate) — zero-step deploys for self-hosters and zero-setup
-vitest miniflare tests.
+1. create or replay an actor-scoped idempotent `pending` Publication;
+2. write an immutable, hash-verified R2 Blob;
+3. transition to `blob_ready`;
+4. commit version metadata, latest pointer, audit row, and `committed` state in one D1 batch guarded by version CAS;
+5. expose only `committed` versions.
 
-## Identity and auth (no accounts)
+A CAS loser returns a structured `409`; the same idempotency key and canonical request replays the original receipt, while a different request fails. A missing Blob can never become latest. Reconciliation classifies stale publications, missing Blobs, and orphan Blobs with paginated, resumable, audited repair commands.
 
-- Artifact id: 12 chars, crypto-random, base58-like alphabet (unguessable,
-  unlisted-by-default sharing model).
-- Write token: `wt_` + 32 random bytes base64url, returned once at create.
-  Only SHA-256(token) is stored; compared with `crypto.subtle.timingSafeEqual`.
-- Optional instance gate: if the `CREATE_TOKEN` secret is set on the deploy,
-  POST /api/artifacts requires it as a bearer token. Unset = open instance
-  (no per-request rate limiting is applied — the bearer gate is the only
-  abuse guard).
-- Optional canonical domain: if `PUBLIC_URL` (e.g. `https://coda0.com`) is set
-  on the deploy, it is the base of every generated link (the API `url`,
-  `og:url`, `og:image`) regardless of the host the request arrived on — so the
-  hosted SaaS instance keeps links on its domain even when reached via
-  `*.workers.dev`. Unset, links derive from the request origin, so a
-  self-hosted instance's links stay on its own domain unchanged.
+Every published version is immutable. Rollback copies a selected historical version into a new version. Live writes a separate revision-CAS Draft with lease/expiry metadata; only an explicit Checkpoint publishes the Draft as the next immutable version. Disconnect, stale-base, or revision conflicts preserve user work.
 
-## Artifact rendering contract
+## Storage and schema lifecycle
 
-- Authors write a strict Recipe plus ordered fragments. The local builder
-  validates and deterministically composes final HTML or Markdown in memory.
-  The Worker wraps the published body at serve time in a doctype/head/body
-  skeleton with a minimal CSS reset, emoji favicon, viewport meta, and theme
-  support.
-- Theme contract: `@media (prefers-color-scheme: dark)` is the default signal;
-  a floating toggle stamps `data-theme="light|dark"` on `<html>` which must
-  win in both directions.
-- `PUT` accepts `baseVersion`; mismatch → 409 unless `force: true`.
-- Versions have optional `label` (≤ 60 chars); `GET /a/:id?v=N` serves history.
-- Favicon: 1–2 emoji, validated server-side.
-- Same id = same URL forever; redeploys bump the version.
+- D1 owns artifact/version/publication metadata, hashes, credential lifecycle, comments, quota reservations, audit rows, and the Live Draft index.
+- R2 owns immutable content-addressed bodies and handoff media/events.
+- Durable Objects own real-time coordination and persisted Draft/session state when `LIVE_DO` is bound.
 
-## Serving untrusted HTML safely
+Numbered SQL files in `migrations/` are the only production schema mutation path. Deployments apply migrations before application rollout. Requests and readiness probes validate the supported schema version and return not-ready on incompatibility; production request handling never executes DDL. Fresh and upgraded databases must converge under `pnpm test:migrations`.
 
-Every user-content response (viewer page and /raw) carries:
+## Authorization, abuse, and cost boundaries
 
-```
-Content-Security-Policy: sandbox allow-scripts allow-modals allow-forms
-  allow-popups; default-src 'none'; script-src 'unsafe-inline';
-  style-src 'unsafe-inline'; img-src data: blob:; font-src data:;
-  media-src data: blob:; connect-src 'none'; form-action 'none';
-  base-uri 'none'
-X-Content-Type-Options: nosniff
-Referrer-Policy: no-referrer
-```
+The engine combines an injected `Authorizer` with scoped capabilities (`wt_`, `ch_`, managed `sk_` where provided). The executable authorization matrix denies unknown route/verb combinations and separates create, view, write, manage, comment, Live, and repair authority. Credential material is hashed at rest or kept in the OS/file Secret Store; rotation, grace, revocation, recovery, and audit are explicit.
 
-The CSP `sandbox` directive gives the document an opaque origin (the
-response-header equivalent of iframe sandbox): artifact scripts cannot read
-cookies/localStorage of the serving origin nor call the API with ambient
-credentials, and `connect-src 'none'`/`default-src 'none'` blocks all external
-exfiltration. workers.dev is on the Public Suffix List, isolating instances
-from each other. The wrapper's theme toggle wraps localStorage in try/catch
-(opaque origin throws) — theme choice is per-load, which is acceptable.
+A low-latency `RateLimiter` protects floods, while the exact D1-backed `QuotaLedger` bounds storage, versions, comments, handoff bytes, daily writes, and concurrent Live sessions. Production forbids open creation and requires explicit anonymous-comment and rate policies. Invalid/missing bindings, policies, secrets, or schema fail closed.
 
-## Link previews (OpenGraph)
+## Viewer trust zones
 
-Every viewer response (plain and unlock shell) carries OpenGraph + Twitter
-tags. `og:image` points at `GET /og/:id`, which returns a 1200x630 **PNG** —
-not SVG, because Facebook, X, LinkedIn, Slack, iMessage and Discord all refuse
-to render an SVG `og:image`, so an SVG card shows no preview image at all.
+The Host Viewer is trusted service chrome. It owns same-origin API/WebSocket calls, Toolbar, Version, Comments, Live, Handoff, password state, and the guarded bridge. Artifact content runs in an iframe/response sandbox with an opaque origin and strict CSP: no cookies, storage, ambient credentials, or arbitrary network access. Host↔Frame messages validate the exact Window identity; frame messages never select a URL, method, headers, or endpoint for a Host request.
 
-The card is a self-contained SVG (dark card, accent bar, wrapped title +
-description, brand wordmark) rasterized with `@resvg/resvg-wasm`. resvg has no
-system fonts, so two Inter subsets (one weight each, Latin + punctuation,
-~90 KB each) are instanced/subset by `scripts/vendor-fonts.mjs` and embedded as
-base64 in `src/generated/fonts.ts`; the `.wasm` is a static import (the runtime
-forbids compiling Wasm from bytes). Total bundle stays near 1 MB gzipped, well
-under the 3 MB free-plan limit. The emoji favicon is deliberately omitted from
-the card: resvg cannot render color emoji, and rendering it would need an
-external Twemoji fetch, which the "no external requests" model rejects — it
-still appears as the page favicon. Because the fonts are Latin-only, a title
-outside that range (e.g. CJK) would draw blank, so a title (or description)
-with uncovered codepoints falls back to a text-light branded card; the real
-title/description still reach viewers via the `og:*` meta tags. User-controlled
-title/description are HTML-escaped into the SVG text nodes, and the response is
-cached (`max-age=300`) so crawlers do not re-rasterize on every hit.
+Browser runtime sources are reviewed modules under `src/viewer/runtime/` and typed state/parsers under `src/viewer/`. `scripts/build-viewer-runtime.mjs` creates deterministic `src/generated/viewer-runtime.ts`, rejecting external requests, `eval`, `new Function`, and unsafe frame networking. Every inline script receives the per-request nonce.
 
-## Password protection (zero-knowledge)
+## CLI and protocol
 
-The server never sees the password or plaintext:
+The CLI root only parses arguments, composes dependencies, and dispatches. Commands live in `skills/using-open-artifacts/scripts/commands/`; atomic State/Manifest, locking, Transport, Watch, Secret Store, validation, and cryptography live in `scripts/lib/`. State writes use a lock, checksum, private mode where needed, temporary file, fsync, and atomic rename; corruption is quarantined rather than overwritten.
 
-- The skill CLI encrypts locally: PBKDF2-HMAC-SHA256, 600,000 iterations,
-  16-byte salt → AES-256-GCM, fresh 12-byte IV per version.
-- Viewer: the Worker serves a trusted unlock shell (strict CSP, ciphertext
-  envelope inlined — `connect-src 'none'` still holds). The browser derives
-  the key, decrypts, wraps the plaintext with the same skeleton template, and
-  injects it into `<iframe sandbox="allow-scripts allow-modals" srcdoc>`.
-- Wrong password = AES-GCM auth failure → error message, no content.
-- Workers could not do this server-side anyway: workerd caps PBKDF2 at
-  100,000 iterations and free CPU at 10 ms.
+`protocol/v1/` is the shared Create/Update/Manifest/Live/Error boundary. Clients advertise `Open-Artifacts-Protocol: 1`; unsupported explicit versions fail with `426`. Worker, CLI, and Viewer consume the same Golden Fixtures, and the checked catalog hash makes protocol drift reviewable. Incompatible changes require a new major directory and the documented dual-read window.
 
-Markdown is rendered client-side (vendored `marked` inlined into the page)
-so the encrypted path and the plain path share one code path, and the Worker
-stays under the CPU cap.
+## Operations and delivery
 
-## The skill and auto-updating artifacts
+Structured telemetry carries request, artifact, publication, version, actor, and trace identifiers through API/D1/R2/DO operations with centralized redaction. Metrics cover every P0 risk and drive owned alerts/runbooks. Daily encrypted D1 export uses separate-account storage; staging restore validates schema, counts, sampled hashes, Viewer read, and unauthorized-write rejection. Load profiles and quality budgets gate bundle size, generated runtime, source concentration, latency, and memory.
 
-Repo layout `skills/using-open-artifacts/{SKILL.md,scripts/artifact.mjs,references/design.md}`
-works with `npx skills add coda0HQ/open-artifacts` (vercel-labs/skills installs
-to `.claude/skills/` by default, `-g` for `~/.claude/skills/`; follows the
-Agent Skills standard so ~70 agents are supported).
+Preview, Staging, and Production use isolated D1/R2/DO/Worker identities and explicit feature policies. CI requires format, generated-output, protocol, docs, budgets, type, secrets, Worker/CLI/contract/migration/DOM/ops/browser tests, and dependency audit. Deployment and release workflows consume the same commit and require environment approval; production promotion follows canary observation with kill switches.
 
-`artifact.mjs` and its Recipe builder (Node ≥ 22, zero deps):
+## Current references
 
-- `validate <recipe>` and `build <recipe> --output <path> [--standalone]`
-- `create <recipe> [--password]`
-- `update <id> [recipe] [--label] [--password]`
-- `migrate <id>` creates Recipe sources for a legacy Manifest v1 entry
-- `status [--hook]` — compares current hashes of files matching each
-  Recipe's watch globs against the snapshot taken at last publish;
-  reports stale artifacts (exit 1, or Stop-hook JSON with
-  `hookSpecificOutput.additionalContext` phrased as factual statements).
-- `list`, `delete <id>`
-- Config resolution: `OPEN_ARTIFACTS_URL` env → `.artifacts/config.json` →
-  `~/.config/open-artifacts/config.json`.
-
-State in the user's project:
-
-- Shared Recipe JSON and fragments are commit-ready reproducible sources.
-- `.artifacts/manifest.json` (Manifest v2, committed): id, URL, version,
-  Recipe path, Recipe/input/output hashes, build strategy, and snapshot.
-- `.artifacts/recipes.local/`, `.artifacts/fragments.local/`,
-  `manifest.local.json`, previews, and credentials are gitignored.
-- `.artifacts/credentials.json`: write/channel tokens and named passwords.
-
-The builder rejects unknown Recipe keys, project/symlink escapes, duplicate or
-oversized fragments, CSP-incompatible resources and APIs, malformed scripts,
-and invalid Canvas ABI. It injects tokens for HTML and extracts the vendored
-Canvas CSS/JS from `canvas.md`; Canvas controls are builder-owned. Small builds
-compose directly. Large builds use local structure/detail passes, then both
-paths issue exactly one final publish request.
-
-Auto-update loop: SKILL.md instructs the agent to run `status` after
-completing work and regenerate any stale artifact within its recorded scope;
-a Stop hook (`node ${CLAUDE_SKILL_DIR}/scripts/artifact.mjs status --hook`)
-surfaces staleness even when the agent forgets. The Recipe records
-`artifact.autoUpdate`, mirrored as operational Manifest state:
-`status --hook`
-only surfaces entries with `autoUpdate === true`, so the hands-off loop only
-ever acts on artifacts explicitly opted in via `artifact.mjs auto-update
-<id> on|off`; a plain, human-run `status` (no `--hook`) is unaffected and
-still reports every stale watched artifact. The regenerate-vs-`ack` judgment
-itself is unchanged either way. Turning `autoUpdate` on also installs the
-Stop hook if not already present — the one other case besides `install-hook`
-itself where the CLI writes `.claude/settings.json`, and it does so only as
-the direct, visible consequence of that explicit command. Updates from
-CI/plain git are out of scope for v1 (documented).
-
-## Stack
-
-- Wrangler 4 (`wrangler.jsonc`, compatibility_date 2026-07-03), workers.dev
-- Hono 4.12 (typed bindings, bearer-auth middleware)
-- Vitest 4.1 + @cloudflare/vitest-pool-workers 0.18 (`cloudflareTest()` Vite
-  plugin; integration via `exports.default.fetch()` from `cloudflare:workers`)
-- Biome, pnpm, TypeScript strict; `wrangler types` generates `Env`
-- Static assets (`public/`) for the landing page. `run_worker_first` includes
-  `/` so the Worker fetches the asset via the `ASSETS` binding and, only on the
-  hosted host (`coda0.com`), rewrites its brand tokens to "coda0" with
-  `HTMLRewriter` (`src/home.ts`) — server-side, so crawlers and no-JS visitors
-  see the SaaS identity. Every other deploy returns the asset untouched.
-- The same host rule drives every other place the service names itself:
-  `home.ts`'s `brandFor(hostname)` is the single source `src/wrap.ts` reads for
-  the viewer header's brand chip (coda0.com always shows "coda0" linking to
-  "/", ignoring `BRAND_URL`; other hosts show the neutral "Open Artifacts"
-  credit only when `BRAND_URL` is set), the not-found/invalid-version pages'
-  "Go to ⟨name⟩" link, and the OG card's wordmark — so a deploy's identity
-  stays consistent everywhere instead of drifting per call site.
-
-## Limits
-
-- Content cap 4 MiB (post-base64 for encrypted) — fits free-tier envelope.
-  Overridable per instance via the `MAX_CONTENT_MIB` env var (default 4;
-  non-numeric or `<= 0` falls back to 4). Both the Worker (`resolveMaxContentBytes`
-  in `src/api.ts`) and the skill builder's output gate read it. Raising it far
-  past a few MiB is at the operator's own risk: the request body is buffered by
-  `c.req.json()` and held as a JS string, so the real ceiling is the Cloudflare
-  Worker request-body / memory limit, not app code (R2/D1 do not constrain it).
-- No per-request rate limiting is implemented; the optional `CREATE_TOKEN`
-  bearer gate is the only abuse guard. (Cloudflare's edge-level protections
-  sit in front of the Worker but are not configured by this project.)
-- Free tier headroom: Workers 100k req/day, R2 1M writes/mo, D1 100k row
-  writes/day.
+- [Protocol compatibility](../protocol/README.md)
+- [Quality budgets](quality-budgets.md)
+- [Authorization matrix](security/authorization-matrix.md)
+- [Threat model](security/threat-model.md)
+- [SLO and error budget](ops/slo.md)
+- [Runbooks](runbooks/)
+- [Complete implementation plan](project-plan.md)

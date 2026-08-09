@@ -46,6 +46,49 @@ async function createArtifact(
 }
 
 describe("POST /api/artifacts", () => {
+  it("replays idempotent creation with the same id, token, and publication", async () => {
+    const headers = { "idempotency-key": "api-create-retry-0001" };
+    const payload = {
+      content: "<h1>Created once</h1>",
+      title: "Idempotent create",
+      favicon: "🧭",
+    };
+    const first = await exports.default.fetch(
+      jsonRequest("POST", "/api/artifacts", payload, headers),
+    );
+    expect(first.status).toBe(201);
+    const firstBody = (await first.json()) as CreateResult & {
+      publicationId: string;
+      idempotentReplay: boolean;
+    };
+    expect(firstBody.idempotentReplay).toBe(false);
+
+    const replay = await exports.default.fetch(
+      jsonRequest("POST", "/api/artifacts", payload, headers),
+    );
+    expect(replay.status).toBe(201);
+    expect(await replay.json()).toMatchObject({
+      id: firstBody.id,
+      writeToken: firstBody.writeToken,
+      version: 1,
+      publicationId: firstBody.publicationId,
+      idempotentReplay: true,
+    });
+
+    const reused = await exports.default.fetch(
+      jsonRequest(
+        "POST",
+        "/api/artifacts",
+        { ...payload, content: "<h1>Different</h1>" },
+        headers,
+      ),
+    );
+    expect(reused.status).toBe(409);
+    expect(await reused.json()).toMatchObject({
+      code: "IDEMPOTENCY_KEY_REUSED",
+    });
+  });
+
   it("publishes a new HTML artifact", async () => {
     const created = await createArtifact();
     expect(created.id).toMatch(/^[1-9A-HJ-NP-Za-km-z]{12}$/);
@@ -306,6 +349,49 @@ describe("canonical public URL (PUBLIC_URL)", () => {
 });
 
 describe("PUT /api/artifacts/:id", () => {
+  it("replays an update with the same Idempotency-Key and rejects key reuse", async () => {
+    const created = await createArtifact();
+    const headers = {
+      authorization: `Bearer ${created.writeToken}`,
+      "idempotency-key": "api-update-retry-0001",
+    };
+    const payload = { content: "<p>idempotent</p>", baseVersion: 1 };
+
+    const first = await exports.default.fetch(
+      jsonRequest("PUT", `/api/artifacts/${created.id}`, payload, headers),
+    );
+    expect(first.status).toBe(200);
+    const firstBody = (await first.json()) as {
+      version: number;
+      publicationId: string;
+      idempotentReplay: boolean;
+    };
+    expect(firstBody).toMatchObject({ version: 2, idempotentReplay: false });
+
+    const replay = await exports.default.fetch(
+      jsonRequest("PUT", `/api/artifacts/${created.id}`, payload, headers),
+    );
+    expect(replay.status).toBe(200);
+    expect(await replay.json()).toMatchObject({
+      version: 2,
+      publicationId: firstBody.publicationId,
+      idempotentReplay: true,
+    });
+
+    const reused = await exports.default.fetch(
+      jsonRequest(
+        "PUT",
+        `/api/artifacts/${created.id}`,
+        { content: "<p>different</p>", baseVersion: 1 },
+        headers,
+      ),
+    );
+    expect(reused.status).toBe(409);
+    expect(await reused.json()).toMatchObject({
+      code: "IDEMPOTENCY_KEY_REUSED",
+    });
+  });
+
   it("updates content with a valid write token and serves it immediately", async () => {
     const created = await createArtifact();
     const res = await exports.default.fetch(
@@ -502,7 +588,7 @@ describe("compare-and-swap update safety (store layer)", () => {
       baseVersion: null,
       force: false,
     });
-    expect(winner).toBe(2);
+    expect(winner).toMatchObject({ version: 2, replayed: false });
 
     // Second update from the SAME stale snapshot must conflict — the row's
     // current_version is now 2, not 1, so the CAS WHERE clause matches nothing.
@@ -522,7 +608,8 @@ describe("compare-and-swap update safety (store layer)", () => {
       (loser as { conflict: true; currentVersion: number }).currentVersion,
     ).toBe(2);
 
-    // The loser never wrote R2: only versions 1 and 2 exist, and v2 holds the winner.
+    // The loser's immutable blob is non-visible and eligible for reconciliation:
+    // only versions 1 and 2 are committed, and v2 holds the winner.
     const meta = (await (
       await exports.default.fetch(`${BASE}/api/artifacts/${created.id}`)
     ).json()) as { versions: Array<{ version: number }> };

@@ -1,5 +1,7 @@
 node_modules/
 dist/
+playwright-report/
+test-results/
 .wrangler/
 .dev.vars
 *.log
@@ -9,6 +11,7 @@ dist/
 .artifacts/previews/
 .artifacts/recipes.local/
 .artifacts/fragments.local/
+.artifacts/rehearsals/
 
 .claude/
 # Local git worktrees. Not ignoring these lets `git add -A` stage each one as a

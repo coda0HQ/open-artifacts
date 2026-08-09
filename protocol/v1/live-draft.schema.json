@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-artifacts.dev/protocol/v1/live-draft.schema.json",
+  "title": "Open Artifacts v1 Live draft save",
+  "type": "object",
+  "required": ["protocolVersion", "expectedRevision", "baseVersion", "content"],
+  "properties": {
+    "protocolVersion": { "const": 1 },
+    "expectedRevision": { "type": "integer", "minimum": 0 },
+    "baseVersion": { "type": "integer", "minimum": 1 },
+    "leaseSeconds": { "type": "integer", "minimum": 1, "maximum": 300 },
+    "content": { "type": "string" },
+    "format": { "enum": ["html", "markdown", "react"] },
+    "title": { "type": "string", "maxLength": 200 },
+    "description": { "type": "string", "maxLength": 1000 },
+    "favicon": { "type": "string" },
+    "label": { "type": ["string", "null"], "maxLength": 60 },
+    "encrypted": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["salt", "iv", "iterations"],
+          "properties": {
+            "salt": { "type": "string" },
+            "iv": { "type": "string" },
+            "iterations": { "type": "integer", "minimum": 1000 }
+          },
+          "additionalProperties": false
+        }
+      ]
+    }
+  },
+  "additionalProperties": false
+}

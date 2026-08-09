@@ -1,0 +1,13 @@
+
+.oa-dock-btn{position:relative;display:inline-flex;align-items:center;gap:.35rem;height:30px;padding:0 .6rem;border-radius:6px;border:1px solid transparent;background:transparent;color:var(--oa-fg);font:inherit;font-weight:500;line-height:1;cursor:pointer;opacity:.85;transition:opacity .15s,background .15s,border-color .15s;flex-shrink:0}
+.oa-dock-btn:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+.oa-dock-btn:not(.oa-dock-btn--indicator):active{transform:translateY(1px)}
+.oa-dock-btn .oa-dock-icon{display:inline-flex;align-items:center}
+.oa-dock-btn .oa-dock-icon svg{width:14px;height:14px;display:block}
+.oa-dock-btn .oa-dock-label{white-space:nowrap}
+.oa-dock-btn[aria-pressed="true"],.oa-dock-btn--active{background:color-mix(in oklab,var(--oa-accent),transparent 88%);border-color:color-mix(in oklab,var(--oa-accent),transparent 60%);color:var(--oa-accent);opacity:1}
+.oa-dock-btn--primary{background:var(--oa-accent);color:var(--oa-accent-on);border-color:transparent;opacity:1;font-weight:600}
+.oa-dock-btn--record{background:var(--oa-danger);color:#fff;border-color:transparent;opacity:1}
+.oa-dock-btn--exit{margin-left:auto}
+.oa-dock-btn--indicator{cursor:default}
+@media (hover:hover) and (pointer:fine){.oa-dock-btn:not(.oa-dock-btn--record):not(.oa-dock-btn--primary):not(.oa-dock-btn--indicator):not(.oa-dock-btn--blur):not(.oa-dock-btn--discard):hover{opacity:1;background:color-mix(in oklab,var(--oa-fg),transparent 94%)}.oa-dock-btn--primary:hover{background:color-mix(in oklab,var(--oa-accent),var(--oa-fg) 10%)}}

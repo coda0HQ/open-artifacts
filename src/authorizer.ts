@@ -1,4 +1,5 @@
 import type { Context } from "hono";
+import { resolveRuntimePolicy } from "./config";
 import type { ArtifactRecord } from "./store";
 import { sha256Hex, timingSafeEqual } from "./tokens";
 
@@ -30,8 +31,13 @@ function bearerToken(c: Context): string | null {
 
 export const defaultAuthorizer: Authorizer = {
   async authorizeCreate(c) {
+    const policy = resolveRuntimePolicy(
+      c.env as unknown as Record<string, unknown>,
+    );
+    if (policy.publicCreate === "disabled") return null;
     const createToken = (c.env as { CREATE_TOKEN?: string }).CREATE_TOKEN;
-    if (createToken !== undefined && createToken !== "") {
+    if (policy.publicCreate === "token" || createToken) {
+      if (!createToken) return null;
       const token = bearerToken(c);
       const presented = token === null ? "" : token;
       if (

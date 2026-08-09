@@ -52,10 +52,11 @@ Feature: Live editing
   Scenario: An offline Live toggle guides the user to start the watcher
     Given no agent is connected to the artifact
     When the user activates the Live toggle
-    Then the Live dock opens a slim "Live agent not connected" banner with a "Show start prompt" disclosure
-    And the startup prompt's copy button sits inside the expanded disclosure
+    Then the Live dock opens a "Live agent not connected" banner with the start prompt already expanded
+    And the disclosure reads "Hide start prompt" and focuses the startup prompt's copy button
+    And collapsing the disclosure changes its label to "Show start prompt"
     And the prompt tells the agent to run `node artifact.mjs live <id> --watch`
-    And the banner auto-shows only once per session — a reopened offline dock keeps just the status row
+    And the expanded banner auto-shows only once per session — a reopened offline dock keeps just the status row
     And while the banner is open, Escape closes the banner before it closes the dock
     And the Live editor still opens in PICKING mode so the user can select an element
 
@@ -76,12 +77,12 @@ Feature: Live editing
     And the host reloads the frame and shows CONFIRMED "Applied"
     And then re-arms pick and returns to PICKING for the next item
 
-  Scenario: A Live edit replaces the current version in place
+  Scenario: A Live edit checkpoints an immutable new version
     Given the artifact is currently served at version 10
     When the agent applies the Live-edited Recipe with the Live update command
-    Then the artifact content changes while the served version remains 10
-    And the version history still contains no version 11
-    And a later ordinary update still creates version 11
+    Then the artifact content is committed as version 11
+    And the content hash behind version 10 remains unchanged
+    And a later ordinary update creates version 12
 
   Scenario: The viewer is told when a new version is published mid-session
     Given a live channel is up (the owner's page holds a WebSocket)
@@ -277,6 +278,7 @@ Feature: Live editing
     And the agent edits the artifact source and runs `node artifact.mjs live <id> --reply <eid> done --data '{"status":"done","appliedEntryIds":[...],"failed":[],"files":[...],"notes":[]}'`
     Then the DO clears that page's staged edits and broadcasts {type:'done', id, status, appliedEntryIds, failed}
     And the host shows "Applied" with the applied/failed summary, empties the Apply pill, and reloads the frame
+    And a late edit-commit response cannot resurrect the queued Apply pill after done
 
   Scenario: Discarding the stash clears staged ops
     When the user clicks the discard button on the Apply pill

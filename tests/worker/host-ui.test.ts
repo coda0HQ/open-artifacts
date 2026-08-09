@@ -104,6 +104,23 @@ describe("host page interactive UI (tasks 009/010/011)", () => {
     expect(drawerRule).not.toContain("box-shadow:");
   });
 
+  it("keeps the comments drawer mutually exclusive with editing docks", async () => {
+    const html = await hostHtml();
+
+    expect(html).toContain("window.__oaCommentsDrawer={");
+    expect(html).toContain(
+      "if(window.__oaCommentsDrawer&&window.__oaCommentsDrawer.isOpen())",
+    );
+    expect(html).toContain("window.__oaCommentsDrawer.close()");
+    expect(html).toContain("getActive:function(){return active;}");
+    expect(html).toContain(
+      "if(active&&!window.__oaDock.close(active))return false",
+    );
+    expect(html).toContain(
+      "if(window.__oaCommentsDrawer&&!window.__oaCommentsDrawer.open())return",
+    );
+  });
+
   it("still serves the interactive UI on the encrypted unlock shell", async () => {
     // Encrypted artifacts get interactive (unanchored) comments too.
     const html = await hostHtml({
@@ -239,6 +256,24 @@ describe("host page interactive UI (tasks 009/010/011)", () => {
     // An always-available action, so the more control never opens an empty menu.
     expect(html).toContain('textContent="Copy text"');
     expect(html).toContain("navigator.clipboard.writeText");
+  });
+
+  it("renders accessible Live Draft and Checkpoint states", async () => {
+    const html = await hostHtml();
+
+    expect(html).toContain('id="oa-live-publication"');
+    expect(html).toContain('aria-live="polite" aria-atomic="true"');
+    expect(html).toContain("Published history is immutable");
+    expect(html).toContain("Saving Draft…");
+    expect(html).toContain("Unsaved Draft r");
+    expect(html).toContain("Checkpointing Draft r");
+    expect(html).toContain("Conflict — Draft r");
+    expect(html).toContain('id="oa-live-checkpoint"');
+    expect(html).toContain("/live/draft");
+    expect(html).toContain("/live/checkpoint");
+    expect(html).toContain("paintPublication(true)");
+    expect(html).toContain("@media (prefers-reduced-motion:reduce)");
+    expect(html).toContain("@media (max-width:480px)");
   });
 
   it("grants owner moderation from ?wt= and strips the token from the URL", async () => {

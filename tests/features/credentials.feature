@@ -1,4 +1,4 @@
-Feature: Credentials file mode hardening
+Feature: Crash-safe credentials and lifecycle
   As a user persisting artifact encryption passwords on disk
   I want the credentials file written with restrictive permissions
   So that no other OS user on the machine can read my write tokens or passwords
@@ -28,3 +28,21 @@ Feature: Credentials file mode hardening
     And another process writes a token into credentials.json during the PUT
     When I run update for that artifact
     Then the concurrent token is still present after the update
+
+  Scenario: Concurrent state mutations are serialized
+    Given four CLI processes share one state file
+    When each process performs twenty-five read-modify-write operations
+    Then all one hundred operations are present
+    And the state checksum is valid
+
+  Scenario: Rotate with no grace revokes the old write token immediately
+    Given an artifact with an active write credential
+    When I rotate it with zero grace seconds
+    Then the new write token is stored without being printed
+    And the old write token is rejected
+
+  Scenario: Manager recovery revokes all old credentials
+    Given every locally stored write token is unavailable
+    When an authorized manager recovers the artifact credential
+    Then exactly one new primary credential is active
+    And prior credentials remain revoked

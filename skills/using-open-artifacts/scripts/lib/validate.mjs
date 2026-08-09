@@ -19,6 +19,7 @@ const VENDOR_DIR = join(
 const MERMAID_BUNDLE = join(VENDOR_DIR, "mermaid.bundle.mjs");
 const LINKEDOM_BUNDLE = join(VENDOR_DIR, "linkedom.bundle.mjs");
 
+/** @type {Array<[RegExp, string]>} */
 const externalChecks = [
   // Any external (http/https) <script src> is blocked — runtime libraries load
   // same-origin from /vendor/* (e.g. /vendor/mermaid.runtime.js), so no external

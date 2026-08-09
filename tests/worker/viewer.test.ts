@@ -142,10 +142,10 @@ describe("GET /a/:id (plain HTML) — host page", () => {
     expect(frameCsp).not.toContain("allow-same-origin");
     const frameHtml = await frameRes.text();
     expect(frameHtml).toContain("<h1>Wrapped</h1>");
-    // No host chrome (og/title meta, header element, drawer) leaks into the
+    // No host chrome (OG meta, header element, drawer) leaks into the
     // frame — it renders no <header>, even though the frame's reset CSS
     // still carries the (unused, harmless) .oa-header selector rules.
-    expect(frameHtml).not.toContain("<title>");
+    expect(frameHtml).toContain("<title>Viewer Test</title>");
     expect(frameHtml).not.toContain("<header");
     expect(frameHtml).not.toContain("oa-cm-drawer");
   });

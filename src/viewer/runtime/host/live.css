@@ -1,0 +1,113 @@
+
+.oa-live-toggle{position:relative;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border:1px solid transparent;background:transparent;color:var(--oa-muted);border-radius:6px;cursor:pointer;transition:color .15s,background .15s;flex-shrink:0}
+.oa-live-toggle::before{content:"";position:absolute;inset:-6px}
+.oa-live-toggle:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+.oa-live-toggle:active{transform:translateY(1px)}
+.oa-live-toggle svg{display:block;width:16px;height:16px}
+.oa-live-toggle[aria-expanded="true"]{color:var(--oa-accent);background:color-mix(in oklab,var(--oa-accent),transparent 88%)}
+.oa-live-toggle[data-agent="on"],.oa-live-toggle[data-agent="busy"]{width:auto;gap:.35rem;padding-inline:.4rem}
+.oa-live-connection{display:none;align-items:center;gap:.25rem;color:var(--oa-accent);font-size:.7rem;font-weight:600;white-space:nowrap}
+.oa-live-connection[hidden]{display:none}
+.oa-live-toggle[data-agent="on"] .oa-live-connection,.oa-live-toggle[data-agent="busy"] .oa-live-connection{display:inline-flex}
+.oa-live-connection::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0}
+@media (hover:hover) and (pointer:fine){.oa-live-toggle:hover{color:var(--oa-fg);background:color-mix(in oklab,var(--oa-fg),transparent 90%)}}
+/* Agent-presence dot: set by LIVE_SCRIPT from /live/status. The pulsing halo
+   is informational, like the handoff rec dot — never on high-frequency
+   actions. Three states (impeccable semantics): on = accent pill, no dot;
+   busy (a pending event is leased to the agent) = the accent dot pulses;
+   off = the mark dims and an amber dot pulses, so the user knows the watcher
+   dropped before they start picking. */
+.oa-live-toggle[data-agent="busy"]::after{content:"";position:absolute;top:2px;right:2px;width:7px;height:7px;border-radius:50%;background:var(--oa-accent);box-shadow:0 0 0 2px color-mix(in oklab,var(--oa-bg),transparent 10%),0 0 0 0 color-mix(in oklab,var(--oa-accent),transparent 55%)}
+@media (prefers-reduced-motion:no-preference){.oa-live-toggle[data-agent="busy"]::after{animation:oa-live-agent-pulse 2s ease-out infinite}}
+@keyframes oa-live-agent-pulse{to{box-shadow:0 0 0 2px color-mix(in oklab,var(--oa-bg),transparent 10%),0 0 0 5px transparent}}
+.oa-live-toggle[data-agent="off"]::after{content:"";position:absolute;top:2px;right:2px;width:6px;height:6px;border-radius:50%;background:oklch(77% 0.13 82);box-shadow:0 0 0 2px color-mix(in oklab,var(--oa-bg),transparent 10%)}
+@media (prefers-reduced-motion:no-preference){.oa-live-toggle[data-agent="off"]::after{animation:oa-live-agent-off-pulse 1.4s ease-in-out infinite}}
+@keyframes oa-live-agent-off-pulse{0%,100%{opacity:.45;transform:scale(.9)}50%{opacity:1;transform:scale(1)}}
+#oa-live-apply[hidden],#oa-live-discard[hidden]{display:none}
+.oa-live-guide[hidden]{display:none}
+.oa-live-guide{width:100%;box-sizing:border-box;padding:.4rem .6rem;border:1px solid var(--oa-border);border-radius:10px;background:var(--oa-surface);color:var(--oa-fg);font-family:var(--oa-font);font-size:.8rem;line-height:1.45}
+.oa-live-guide-bar{display:flex;align-items:center;gap:.75rem}
+.oa-live-guide-bar strong{flex:1;font-size:.85rem;font-weight:600}
+.oa-live-guide-close{border:0;background:transparent;color:var(--oa-muted);font:inherit;font-size:.75rem;cursor:pointer;padding:.25rem;border-radius:4px}
+.oa-live-guide-close:hover{color:var(--oa-fg);background:color-mix(in oklab,var(--oa-fg),transparent 92%)}
+.oa-live-guide-close:focus-visible,.oa-live-guide-copy:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+#oa-live-guide-details[hidden]{display:none}
+#oa-live-guide-details p{margin:.65rem 0 0;color:var(--oa-muted)}
+.oa-live-add:disabled{opacity:.5;cursor:default}
+.oa-live-discard.oa-dock-btn--danger{background:color-mix(in oklab,var(--oa-danger),transparent 88%);color:var(--oa-danger);border-color:color-mix(in oklab,var(--oa-danger),transparent 60%);opacity:1}
+.oa-live-guide-text{display:block;width:100%;min-height:8rem;resize:vertical;padding:.55rem;border:1px solid var(--oa-border);border-radius:6px;background:var(--oa-surface);color:var(--oa-fg);font:inherit;font-family:var(--oa-font-mono,ui-monospace,monospace);font-size:.75rem;line-height:1.45}
+.oa-live-guide-text:focus{outline:none;border-color:var(--oa-accent);box-shadow:var(--oa-focus-ring)}
+.oa-live-guide-actions{display:flex;justify-content:flex-end;margin-top:.65rem}
+.oa-live-guide-copy{min-height:28px;padding:.3rem .6rem;border:1px solid transparent;border-radius:6px;background:var(--oa-accent);color:var(--oa-accent-on);font:inherit;font-size:.75rem;font-weight:600;cursor:pointer}
+.oa-live-guide-copy:hover{background:color-mix(in oklab,var(--oa-accent),var(--oa-fg) 10%)}
+.oa-live-guide-copy:active{transform:translateY(1px)}
+#oa-live-root[hidden]{display:none}
+#oa-live-root{position:fixed;inset:0;z-index:2147483645;pointer-events:none;font-family:var(--oa-font);font-size:.8rem}
+#oa-live-dock{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(1rem + env(safe-area-inset-bottom));width:min(28rem,92vw);max-height:calc(100dvh - 6rem);display:flex;flex-direction:column;gap:.5rem;padding:.6rem .6rem .55rem;border-radius:14px;border:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 4%);background:color-mix(in oklab,var(--oa-bg),transparent 4%);backdrop-filter:blur(14px) saturate(120%);box-shadow:0 8px 32px -4px color-mix(in oklab,var(--oa-fg),transparent 86%),0 1px 0 0 color-mix(in oklab,var(--oa-fg),transparent 92%) inset;overflow-y:auto;pointer-events:auto;z-index:2147483645}
+#oa-live-chips{display:flex;flex-direction:column;gap:.35rem;min-height:0;overflow-y:auto;padding:.1rem}
+#oa-live-chips:empty{display:none}
+#oa-live-chips .oa-live-chip{position:relative;display:block;padding:.5rem .6rem .5rem .65rem;border-radius:8px;background:color-mix(in oklab,var(--oa-surface),transparent 4%);border:0;font-size:.8rem;line-height:1.4}
+#oa-live-chips .oa-live-chip+.oa-live-chip{border-top:1px solid color-mix(in oklab,var(--oa-border),transparent 40%);border-radius:0}
+#oa-live-chips .oa-live-chip:first-child{border-radius:8px 8px 0 0}
+#oa-live-chips .oa-live-chip:last-child{border-radius:0 0 8px 8px}
+#oa-live-chips .oa-live-chip:only-child{border-radius:8px}
+#oa-live-chips .oa-live-chip-tag{display:inline-block;color:color-mix(in oklab,var(--oa-accent),var(--oa-fg) 8%);font-weight:600;font-size:.7rem;letter-spacing:.02em;margin:0 0 .25rem 0;font-family:var(--oa-font-mono,ui-monospace,monospace)}
+#oa-live-chips .oa-live-chip-txt{display:block;color:var(--oa-fg);white-space:normal;word-break:break-word;line-height:1.45;padding-right:1.6rem}
+#oa-live-chips .oa-live-chip-rm{position:absolute;width:24px;height:24px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--oa-muted);cursor:pointer;font-size:18px;line-height:1;top:.4rem;right:.35rem;transition:color .12s,background .12s}
+#oa-live-chips .oa-live-chip-rm:hover{color:var(--oa-fg);background:color-mix(in oklab,var(--oa-fg),transparent 92%)}
+#oa-live-chips .oa-live-chip-rm:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+#oa-live-controls{display:flex;align-items:center;gap:.35rem;flex-shrink:0;padding-bottom:.5rem;border-bottom:1px solid color-mix(in oklab,var(--oa-border),transparent 50%)}
+#oa-live-dock:not(:has(#oa-live-chips:not(:empty))) #oa-live-controls{padding-bottom:0;border-bottom:0}
+#oa-live-submit-wrap{margin-left:.35rem}
+#oa-live-submit-wrap:empty{display:none}
+#oa-live-action-bar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(1rem + 5rem + env(safe-area-inset-bottom));display:flex;pointer-events:auto;z-index:2147483645}
+#oa-live-action-bar[hidden]{display:none}
+#oa-live-action-bar .oa-live-row{display:flex;align-items:center;gap:.35rem;padding:.4rem .45rem;border-radius:12px;border:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 4%);background:color-mix(in oklab,var(--oa-bg),transparent 4%);backdrop-filter:blur(14px) saturate(120%);box-shadow:0 6px 24px -4px color-mix(in oklab,var(--oa-fg),transparent 88%)}
+#oa-live-action-bar .oa-live-row>input,#oa-live-action-bar .oa-live-row>button{height:32px;font:inherit;font-size:.8rem;color:var(--oa-fg);background:var(--oa-surface);border:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 4%);border-radius:6px;padding:0 .6rem;transition:border-color .15s,box-shadow .15s}
+#oa-live-action-bar .oa-live-row>input{min-width:14rem}
+#oa-live-action-bar .oa-live-row>input::placeholder{color:color-mix(in oklab,var(--oa-fg),transparent 55%)}
+#oa-live-action-bar .oa-live-row>input:focus-visible{outline:none;border-color:color-mix(in oklab,var(--oa-accent),var(--oa-border) 40%);box-shadow:var(--oa-focus-ring)}
+#oa-live-action-bar .oa-live-add{background:var(--oa-accent);border-color:transparent;color:var(--oa-accent-on);font-weight:600;cursor:pointer}
+#oa-live-action-bar .oa-live-add:hover{background:color-mix(in oklab,var(--oa-accent),var(--oa-fg) 8%)}
+#oa-live-action-bar .oa-live-add:focus-visible{box-shadow:var(--oa-focus-ring)}
+#oa-live-action-bar .oa-live-add:active{transform:translateY(1px)}
+#oa-live-status{color:var(--oa-muted);font-size:.78rem;line-height:1.4;padding:0 .15rem .5rem;display:flex;align-items:center;gap:.35rem;min-height:1.2rem}
+#oa-live-status[hidden]{display:none}
+#oa-live-status .oa-live-stall{color:var(--oa-danger)}
+#oa-live-status .oa-live-spin{display:inline-block;width:11px;height:11px;border:2px solid color-mix(in oklab,var(--oa-fg),transparent 70%);border-top-color:var(--oa-accent);border-radius:50%;animation:oa-live-spin .7s linear infinite;vertical-align:-1px;flex-shrink:0}
+@keyframes oa-live-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){#oa-live-status .oa-live-spin{animation:none}}
+#oa-live-publication{display:flex;align-items:center;gap:.5rem;min-width:0;padding:.45rem .5rem;border:1px solid var(--oa-border);border-radius:9px;background:var(--oa-surface);color:var(--oa-fg)}
+#oa-live-publication:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+#oa-live-publication[data-tone="draft"]{border-color:color-mix(in oklab,var(--oa-accent),var(--oa-border) 55%)}
+#oa-live-publication[data-tone="conflict"]{border-color:color-mix(in oklab,var(--oa-danger),var(--oa-border) 45%)}
+.oa-live-publication-copy{display:flex;flex-direction:column;gap:.1rem;min-width:0;flex:1}
+#oa-live-publication-label{font-size:.78rem;font-weight:650;line-height:1.25}
+#oa-live-publication-detail{font-size:.68rem;color:var(--oa-muted);line-height:1.3;white-space:normal}
+#oa-live-checkpoint{flex:none;min-height:32px;padding:.3rem .65rem;border:1px solid transparent;border-radius:6px;background:var(--oa-accent);color:var(--oa-accent-on);font:inherit;font-size:.75rem;font-weight:650;cursor:pointer}
+#oa-live-checkpoint[hidden]{display:none}
+#oa-live-checkpoint:disabled{opacity:.55;cursor:wait}
+#oa-live-checkpoint:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+#oa-live-action-bar .oa-live-spin{display:inline-block;width:12px;height:12px;border:2px solid color-mix(in oklab,var(--oa-fg),transparent 70%);border-top-color:var(--oa-accent);border-radius:50%;animation:oa-live-spin .7s linear infinite;vertical-align:-2px;flex-shrink:0}
+/* Touch: coarse pointers get WCAG-friendly targets without disturbing the
+   desktop chrome (LAYOUT_SCRIPT measures the header's actual height, so a
+   44px toggle just grows the header a little on touch devices). */
+@media (pointer:coarse){
+  .oa-live-toggle{width:44px;height:44px}
+  .oa-dock-btn{height:44px}
+  #oa-live-action-bar .oa-live-row>input,#oa-live-action-bar .oa-live-row>button{height:44px}
+}
+/* Narrow viewports: the floating bar wraps instead of overflowing; on phones
+   the prompt input takes its own line so the row reads predictably and every
+   control is a wide touch target. */
+#oa-live-action-bar{max-width:calc(100vw - 1.5rem)}
+#oa-live-action-bar .oa-live-row{flex-wrap:wrap}
+@media (max-width:480px){
+  #oa-live-publication{align-items:stretch;flex-wrap:wrap}
+  #oa-live-checkpoint{width:100%;min-height:44px}
+  #oa-live-action-bar .oa-live-row>input{min-width:0;flex:1 1 100%;order:2}
+  /* The floating bar is shrink-to-fit (positionBar pins it inline), so
+     flex-grow has no free space to distribute — a min-width is what actually
+     widens the touch targets. */
+  #oa-live-action-bar .oa-live-row>button{min-width:4.5rem}
+}

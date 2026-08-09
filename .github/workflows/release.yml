@@ -1,0 +1,118 @@
+name: Immutable release candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Full reviewed commit SHA to rebuild
+        required: true
+        type: string
+      candidate:
+        description: Release-candidate label (for example v1.0.0-rc.1)
+        required: true
+        default: v1.0.0-rc.1
+        type: string
+      publish_rc:
+        description: Create the RC tag/release after protected approval
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.commit }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Reproducible ${{ inputs.candidate }} build
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Validate immutable inputs
+        env:
+          RELEASE_COMMIT: ${{ inputs.commit }}
+          RELEASE_CANDIDATE: ${{ inputs.candidate }}
+        run: |
+          test "${#RELEASE_COMMIT}" -eq 40
+          test "$(printf '%s' "$RELEASE_COMMIT" | tr -cd '0-9a-fA-F')" = "$RELEASE_COMMIT"
+          printf '%s' "$RELEASE_CANDIDATE" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.commit }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm verify
+      - name: Prove tracked source remained clean
+        run: git diff --exit-code && git diff --cached --exit-code
+      - name: Build production-shaped Worker bundle
+        run: pnpm exec wrangler deploy --dry-run --outdir dist/worker -c wrangler.production.jsonc
+      - name: Generate manifest, SBOM, checksums, and provenance
+        env:
+          RELEASE_COMMIT: ${{ inputs.commit }}
+        run: |
+          SOURCE_DATE_EPOCH="$(git show -s --format=%ct "$RELEASE_COMMIT")"
+          node scripts/build-release-artifacts.mjs --bundle dist/worker --out dist --commit "$RELEASE_COMMIT" --source-date-epoch "$SOURCE_DATE_EPOCH" --require-clean
+      - name: Verify every release checksum
+        working-directory: dist
+        run: sha256sum --check SHA256SUMS
+      - name: Upload immutable candidate
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ inputs.candidate }}-${{ inputs.commit }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 90
+
+  publish:
+    name: Publish approved RC tag
+    needs: build
+    if: ${{ inputs.publish_rc }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: release-approval
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.commit }}
+          persist-credentials: false
+      - name: Download the exact verified candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_NAME: ${{ inputs.candidate }}-${{ inputs.commit }}
+        run: gh run download "$GITHUB_RUN_ID" --name "$ARTIFACT_NAME" --dir release-candidate
+      - name: Re-verify checksums before publishing
+        working-directory: release-candidate
+        run: sha256sum --check SHA256SUMS
+      - name: Refuse to replace an existing immutable tag
+        env:
+          RELEASE_CANDIDATE: ${{ inputs.candidate }}
+        run: test -z "$(git ls-remote --tags origin "refs/tags/$RELEASE_CANDIDATE")"
+      - name: Create tag and GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_CANDIDATE: ${{ inputs.candidate }}
+          RELEASE_COMMIT: ${{ inputs.commit }}
+        run: >-
+          gh release create "$RELEASE_CANDIDATE"
+          release-candidate/SHA256SUMS
+          release-candidate/release-manifest.json
+          release-candidate/sbom.cdx.json
+          release-candidate/provenance.json
+          release-candidate/worker/*
+          --target "$RELEASE_COMMIT"
+          --title "Open Artifacts Foundation $RELEASE_CANDIDATE"
+          --notes-file "docs/releases/$RELEASE_CANDIDATE.md"

@@ -1,6 +1,11 @@
 import { env, exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
-import { ensureSchemaForTests, resetSchemaMemoForTests } from "../../src/store";
+import {
+  D1R2Store,
+  ensureSchemaForTests,
+  resetSchemaMemoForTests,
+  SchemaCompatibilityError,
+} from "../../src/store";
 
 const BASE = "http://artifacts.test";
 
@@ -136,6 +141,19 @@ async function seedRemovedFeedbackDatabase(): Promise<void> {
 }
 
 describe("in-place schema migration", () => {
+  it("fails closed without running DDL in production mode", async () => {
+    await dropAllTables();
+    const store = new D1R2Store(env.DB, env.CONTENT, {
+      schemaPolicy: "validate",
+    });
+
+    await expect(store.get("missing")).rejects.toBeInstanceOf(
+      SchemaCompatibilityError,
+    );
+    expect(await columnNames("artifacts")).toEqual([]);
+    expect(await columnNames("schema_meta")).toEqual([]);
+  });
+
   it("backfills per-version metadata from the parent artifact", async () => {
     const id = "legacyid0001";
     await seedLegacyVersionsDatabase(id);

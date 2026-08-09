@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 1,
+  "evaluationIntervalSeconds": 60,
+  "alerts": [
+    {
+      "id": "missing-blob",
+      "metric": "missing_blob",
+      "owner": "platform-oncall",
+      "severity": "P0",
+      "threshold": { "comparator": "gt", "value": 0, "windowMinutes": 1, "occurrences": 1 },
+      "rationale": "Any committed version without verified immutable content is a user-visible integrity incident.",
+      "runbook": "docs/runbooks/missing-blob.md",
+      "notification": ["pager-platform", "security-incidents"]
+    },
+    {
+      "id": "publication-failure-rate",
+      "metric": "publication_state_failure",
+      "owner": "platform-oncall",
+      "severity": "P0",
+      "threshold": { "comparator": "gte", "value": 5, "windowMinutes": 5, "occurrences": 2 },
+      "rationale": "Five state-machine failures in five minutes exceeds the accepted publish error budget while avoiding one-off noise.",
+      "runbook": "docs/runbooks/partial-publication.md",
+      "notification": ["pager-platform"]
+    },
+    {
+      "id": "repeated-auth-failure",
+      "metric": "auth_failure",
+      "owner": "security-oncall",
+      "severity": "P1",
+      "threshold": { "comparator": "gte", "value": 50, "windowMinutes": 5, "occurrences": 2 },
+      "rationale": "Sustained authentication failures indicate credential probing or a broken client rollout and require triage.",
+      "runbook": "docs/runbooks/abuse.md",
+      "notification": ["pager-security", "platform-incidents"]
+    },
+    {
+      "id": "migration-incompatible",
+      "metric": "migration_incompatible",
+      "owner": "release-oncall",
+      "severity": "P0",
+      "threshold": { "comparator": "gt", "value": 0, "windowMinutes": 1, "occurrences": 1 },
+      "rationale": "An incompatible schema means the application cannot safely serve or mutate data and must fail closed immediately.",
+      "runbook": "docs/runbooks/migrations.md",
+      "notification": ["pager-release", "pager-platform"]
+    },
+    {
+      "id": "quota-exhaustion",
+      "metric": "quota_exhausted",
+      "owner": "platform-oncall",
+      "severity": "P1",
+      "threshold": { "comparator": "gte", "value": 10, "windowMinutes": 15, "occurrences": 2 },
+      "rationale": "Repeated exact-quota rejection may represent abusive growth or a capacity policy that no longer matches usage.",
+      "runbook": "docs/runbooks/abuse.md",
+      "notification": ["platform-incidents"]
+    },
+    {
+      "id": "rate-saturation",
+      "metric": "rate_limited",
+      "owner": "security-oncall",
+      "severity": "P1",
+      "threshold": { "comparator": "gte", "value": 100, "windowMinutes": 5, "occurrences": 2 },
+      "rationale": "Sustained soft-limit rejection signals an attack, a runaway client, or an undersized ingress policy.",
+      "runbook": "docs/runbooks/abuse.md",
+      "notification": ["pager-security", "platform-incidents"]
+    },
+    {
+      "id": "live-failure-rate",
+      "metric": "live_operation",
+      "owner": "realtime-oncall",
+      "severity": "P1",
+      "threshold": { "comparator": "gte", "value": 10, "windowMinutes": 10, "occurrences": 2 },
+      "rationale": "Ten failed Live operations in ten minutes indicates Durable Object or protocol degradation beyond isolated conflicts.",
+      "runbook": "docs/runbooks/live.md",
+      "notification": ["pager-realtime", "platform-incidents"]
+    },
+    {
+      "id": "telemetry-silence",
+      "metric": "http_request",
+      "owner": "sre-oncall",
+      "severity": "P0",
+      "threshold": { "comparator": "absent", "value": 0, "windowMinutes": 10, "occurrences": 2 },
+      "rationale": "A serving production environment with no request telemetry is an observability outage that masks all other incidents.",
+      "runbook": "docs/runbooks/telemetry.md",
+      "notification": ["pager-sre"]
+    }
+  ]
+}

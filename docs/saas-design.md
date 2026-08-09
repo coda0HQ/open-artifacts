@@ -11,6 +11,9 @@
 >
 > Session / CSRF / `sk_` / loopback OAuth **mechanisms** below remain useful
 > reference; do not implement the "account tables in open-artifacts" approach.
+> The later `SCHEMA[]` / `ensureSchema` notes are also historical: current
+> schema changes use numbered `migrations/*.sql`, deploy-time application, and
+> request-time compatibility validation only.
 
 ---
 

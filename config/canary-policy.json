@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "scope": "invited-team production service",
+  "phases": [
+    {
+      "id": "canary",
+      "cohort": "one explicitly invited internal team",
+      "minimumObservationMinutes": 60,
+      "maximumTrafficPercent": 5
+    },
+    {
+      "id": "expanded",
+      "cohort": "all invited internal teams",
+      "minimumObservationMinutes": 240,
+      "maximumTrafficPercent": 25
+    },
+    {
+      "id": "general-team",
+      "cohort": "approved team-level production population",
+      "minimumObservationMinutes": 1440,
+      "maximumTrafficPercent": 100
+    }
+  ],
+  "entryGates": [
+    "immutable release manifest checksum approved",
+    "staging rehearsal receipt approved",
+    "production backup and rollback target recorded",
+    "on-call owners acknowledged",
+    "anonymous create and comments disabled"
+  ],
+  "promotionGates": {
+    "missingBlobCount": 0,
+    "unexplainedHighCriticalRisks": 0,
+    "publicationSuccessRateMinimum": 0.995,
+    "availabilityMinimum": 0.999,
+    "latencyBudgetRegressionMaximum": 0.1,
+    "costBudgetRegressionMaximum": 0.1,
+    "coreFlowFailures": 0
+  },
+  "automaticAbort": [
+    "any missing_blob event",
+    "any authorization boundary regression",
+    "any schema incompatibility",
+    "publication success below 99.5 percent",
+    "telemetry silence",
+    "unbounded cost or rate saturation"
+  ],
+  "killSwitches": {
+    "allWrites": "KILL_SWITCH_WRITES",
+    "live": "KILL_SWITCH_LIVE",
+    "comments": "KILL_SWITCH_COMMENTS"
+  },
+  "rollbackRule": "Rollback Worker code only when the previous release supports the active schema and Durable Object lifecycle; otherwise disable the affected surface and roll forward.",
+  "approval": {
+    "canary": ["Release Manager", "SRE on-call"],
+    "expanded": ["Product owner", "SRE on-call"],
+    "general-team": ["Product owner", "Security reviewer", "Release Manager"]
+  }
+}

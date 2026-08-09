@@ -1,0 +1,58 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "open-artifacts-staging",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-03",
+  "workers_dev": true,
+  "preview_urls": true,
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/", "/api/*", "/a/*", "/og/*", "/fonts/*", "/vendor/*"]
+  },
+  "vars": {
+    "ENVIRONMENT": "staging",
+    "TELEMETRY_ENV": "staging",
+    "TELEMETRY_LOGS": "enabled",
+    "PUBLIC_CREATE_MODE": "disabled",
+    "ANONYMOUS_COMMENTS": "disabled",
+    "RATE_LIMIT_MODE": "cloudflare",
+    "OPEN_ARTIFACTS_WEB_FONTS": "1",
+    "OPEN_ARTIFACTS_HANDOFF": "1",
+    "KILL_SWITCH_WRITES": "0",
+    "KILL_SWITCH_LIVE": "0",
+    "KILL_SWITCH_COMMENTS": "0"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "open-artifacts-staging",
+      "database_id": "e8ea7f68-ef7e-4f73-a4d3-173148406fd1",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [
+    { "binding": "CONTENT", "bucket_name": "open-artifacts-staging-content" }
+  ],
+  "analytics_engine_datasets": [
+    { "binding": "METRICS", "dataset": "open-artifacts-staging-metrics" }
+  ],
+  "ratelimits": [
+    {
+      "name": "RATE_LIMITER",
+      "namespace_id": "10000002",
+      "simple": { "limit": 120, "period": 60 }
+    }
+  ],
+  "durable_objects": {
+    "bindings": [{ "name": "LIVE_DO", "class_name": "LiveObject" }]
+  },
+  "exports": {
+    "LiveObject": { "type": "durable-object", "storage": "sqlite" }
+  },
+  "rules": [
+    { "type": "Text", "globs": ["**/*.txt"], "fallthrough": true },
+    { "type": "CompiledWasm", "globs": ["**/*.wasm"], "fallthrough": true }
+  ],
+  "observability": { "enabled": true }
+}

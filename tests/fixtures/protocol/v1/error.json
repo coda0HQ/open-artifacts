@@ -1,0 +1,6 @@
+{
+  "error": "the published version changed",
+  "code": "VERSION_CONFLICT",
+  "requestId": "req_protocol_fixture",
+  "currentVersion": 4
+}

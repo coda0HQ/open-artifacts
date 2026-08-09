@@ -6,7 +6,9 @@ Open-source, self-hosted [Claude Code Artifacts](https://code.claude.com/docs/en
 let any coding agent publish self-contained HTML/Markdown pages to shareable
 URLs, protect them with passwords (zero-knowledge, client-side encryption),
 and keep them updated as the project they describe evolves. Runs entirely on
-Cloudflare (Workers + D1 + R2), fits in the free tier, no accounts anywhere.
+Cloudflare (Workers + D1 + R2 + optional Durable Objects). The neutral engine
+supports capability tokens and an injected `Authorizer`; the hardened
+production profile is private/team-scoped and fails closed.
 
 > **Hosted or self-hosted.** [coda0.com](https://coda0.com) is the official
 > managed instance, run by the project — point your agent at it for zero-setup
@@ -79,18 +81,30 @@ compose and validate in memory, then send exactly one final publish request.
 ```sh
 git clone https://github.com/coda0HQ/open-artifacts && cd open-artifacts
 pnpm install
-npx wrangler d1 create open-artifacts        # put database_id into wrangler.jsonc
+npx wrangler d1 create open-artifacts        # put the id in wrangler.production.jsonc
 npx wrangler r2 bucket create open-artifacts-content
-pnpm run deploy
+pnpm check:environments                       # validates Preview/Staging/Production isolation + dry-runs
 ```
 
-The schema applies itself on first request — no migration step. To restrict
-who can create artifacts on your instance (updates are always restricted by
-per-artifact write tokens):
+Apply every numbered D1 migration before deploying. Production requests only
+validate schema compatibility and never run DDL. Configure
+`PUBLIC_CREATE_MODE`, `ANONYMOUS_COMMENTS`, `RATE_LIMIT_MODE`, and a 32+ byte
+`IDEMPOTENCY_SECRET`; production refuses unsafe/missing policy. Provision the
+distinct D1/R2/DO/Analytics/rate-limit resources declared by each environment
+config and store `IDEMPOTENCY_SECRET` plus `REPAIR_TOKEN` as Worker secrets,
+never committed vars. To use token-gated creation, set
+`PUBLIC_CREATE_MODE=token` and:
 
 ```sh
-npx wrangler secret put CREATE_TOKEN         # then set OPEN_ARTIFACTS_TOKEN client-side
+npx wrangler secret put CREATE_TOKEN --config wrangler.production.jsonc
+# then set OPEN_ARTIFACTS_TOKEN client-side
 ```
+
+Direct `pnpm run deploy` is intentionally blocked. Promote a full committed
+SHA through the protected `Gated deployment` workflow; it repeats verification,
+builds the selected config, applies migrations, and only then deploys. Release
+manifests, Staging rehearsal, Canary thresholds and rollback rules are indexed
+in [`docs/releases/`](docs/releases/README.md).
 
 Local development: `pnpm dev` (state persists in `.wrangler/state`).
 
@@ -98,12 +112,12 @@ Local development: `pnpm dev` (state persists in `.wrangler/state`).
 
 | Concern | Design |
 | --- | --- |
-| Identity | No accounts. Artifact ids are 12-char crypto-random (unguessable, unlisted). Creation returns a one-time `writeToken`; only its SHA-256 is stored. |
+| Identity | Artifact ids are 12-char crypto-random. Creation returns a one-time `writeToken`; only its SHA-256 is stored. An injected `Authorizer` can add team/account policy without coupling it to the engine. Credentials support rotate, grace, revoke, status, and manager recovery. |
 | Deterministic sources | A strict Recipe plus ordered fragments generates every Artifact. The builder injects tokens and, for Canvas, the vendored runtime and controls. Manifest v2 records Recipe/input/output hashes; direct HTML/Markdown CLI publishing is rejected. |
 | Channels | `artifact.channel` binds an artifact to a stable URL. The CLI keeps a per-channel token (`ch_`) in `.artifacts/credentials.json`; presenting it on a later `create` updates the bound artifact (new version, same link) instead of minting a new one. Only the channel hash is stored server-side. |
 | Local mode | `artifact.local: true` places private sources under gitignored `.artifacts/recipes.local/` and `.artifacts/fragments.local/`, with state in `manifest.local.json`. Shared Recipes/fragments live under `.artifacts/recipes/` and `.artifacts/fragments/` and may be committed. Encrypted Recipes are always private. |
-| Storage | D1 for metadata/tokens/version index, R2 for content bodies (`content/<id>/<version>`). Both strongly consistent — updates are visible immediately. |
-| Versions | Every publish is an immutable version with an optional label and its own title, description, favicon, format, and encryption state, so history reflects what each version actually looked like. `?v=N` views history; `PUT` accepts `baseVersion` and returns 409 on conflicts (override with `force`). |
+| Storage | D1 stores metadata/publication state and R2 stores immutable content-addressed bodies. A pending → blob-ready → committed state machine makes only complete content visible; reconciliation handles orphan/missing boundaries. |
+| Versions | Every publish is immutable. `?v=N` and the inlined Viewer picker browse history; `PUT` uses version CAS. Live saves a revisioned Draft and only explicit Checkpoint creates the next version—published history is never edited in place. |
 | Serving | The Worker wraps stored content in a skeleton (CSS reset, emoji favicon, viewport, light/dark theme with a `data-theme` toggle) and serves it with `Content-Security-Policy: sandbox allow-scripts ...; default-src 'none'` — artifact scripts run in an opaque origin and cannot make any external request. |
 | Link previews | Every page emits OpenGraph + Twitter tags (title, description, image). `GET /og/:id` returns a 1200x630 PNG card rasterized on the edge with `@resvg/resvg-wasm` from an embedded Inter subset — a real raster crawlers render (they ignore SVG), self-contained with no external requests. |
 | Passwords | The CLI encrypts locally: PBKDF2-HMAC-SHA256 (600k iterations) + AES-256-GCM. The server stores only `{salt, iv, ciphertext}`. The viewer serves an unlock shell that decrypts in the browser and renders the result inside a sandboxed iframe. The password never leaves the client. |
@@ -119,8 +133,14 @@ PUT    /api/artifacts/:id       same fields + baseVersion?/force?   (Bearer writ
 GET    /api/artifacts/:id       metadata + version history
 GET    /api/artifacts/:id/raw   stored content (?v=N)
 DELETE /api/artifacts/:id       (Bearer writeToken)
+PUT    /api/artifacts/:id/live/draft       revision-CAS Draft save
+POST   /api/artifacts/:id/live/checkpoint  immutable Checkpoint publish
 GET    /a/:id                   rendered page (?v=N)
 ```
+
+Clients should send `Open-Artifacts-Protocol: 1`; unsupported explicit
+versions fail with `426`. Versioned schemas and Golden Fixtures live in
+`protocol/v1/`.
 
 `encrypted` is `{ salt, iv, iterations }` (all base64/int) with base64
 ciphertext as `content`. `channel` is a channel token (`ch_...`) that targets
@@ -139,19 +159,24 @@ Max content size 4 MiB.
 - Anyone with the URL of an unprotected artifact can read it (like an unlisted
   gist). Use `--password` for anything sensitive; title/favicon metadata stays
   plaintext.
-- An open instance (no `CREATE_TOKEN`) lets anyone with the URL create pages.
-  Set the secret for anything public-facing.
+- Development may opt into open creation. Production forbids open creation,
+  requires explicit anonymous-comment/rate policies, and fails closed when a
+  required binding, secret, policy, or migration is missing.
 
 ## Development
 
 ```sh
 pnpm test          # Worker integration tests (vitest + workerd)
 pnpm test:cli      # skill CLI tests
+pnpm test:security # authorization, abuse, password and quota boundaries
+pnpm test:accessibility # two themes, 360px, keyboard and WCAG 2.2 AA
+pnpm test:load     # bounded load model + browser smoke
 pnpm typecheck
 pnpm check         # biome lint + format
+pnpm verify        # complete static, contract, operational, audit, and browser gate
 ```
 
-BDD scenarios live in `tests/features/`; the architecture decision record in
-`docs/architecture.md`.
+See `docs/architecture.md`, `protocol/README.md`, `docs/quality-budgets.md`,
+and `docs/runbooks/` for the current architecture and operator contract.
 
 MIT licensed.

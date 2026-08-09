@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "iterations": 25,
+  "concurrency": 8,
+  "timeoutMs": 10000,
+  "operations": {
+    "publish": 1,
+    "read": 1,
+    "comment": 1,
+    "live": 1
+  },
+  "gates": {
+    "serverErrors": 0,
+    "networkErrors": 0,
+    "controlledStatuses": [401, 403, 404, 409, 413, 429],
+    "p95Ms": {
+      "publish": 1500,
+      "read": 750,
+      "comment": 1000,
+      "live": 1000
+    }
+  },
+  "costModel": {
+    "workerRequestsPerIteration": 4,
+    "d1Reads": { "publish": 2, "read": 2, "comment": 2, "live": 1 },
+    "d1Writes": { "publish": 4, "read": 0, "comment": 2, "live": 0 },
+    "r2Reads": { "publish": 1, "read": 1, "comment": 0, "live": 0 },
+    "r2Writes": { "publish": 1, "read": 0, "comment": 0, "live": 0 },
+    "durableObjectRequests": { "publish": 0, "read": 0, "comment": 0, "live": 1 }
+  }
+}

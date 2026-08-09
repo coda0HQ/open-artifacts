@@ -1,0 +1,5 @@
+{
+  "error": "Live protocol v1 is required",
+  "code": "LIVE_PROTOCOL_UPGRADE_REQUIRED",
+  "supportedVersions": [1]
+}

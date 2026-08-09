@@ -143,3 +143,12 @@ Feature: Multi-user interaction on a shared artifact
     Then only the done comment is listed
     When the viewer selects the All filter
     Then both comments are listed
+
+  Scenario: The comments drawer and editing docks are mutually exclusive
+    Given the owner can open the comments drawer, Live dock, and Handoff dock
+    When the owner opens any editing dock while the comments drawer is open
+    Then the comments drawer closes before the dock opens
+    When the owner opens comments from either the header or an artifact anchor
+    Then the active editing dock closes before the comments drawer opens
+    But if Handoff refuses to close while recording or playing, comments stay closed
+    So the comments drawer and an editing dock are never expanded at once

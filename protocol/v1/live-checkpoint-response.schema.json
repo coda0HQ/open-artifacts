@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-artifacts.dev/protocol/v1/live-checkpoint-response.schema.json",
+  "title": "Open Artifacts v1 Live checkpoint response",
+  "type": "object",
+  "required": ["id", "url", "version", "publicationId", "draftRevision"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "url": { "type": "string", "minLength": 1 },
+    "version": { "type": "integer", "minimum": 1 },
+    "publicationId": { "type": "string", "minLength": 1 },
+    "draftRevision": { "type": "integer", "minimum": 1 },
+    "idempotentReplay": { "type": "boolean" }
+  },
+  "additionalProperties": false
+}

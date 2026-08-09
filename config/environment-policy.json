@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "environments": ["preview", "staging", "production"],
+  "requiredBindings": ["ASSETS", "DB", "CONTENT", "METRICS", "RATE_LIMITER", "LIVE_DO"],
+  "requiredSecrets": ["IDEMPOTENCY_SECRET", "REPAIR_TOKEN"],
+  "forbiddenInlineSecrets": [
+    "IDEMPOTENCY_SECRET",
+    "REPAIR_TOKEN",
+    "CREATE_TOKEN",
+    "CLOUDFLARE_API_TOKEN",
+    "CLOUDFLARE_ACCOUNT_ID",
+    "OPEN_ARTIFACTS_BACKUP_KEY",
+    "OPEN_ARTIFACTS_BACKUP_UPLOAD_TOKEN"
+  ],
+  "requiredKillSwitches": [
+    "KILL_SWITCH_WRITES",
+    "KILL_SWITCH_LIVE",
+    "KILL_SWITCH_COMMENTS"
+  ],
+  "distinctResources": [
+    "workerName",
+    "domainIdentity",
+    "databaseId",
+    "databaseName",
+    "contentBucket",
+    "metricsDataset",
+    "rateLimitNamespace"
+  ],
+  "remoteProvisioning": {
+    "requiredBeforePromotion": true,
+    "sourceOfTruth": "Cloudflare account inventory and protected GitHub environment"
+  }
+}

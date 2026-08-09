@@ -36,12 +36,14 @@ should not lead with self-host parity.
 - The engine is consumed by a hosted SaaS via `file:../open-artifacts`; the host
   layer adds accounts, orgs, visibility, and branding via `BRAND_*` vars and a
   pluggable authorizer (the host supplies its own).
-- Self-hosting: deploy the Worker directly (MIT). D1 schema auto-applies on first
-  request; local dev state lives in `.wrangler/state`.
+- Self-hosting: deploy the Worker through the gated workflow (MIT). Numbered D1
+  migrations run before application promotion; requests only validate schema
+  compatibility. Local dev state lives in `.wrangler/state`.
 - Agents publish via the Open Artifacts skill/CLI (`npx skills add`), pointing
   `OPEN_ARTIFACTS_URL` at an instance (hosted or self-hosted).
-- Bindings: D1 (`DB`), R2 (`CONTENT`); optional `LIVE_DO` (live variant editing),
-  `OPEN_ARTIFACTS_HANDOFF` (handoff recording), `CREATE_TOKEN` (open vs gated).
+- Bindings: D1 (`DB`), R2 (`CONTENT`), assets and metrics; optional `LIVE_DO`
+  (Live Draft/Checkpoint), `OPEN_ARTIFACTS_HANDOFF` (handoff recording), and
+  explicit create/comment/rate policies.
 - Viewer: `sandbox allow-scripts; default-src 'none'`, opaque origin - no
   external requests, no storage, no `fetch`; viewer-side data is inlined at serve
   time. Max artifact content 4 MiB (`MAX_CONTENT_MIB` override).

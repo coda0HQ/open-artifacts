@@ -1,0 +1,22 @@
+
+.oa-account-slot{position:relative;display:inline-flex;align-items:center;flex-shrink:0;min-height:28px}
+.oa-account-slot:empty{display:none}
+.oa-account-loading{width:20px;height:20px;border:2px solid color-mix(in oklab,var(--oa-fg),transparent 85%);border-top-color:var(--oa-accent);border-radius:50%;animation:oa-spin .8s linear infinite}
+@keyframes oa-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.oa-account-loading{animation:none;opacity:.5}}
+.oa-account-btn{position:relative;display:inline-flex;align-items:center;gap:.4rem;height:28px;padding:0 .35rem 0 .3rem;border-radius:6px;border:1px solid transparent;background:transparent;color:var(--oa-fg);font:inherit;font-size:.75rem;line-height:1;cursor:pointer;transition:color .15s,background .15s}
+.oa-account-btn:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+.oa-account-btn:active{transform:translateY(1px)}
+@media (hover:hover) and (pointer:fine){.oa-account-btn:hover{background:color-mix(in oklab,var(--oa-fg),transparent 90%)}}
+.oa-account-av{flex-shrink:0;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;overflow:hidden;background:color-mix(in oklab,var(--oa-fg),transparent 88%);color:var(--oa-fg);font-size:.7rem;font-weight:600;line-height:1;text-transform:uppercase;user-select:none}
+.oa-account-av-image{display:block;width:100%;height:100%;object-fit:cover}
+.oa-account-name{max-width:8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.oa-account-menu{position:absolute;top:calc(100% + 4px);right:0;min-width:9rem;padding:.25rem;border:1px solid var(--oa-border);border-radius:6px;background:var(--oa-bg);box-shadow:0 4px 12px -2px color-mix(in oklab,var(--oa-fg),transparent 78%);z-index:2147483646}
+.oa-account-menu[hidden]{display:none}
+.oa-account-menu a,.oa-account-menu button{display:block;width:100%;text-align:left;padding:.375rem .5rem;border:0;border-radius:4px;background:none;color:var(--oa-fg);font:inherit;font-size:.78rem;cursor:pointer;text-decoration:none}
+.oa-account-menu a:focus-visible,.oa-account-menu button:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+@media (hover:hover) and (pointer:fine){.oa-account-menu a:hover,.oa-account-menu button:hover{background:color-mix(in oklab,var(--oa-fg),transparent 94%)}}
+.oa-account-signin{display:inline-flex;align-items:center;height:28px;padding:0 .7rem;border-radius:999px;border:1px solid var(--oa-border);background:var(--oa-accent);color:var(--oa-accent-on);font:inherit;font-size:.75rem;font-weight:600;line-height:1;cursor:pointer;text-decoration:none;transition:background .15s,transform .06s}
+.oa-account-signin:active{transform:translateY(1px)}
+.oa-account-signin:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+@media (hover:hover) and (pointer:fine){.oa-account-signin:hover{background:color-mix(in oklab,var(--oa-accent),var(--oa-fg) 10%)}}

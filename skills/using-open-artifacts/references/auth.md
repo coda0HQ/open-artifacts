@@ -61,6 +61,22 @@ secrets for self-hosted instances and would publish as anonymous on a hosted
 instance). But `--token` or `OPEN_ARTIFACTS_API_KEY` still overrides `sk_` -
 don't leave them set on a hosted instance unless you mean to.
 
-A `sk_` is a long-lived credential. If one leaks, rotate by logging in again
-from a clean machine and treating the old key as compromised (per-key
-revocation is not yet exposed in the CLI).
+Artifact write credentials have explicit lifecycle commands:
+
+```sh
+node "$ARTIFACT_CLI" credentials status <artifact-id>
+node "$ARTIFACT_CLI" credentials rotate <artifact-id> --grace 30
+node "$ARTIFACT_CLI" credentials revoke <artifact-id> <credential-id>
+node "$ARTIFACT_CLI" credentials recover <artifact-id> # manager login required
+```
+
+Rotation stores the newly returned token without printing it. Grace is optional
+and capped at 300 seconds; use zero for suspected compromise. Status output
+contains IDs and timestamps, never raw tokens. Recovery revokes every prior
+credential and requires the hosted Authorizer's manage permission.
+
+Manifest and Recipe files never contain secrets. The default compatibility
+backend is the gitignored, checksummed `credentials.json` written as `0600`.
+`secret-store.mjs` also provides macOS Keychain and read-only organization
+environment adapters so a host can replace the file backend without changing
+command behavior.

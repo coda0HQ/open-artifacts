@@ -3,9 +3,10 @@
 A hosted instance that bound a `LIVE_DO` Durable Object (coda0.com) supports
 **live editing**: in the artifact viewer, open Live, pick an element, type a
 prompt, and the authoring agent edits the artifact source locally and
-republishes. A WebSocket pushes the `done` ack to the browser, which reloads
-the frame to show the new content. One shot — no variant cycling, no
-accept/discard loop.
+saves a revisioned Draft. The user can recover or review that Draft without
+changing published history; an explicit Checkpoint publishes it as a new,
+immutable version. A WebSocket pushes the `done` ack to the browser. One shot
+— no variant cycling.
 
 ## Starting live after a publish
 
@@ -67,14 +68,21 @@ Live-edit artifact <ID> at coda0.com:
    - An `edit` event `{type:'edit', id, pageUrl, items:[{id, element, ops}]}`
      arrives when the user applies their staged inline text edits (see "Copy
      edits" below): apply each op's `originalText` → `newText` in the Recipe
-     source, `update <id> --live`, and reply `done --data '<json>'`.
+     source, `update <id> --live`, Checkpoint when ready, and reply
+     `done --data '<json>'`.
 5. Edit the artifact source to apply each item's requested change to its picked element (match by id → class → tag → outerHTML content). Do NOT inject variant wrappers — Live is one-shot edit-and-reload, not variant cycling.
-6. Publish the Live edit in place (this does not create a new artifact version):
+6. Save the Live edit as a durable Draft revision (the published version and
+   every historical hash remain unchanged):
    node "$ARTIFACT_CLI" update <ID> --live   (use the artifact's recipe, or pass the new recipe)
-   - If the artifact was at v10, it remains at v10 while its served content changes.
-7. Ack: node "$ARTIFACT_CLI" live <ID> --reply <eid> done --version <current-version>
-   - The browser receives `done`, reloads the frame, and shows the updated content.
-8. The watcher keeps polling for the next event (another generate, or `exit` when the browser closes the session). Stop it with Ctrl-C.
+   - A stale editor receives a revision conflict; re-read/reapply instead of
+     forcing over the winning Draft.
+7. When the Draft is accepted, Checkpoint it explicitly:
+   node "$ARTIFACT_CLI" live checkpoint <ID>
+   - If the artifact was at v10, this atomically creates v11. It never rewrites
+     v10. A stale base returns a conflict and preserves the Draft.
+8. Ack: node "$ARTIFACT_CLI" live <ID> --reply <eid> done --version <new-version>
+   - The browser receives `done` and reloads the newly published Checkpoint.
+9. The watcher keeps polling for the next event (another generate, or `exit` when the browser closes the session). Stop it with Ctrl-C.
 ```
 
 If you can't keep the watcher running, the one-shot
@@ -201,8 +209,9 @@ Apply loop (one `edit` event per Apply):
    to locate the containing element first, then the row by `ref`.
 2. Replace `originalText` → `newText`, preserving `newText` exactly.
 3. Verify `newText` landed: grep the touched files before republishing.
-4. Publish in place: `node "$ARTIFACT_CLI" update <ID> --live`
-5. Reply with the canonical result JSON so the browser can show what landed:
+4. Save a Draft: `node "$ARTIFACT_CLI" update <ID> --live`
+5. Checkpoint after validation: `node "$ARTIFACT_CLI" live checkpoint <ID>`
+6. Reply with the canonical result JSON so the browser can show what landed:
 
 ```
 node "$ARTIFACT_CLI" live <ID> --reply <eid> done --data '{"status":"done","appliedEntryIds":["stash_..."],"failed":[],"files":["..."],"notes":[]}'

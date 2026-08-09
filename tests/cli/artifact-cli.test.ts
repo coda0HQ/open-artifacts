@@ -44,6 +44,7 @@ interface RecordedRequest {
   method: string;
   path: string;
   auth: string | undefined;
+  idempotencyKey: string | undefined;
   body: Record<string, unknown>;
 }
 
@@ -93,6 +94,12 @@ interface ManifestEntry {
   migrationPending?: boolean;
   visibility?: string;
   orgId?: string;
+  draft?: {
+    revision?: number;
+    baseVersion?: number;
+    state?: string;
+    checkpointVersion?: number;
+  };
 }
 
 interface ManifestState {
@@ -125,6 +132,7 @@ let holdPoll = false;
 let releasePoll:
   | ((status: number, body: Record<string, unknown>) => void)
   | null = null;
+let liveDraft: Record<string, unknown> | null = null;
 let projectDir: string;
 
 beforeAll(async () => {
@@ -137,6 +145,7 @@ beforeAll(async () => {
         method: req.method ?? "",
         path: req.url ?? "",
         auth: req.headers.authorization,
+        idempotencyKey: req.headers["idempotency-key"] as string | undefined,
         body: raw ? JSON.parse(raw) : {},
       });
       if (onRequest) {
@@ -168,6 +177,58 @@ beforeAll(async () => {
       }
       const preset = nextResponse;
       nextResponse = null;
+      const path = req.url ?? "";
+      if (!preset && path.endsWith("/live/draft") && req.method === "GET") {
+        const status = liveDraft ? 200 : 404;
+        res.writeHead(status, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify(
+            liveDraft ? { draft: liveDraft } : { error: "draft not found" },
+          ),
+        );
+        return;
+      }
+      if (!preset && path.endsWith("/live/draft") && req.method === "PUT") {
+        const body = raw ? JSON.parse(raw) : {};
+        liveDraft = {
+          revision: Number(body.expectedRevision) + 1,
+          baseVersion: body.baseVersion,
+          state: "active",
+          updatedAt: "2026-08-04T00:00:00.000Z",
+          payload: { content: body.content },
+        };
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ draft: liveDraft }));
+        return;
+      }
+      if (
+        !preset &&
+        path.endsWith("/live/checkpoint") &&
+        req.method === "POST"
+      ) {
+        const draft = liveDraft as {
+          revision?: number;
+          baseVersion?: number;
+        } | null;
+        const version = Number(draft?.baseVersion ?? 1) + 1;
+        if (liveDraft) {
+          liveDraft = {
+            ...liveDraft,
+            state: "checkpointed",
+            checkpointVersion: version,
+          };
+        }
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            id: "testid123456",
+            url: `${apiUrl}/a/testid123456`,
+            version,
+            draftRevision: draft?.revision,
+          }),
+        );
+        return;
+      }
       const status = preset?.status ?? (req.method === "POST" ? 201 : 200);
       const body =
         preset?.body ??
@@ -206,6 +267,7 @@ beforeEach(() => {
   onRequest = null;
   holdPoll = false;
   releasePoll = null;
+  liveDraft = null;
   projectDir = mkdtempSync(join(tmpdir(), "oa-cli-"));
   mkdirSync(join(projectDir, ".git"));
   mkdirSync(join(projectDir, "src"));
@@ -257,7 +319,12 @@ async function run(
 }
 
 function readJson<T>(path: string): T {
-  return JSON.parse(readFileSync(path, "utf8"));
+  const value = JSON.parse(readFileSync(path, "utf8"));
+  // State files carry an internal checksum envelope. Tests that simulate an
+  // older concurrent CLI intentionally write the legacy payload shape, so do
+  // not copy a now-stale checksum into that simulated write.
+  if (value && typeof value === "object") delete value._state;
+  return value;
 }
 
 function writeJson(path: string, value: unknown): void {
@@ -1997,31 +2064,65 @@ describe("Recipe publishing", () => {
     expect(manifest().artifacts[0].version).toBe(2);
   });
 
-  it("updates the current version in place for Live edits", async () => {
+  it("saves a Live draft without advancing the published version", async () => {
     const built = writeRecipe();
     await run(["create", built.recipePath]);
     writeFileSync(
       built.bodyPath,
       '<main class="oa-prose"><h1>Live edit</h1></main>\n',
     );
-    nextResponse = {
-      status: 200,
-      body: {
-        id: "testid123456",
-        url: "http://127.0.0.1/a/testid123456",
-        version: 1,
-      },
-    };
-
-    await run(["update", "testid123456", "--live"]);
+    const result = await run(["update", "testid123456", "--live"]);
 
     expect(requests[1]).toMatchObject({
-      method: "PUT",
-      path: "/api/artifacts/testid123456/live",
+      method: "GET",
+      path: "/api/artifacts/testid123456/live/draft",
     });
-    expect(requests[1].body.baseVersion).toBe(1);
-    expect(requests[1].body.content).toContain("Live edit");
+    expect(requests[2]).toMatchObject({
+      method: "PUT",
+      path: "/api/artifacts/testid123456/live/draft",
+    });
+    expect(requests[2].body).toMatchObject({
+      protocolVersion: 1,
+      expectedRevision: 0,
+      baseVersion: 1,
+    });
+    expect(requests[2].body.content).toContain("Live edit");
     expect(manifest().artifacts[0].version).toBe(1);
+    expect(manifest().artifacts[0].draft).toMatchObject({
+      revision: 1,
+      baseVersion: 1,
+      state: "active",
+    });
+    expect(result.stderr).toContain("saved Live draft revision 1");
+  });
+
+  it("checkpoints a Live draft as a new immutable version", async () => {
+    const built = writeRecipe();
+    await run(["create", built.recipePath]);
+    await run(["update", "testid123456", "--live"]);
+
+    const result = await run(["live", "checkpoint", "testid123456"]);
+
+    expect(requests.at(-2)).toMatchObject({
+      method: "GET",
+      path: "/api/artifacts/testid123456/live/draft",
+    });
+    expect(requests.at(-1)).toMatchObject({
+      method: "POST",
+      path: "/api/artifacts/testid123456/live/checkpoint",
+      idempotencyKey: "cli-live-checkpoint:testid123456:r1:b1",
+      body: { protocolVersion: 1, expectedRevision: 1 },
+    });
+    expect(manifest().artifacts[0]).toMatchObject({
+      version: 2,
+      draft: {
+        revision: 1,
+        baseVersion: 1,
+        state: "checkpointed",
+        checkpointVersion: 2,
+      },
+    });
+    expect(result.stderr).toContain("as immutable version 2");
   });
 
   it("keeps Manifest hashes unchanged on a version conflict", async () => {

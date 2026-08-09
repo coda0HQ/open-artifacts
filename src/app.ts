@@ -1,5 +1,9 @@
 import { Hono } from "hono";
 import {
+  killSwitchesFromBindings,
+  validateCloudflareComposition,
+} from "./adapters/cloudflare/composition";
+import {
   type AppContext,
   api,
   artifactUrl,
@@ -9,15 +13,28 @@ import {
   parseVersionParam,
   storeFrom,
 } from "./api";
+import { credentialsApi } from "./api/credentials";
 import type { Authorizer } from "./authorizer";
 import { defaultAuthorizer } from "./authorizer";
+import { RuntimeConfigError } from "./config";
 import type { VersionMeta } from "./domain";
 import { fontFaceCss, materializeFont, parseSlug } from "./fonts";
 import { handoffApi } from "./handoff-api";
 import { brandFor, brandHomepage, hasBrandConfig } from "./home";
 import { liveApi } from "./live-api";
 import { renderOgCardPng } from "./og";
+import {
+  negotiateProtocolVersion,
+  PROTOCOL_HEADER,
+  PROTOCOL_VERSION,
+  protocolUpgradeBody,
+} from "./protocol";
+import { QuotaExceededError } from "./quota/service";
+import { enforceRateLimit } from "./rate-limit";
+import { reconcileApi } from "./reconcile-api";
+import { createRequestContext } from "./request-context";
 import type { ArtifactRecord, ArtifactStore } from "./store";
+import { Telemetry } from "./telemetry";
 import {
   badVersionPage,
   frameDocument,
@@ -91,8 +108,211 @@ export function createApp(
 ): Hono<AppContext> {
   const app = new Hono<AppContext>();
 
+  app.onError((error, c) => {
+    const telemetry = c.get("telemetry");
+    if (error instanceof QuotaExceededError) {
+      telemetry?.warn("quota.exhausted", {
+        resource: error.resource,
+        usage: error.usage,
+        limit: error.limit,
+      });
+      telemetry?.metric("quota_exhausted", {
+        value: 1,
+        route: telemetry.context.route,
+        operation: "other",
+        result: "exhausted",
+        status: 429,
+      });
+      return c.json(
+        {
+          error: "quota exceeded",
+          code: error.code,
+          resource: error.resource,
+          usage: error.usage,
+          limit: error.limit,
+        },
+        429,
+      );
+    }
+    telemetry?.error("request.unhandled_error", { error });
+    if (error.name === "SchemaCompatibilityError") {
+      telemetry?.metric("migration_incompatible", {
+        value: 1,
+        route: telemetry.context.route,
+        operation: "d1",
+        result: "failure",
+        status: 503,
+      });
+    }
+    return c.json({ error: "internal server error" }, 500);
+  });
+
   app.use("*", async (c, next) => {
+    const requestContext = await createRequestContext(c.req.raw);
+    const telemetry = new Telemetry(
+      requestContext,
+      c.env.TELEMETRY_ENV ?? c.env.ENVIRONMENT ?? "production",
+      c.env.METRICS,
+      c.env.TELEMETRY_LOGS === "disabled" ||
+        (c.env.ENVIRONMENT === "test" && c.env.TELEMETRY_LOGS !== "enabled")
+        ? () => {}
+        : undefined,
+    );
     c.set("authorizer", authorizer);
+    c.set("requestContext", requestContext);
+    c.set("telemetry", telemetry);
+    const startedAt = Date.now();
+    let failed = false;
+    telemetry.info("request.started");
+    try {
+      await next();
+    } catch (error) {
+      failed = true;
+      telemetry.error("request.failed", { error });
+      throw error;
+    } finally {
+      const status = failed ? 500 : c.res.status;
+      const result =
+        status === 409
+          ? "conflict"
+          : status >= 500
+            ? "failure"
+            : status >= 400
+              ? "other"
+              : "success";
+      const durationMs = Date.now() - startedAt;
+      telemetry.info("request.completed", { status, result, durationMs });
+      telemetry.metric("http_request", {
+        value: 1,
+        durationMs,
+        route: requestContext.route,
+        operation: "other",
+        result,
+        status,
+      });
+      if (status === 401 || status === 403) {
+        telemetry.metric("auth_failure", {
+          value: 1,
+          route: requestContext.route,
+          operation: "other",
+          result: "failure",
+          status,
+        });
+      }
+      if (
+        requestContext.route === "live_connect" ||
+        requestContext.route === "live_draft" ||
+        requestContext.route === "live_coordination" ||
+        requestContext.route === "checkpoint" ||
+        requestContext.route === "rollback"
+      ) {
+        telemetry.metric("live_operation", {
+          value: 1,
+          durationMs,
+          route: requestContext.route,
+          operation:
+            requestContext.route === "live_draft"
+              ? "draft_save"
+              : requestContext.route === "live_connect"
+                ? "live_connect"
+                : requestContext.route === "checkpoint"
+                  ? "checkpoint"
+                  : requestContext.route === "rollback"
+                    ? "rollback"
+                    : "other",
+          result,
+          status,
+        });
+      }
+      try {
+        c.header("X-Request-Id", requestContext.requestId);
+      } catch {
+        // A WebSocket upgrade can expose immutable response headers. Logging
+        // must never turn a successful upgrade into a failed request.
+      }
+    }
+  });
+
+  app.get("/health/live", (c) => c.json({ status: "live" }));
+  app.get("/health/ready", async (c) => {
+    try {
+      validateCloudflareComposition(c.env);
+      await storeFrom(c).get("__readiness_schema_probe__");
+      return c.json({ status: "ready" });
+    } catch (error) {
+      c.get("telemetry").warn("readiness.failed", { error });
+      if (error instanceof Error && error.name === "SchemaCompatibilityError") {
+        c.get("telemetry").metric("migration_incompatible", {
+          value: 1,
+          route: "health",
+          operation: "d1",
+          result: "failure",
+          status: 503,
+        });
+      }
+      return c.json(
+        {
+          status: "not_ready",
+          code:
+            error instanceof RuntimeConfigError
+              ? error.code
+              : "SCHEMA_OR_BINDING_NOT_READY",
+        },
+        503,
+      );
+    }
+  });
+
+  app.use("/api/*", async (c, next) => {
+    const negotiation = negotiateProtocolVersion(c.req.header(PROTOCOL_HEADER));
+    c.header(PROTOCOL_HEADER, String(PROTOCOL_VERSION));
+    if (!negotiation.ok) {
+      return c.json(protocolUpgradeBody(negotiation.requestedVersion), 426);
+    }
+    await next();
+  });
+
+  app.use("/api/*", async (c, next) => {
+    const switches = killSwitchesFromBindings(c.env);
+    const path = new URL(c.req.url).pathname;
+    const method = c.req.method.toUpperCase();
+    const isWrite = !["GET", "HEAD", "OPTIONS"].includes(method);
+    const activeFlag =
+      isWrite && /\/live(?:\/|$)/.test(path) && switches.live
+        ? "KILL_SWITCH_LIVE"
+        : isWrite && /\/comments(?:\/|$)/.test(path) && switches.comments
+          ? "KILL_SWITCH_COMMENTS"
+          : isWrite && switches.writes
+            ? "KILL_SWITCH_WRITES"
+            : null;
+    if (activeFlag) {
+      c.get("telemetry").warn("kill_switch.blocked", { flag: activeFlag });
+      return c.json(
+        {
+          error: "this write surface is temporarily disabled",
+          code: "FEATURE_KILL_SWITCH_ACTIVE",
+          flag: activeFlag,
+        },
+        503,
+      );
+    }
+    await next();
+  });
+
+  app.use("/api/*", async (c, next) => {
+    try {
+      validateCloudflareComposition(c.env);
+    } catch (error) {
+      if (error instanceof RuntimeConfigError) {
+        c.get("telemetry").warn("runtime_config.invalid", {
+          issueCount: error.issues.length,
+        });
+        return c.json({ error: "service is not ready", code: error.code }, 503);
+      }
+      throw error;
+    }
+    const limited = await enforceRateLimit(c);
+    if (limited) return limited;
     await next();
   });
 
@@ -102,6 +322,8 @@ export function createApp(
   // Handoff recording routes (list/create/media/events/delete). 404 when the
   // deploy did not set OPEN_ARTIFACTS_HANDOFF=1; otherwise under /api/artifacts/:id/handoffs*.
   app.route("/api", handoffApi);
+  app.route("/api", credentialsApi);
+  app.route("/api", reconcileApi);
   app.route("/api", api);
 
   app.get("/", async (c) => {
@@ -313,6 +535,7 @@ export function createApp(
     const page = frameDocument({
       format: record.format,
       content: content.body,
+      title: record.title,
       nonce,
       handoffEnabled: handoffEnabled(c),
     });
@@ -351,7 +574,7 @@ export function createApp(
         brand,
       });
     } catch (error) {
-      console.error("og render failed", error);
+      c.get("telemetry").error("og.render_failed", { error });
       return new Response("og render failed", { status: 500 });
     }
     return new Response(png, {

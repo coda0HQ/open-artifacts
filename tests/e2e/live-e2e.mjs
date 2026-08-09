@@ -8,8 +8,8 @@
 //   2. Live opened, element picked with real mouse   -> compose bar
 //   3. Edit text flow: chip -> inline edit -> Save    -> "Apply copy edits (1)" pill
 //   4. Apply clicked + done --data reply             -> watcher prints edit, pill clears
-//   5. prompt typed + Submit                         -> watcher prints generate
-//   6. Exit clicked                                  -> watcher prints exit, exits 0
+//   5. prompt typed + Submit + done reply            -> watcher prints generate
+//   6. Exit clicked after the watcher resumes        -> watcher prints exit, exits 0
 //   7. /live/status reports agentActive while online
 //   8. the header renders Connected while the watcher is online
 //   9. the watcher stream never prints timeout noise (polls time out at 1s)
@@ -223,7 +223,10 @@ try {
       OPEN_ARTIFACTS_URL: BASE,
       OPEN_ARTIFACTS_API_KEY: "sk_e2e",
       OPEN_ARTIFACTS_LIVE_TIMEOUT_MS: "1000",
-      OPEN_ARTIFACTS_LIVE_HEARTBEAT_MS: "300",
+      // The first heartbeat is immediate. Keep subsequent heartbeats below
+      // the shared live-route rate limit while 1s polls exercise silent
+      // timeout handling; a 300ms heartbeat self-DOSes the test with 429s.
+      OPEN_ARTIFACTS_LIVE_HEARTBEAT_MS: "5000",
     },
   });
   watcher.stdout.on("data", (d) => {
@@ -346,6 +349,7 @@ try {
   const composeShown = () =>
     evalStr(`!!document.querySelector('.oa-live-freeform')`) === true;
 
+  let pickedPoint = null;
   const pickElement = async () => {
     for (let i = 0; i < 5; i++) {
       const rect = await frameRect();
@@ -359,6 +363,7 @@ try {
       ab(`mouse up`);
       try {
         await waitFor(composeShown, "compose bar after pick", 4000);
+        pickedPoint = { x: px, y: py };
         return true;
       } catch {
         // pick can miss on the first mouse pass — retry at the same point
@@ -389,24 +394,38 @@ try {
     10_000,
   );
   await sleep(500); // let the frame arm contenteditable rows
-  // The first editable row is auto-focused; select-all + insert replaces it.
-  // inserttext (no key events) is steadier than keyboard type, which can hang
-  // on back-to-back CDP connects — retry once before failing.
-  ab("press Control+a");
+  // Focus the editable row through the same real page coordinates used to
+  // pick it. The sandbox has an opaque origin, so agent-browser cannot switch
+  // into it by selector. Then use the platform's real select-all accelerator
+  // and key events, which fire the input event that records the draft.
+  if (!pickedPoint) fail("picked element coordinates were not retained");
+  ab(`mouse move ${pickedPoint.x} ${pickedPoint.y}`);
+  ab("mouse down");
+  ab("mouse up");
   let typed = false;
+  let typingError = "";
+  const selectAll = process.platform === "darwin" ? "Meta+a" : "Control+a";
   for (let i = 0; i < 3 && !typed; i++) {
     try {
-      execSync('agent-browser keyboard inserttext "E2E EDITED TITLE"', {
-        stdio: ["ignore", "pipe", "pipe"],
+      execFileSync("agent-browser", ["batch", "--bail"], {
+        input: JSON.stringify([
+          ["press", selectAll],
+          ["keyboard", "type", "E2E EDITED TITLE"],
+        ]),
+        stdio: ["pipe", "pipe", "pipe"],
         encoding: "utf8",
         timeout: 30_000,
       });
       typed = true;
-    } catch {
+    } catch (error) {
+      typingError = String(error.stderr || error.message).slice(0, 300);
       await sleep(1000);
     }
   }
-  if (!typed) fail("typing into the edited text row failed after retries");
+  if (!typed)
+    fail(
+      `typing into the edited text row failed after retries: ${typingError}`,
+    );
   await sleep(300);
   // Click Save from the host page (a DOM click — the same event a user's click
   // fires). agent-browser's click selector resolution is flaky against the
@@ -539,10 +558,55 @@ try {
     15_000,
   );
   console.log("generate streamed to watcher ✓");
+  const generateLine = watcherLines
+    .map((line) => {
+      try {
+        return JSON.parse(line);
+      } catch {
+        return null;
+      }
+    })
+    .find((event) => event && event.type === "generate");
+  execFileSync(
+    process.execPath,
+    [CLI, "live", id, "--reply", generateLine.id, "done", "--version", "1"],
+    {
+      cwd: projDir,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        OPEN_ARTIFACTS_URL: BASE,
+        OPEN_ARTIFACTS_API_KEY: "sk_e2e",
+      },
+    },
+  );
+  await waitFor(
+    async () => {
+      const response = await fetch(`${BASE}/api/artifacts/${id}/live/status`, {
+        headers: { authorization: "Bearer sk_e2e" },
+      });
+      if (!response.ok) return false;
+      const status = await response.json();
+      return !status.pendingEvents.some(
+        (event) => event.id === generateLine.id,
+      );
+    },
+    "generate event to clear after done",
+    15_000,
+  );
+  console.log("generate cleared after done ✓");
+  await waitFor(
+    () =>
+      evalStr(
+        `document.getElementById('oa-live-status')?.textContent.trim().startsWith('Pick an element')`,
+      ) === true,
+    "browser to process generate done and return to picking",
+    10_000,
+  );
 
   // 6) exit live -> watcher terminates cleanly (class selector: a bare `#`
-  // in the command line would be eaten as a shell comment)
-  ab("click .oa-dock-btn--exit");
+  // must be quoted so the shell does not treat it as a comment).
+  ab('click "#oa-live-exit"');
   await waitFor(
     () => watcher.exitCode !== null || watcher.killed,
     "watcher to exit after the session ended",
