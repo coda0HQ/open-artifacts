@@ -1,0 +1,156 @@
+<main class="page">
+  <header class="masthead" id="masthead">
+    <h1 class="masthead-name">李惜 Frad LEE</h1>
+    <p class="masthead-role">AI-native 产品设计师 · 面试 Kimi 产品设计师(AI Agent)</p>
+    <div class="masthead-meta">
+      <span>12 年设计到产品</span>
+      <span>现职 雷鸟创新 AI 产品经理</span>
+      <a href="https://frad.me" target="_blank" rel="noopener">frad.me</a>
+      <a href="https://github.com/FradSer" target="_blank" rel="noopener">GitHub @FradSer</a>
+    </div>
+  </header>
+
+  <div class="thesis" id="thesis">
+    <p class="thesis-statement">当 Agent 开始替你工作,<br />你要的不是聊天框,是一张<span class="thesis-em">工作台</span>。</p>
+    <p class="thesis-note">这份页面不按简历写,按论据写:三组亲手完成的产品设计与 Agent 工程交叉案例、三个设计系统与交互项目,和四条具体的界面主张,说明我如何理解 AI Agent 产品的设计。</p>
+  </div>
+
+  <section id="positioning">
+    <h2>设计方法,已被自己构建的 Agent 工作流重塑</h2>
+    <p class="lead">我是 AI-native 的设计方法论者:技能栈、工具链、交付方式,都建立在我亲手搭建的 Agent 工作流之上。设计文档由 Agent 起草、我来裁决;Gherkin 规格先行,实现由 Agent 完成、我来验收。效率工具的叠加做不到这一点——设计动作本身被重新定义了。</p>
+    <ul class="pillars">
+      <li>
+        <p class="pillar-name">交互设计功底</p>
+        <p class="pillar-desc">VIVO XR Lab 交互设计师,保密 XR OS 项目,交互架构与窗口管理方法论;8 项公开交互设计专利。</p>
+      </li>
+      <li>
+        <p class="pillar-name">产品定义能力</p>
+        <p class="pillar-desc">雷鸟创新 AI 产品经理,从 0 定义 AI 看板、会议助手、眼镜端 Agent 通道的产品形态。</p>
+      </li>
+      <li>
+        <p class="pillar-name">Agent 工程实践</p>
+        <p class="pillar-desc">亲手实现:AI 看板双产物模型、会议助手双路径置信度引擎,独立运营多模型 PR 评审产品 Code Terrier。</p>
+      </li>
+    </ul>
+  </section>
+
+  <section id="case-studies">
+    <p class="section-label">案例 · 产品设计与 Agent 工程的交叉</p>
+    <h2>三个案例,三种设计决策</h2>
+
+    <article class="case" id="case-jinxing">
+      <h3>金星 AI 看板 · 双产物模型</h3>
+      <p class="case-context">雷鸟创新 · AI 产品经理</p>
+      <p>用户用一句话描述需求,AI 解析、预览、确认——看板由此生成。核心设计决策是把 AI 生成的内容拆成两种产物:<strong>看板组件</strong>(持久展示)与<strong>通知触发器</strong>(事件驱动,出现即消失)。复合意图由 AI 判定,用户可在预览阶段调整。</p>
+      <p>为什么不能混在一起?如果一次性提醒也沉淀为看板组件,看板会被事件淹没,「主动查看」的核心价值就不存在了。这个拆分在团队评审后被采纳:第一阶段只做看板组件,通知触发器解耦到后续迭代——节奏更稳,长期也更正确。</p>
+    </article>
+
+    <article class="case" id="case-meeting">
+      <h3>AI 会议助手 · 双路径置信度引擎</h3>
+      <p class="case-context">雷鸟创新 · 桌面原型</p>
+      <p>实时转写、情绪分析、摘要、任务提取同时运行。关键设计是:<strong>情绪显著性只被标注,不进入任务判定路径</strong>——一句语气激动说出的待办,依然会被记录,同时附一条敏感度提示,提醒用户回顾当时的语气与上下文。</p>
+      <p>这解决的是会议工具里「情绪污染任务判定」的问题:情绪是信号,不是过滤器。另一条工程决策是规则驱动的触发批处理——按情绪阈值、超时、发言条数聚合模型调用,在实时感与调用成本之间取平衡。</p>
+    </article>
+
+    <article class="case" id="case-terrier">
+      <h3>Code Terrier · 安静,所以被信任</h3>
+      <p class="case-context">独立产品 · GitHub App,已上架 Marketplace,<a href="https://codeterrier.com" target="_blank" rel="noopener">codeterrier.com</a></p>
+      <p>多模型并行 PR 评审产品,正在真实仓库中服役。三个设计决策,也是三条我认为适用于所有 Agent 产品的原则。</p>
+      <ul class="principles">
+        <li>
+          <div>
+            <p class="principle-name">精确率优先于召回率</p>
+            <p class="principle-desc">没有发现问题时,"空"就是正确答案,不硬凑发现。<span class="principle-note">安静的机器人才会被信任;每次误报都在消耗团队对 Agent 的信用额度。</span></p>
+          </div>
+        </li>
+        <li>
+          <div>
+            <p class="principle-name">永不批准</p>
+            <p class="principle-desc">Code Terrier 可以评论、可以请求修改,但批准键永远在人手里。<span class="principle-note">不可逆的决定留给人类——审批应按可逆性分级,而不是按便利性分级。</span></p>
+          </div>
+        </li>
+        <li>
+          <div>
+            <p class="principle-name">生产者 / 检查者分离</p>
+            <p class="principle-desc">发现问题的模型与最终定级的验证器相互独立,验证器持有最终分类权。<span class="principle-note">单一模型既当选手又当裁判,是 Agent 产品里最隐蔽的偏差来源。</span></p>
+          </div>
+        </li>
+      </ul>
+    </article>
+  </section>
+
+  <section id="craft">
+    <p class="section-label">功底 · 设计系统与交互</p>
+    <h2>三个亲手构建的项目</h2>
+    <ul class="craft-list">
+      <li>
+        <p class="craft-name">is-yi · 易经占卜 App</p>
+        <p class="craft-desc">跑在 Cloudflare Workers 上的易经占卜应用:引导式三枚铜钱仪式,AI 解卦经 Workers AI 流式输出;自建「墨色」中式水墨设计系统,明暗双主题,轻量中英双语 i18n,触觉反馈与 toast 构成仪式提示。已上线(v0.9.1)。</p>
+      </li>
+      <li>
+        <p class="craft-name">FluidInterfacesSwiftUI · 流畅界面研究</p>
+        <p class="craft-desc">把 WWDC18《Designing Fluid Interfaces》在 iOS 26 API 上重做:Liquid Glass、spring 预设、phaseAnimator、matchedGeometryEffect;7 个交互研究(计算器按键、长按手电筒、橡皮筋回弹、速度驱动的抽屉……),随附可运行示例代码。</p>
+      </li>
+      <li>
+        <p class="craft-name">openclaw · 个人 AI 助手</p>
+        <p class="craft-desc">自托管的个人 AI 助手,接入约 23 个渠道(WhatsApp / Telegram / Slack / Discord / iMessage / 微信……),带实时 Canvas;生产环境长期运行,已发布到 npm,获头部科技公司赞助。它是我试验 Agent 产品形态的日常沙盒。</p>
+      </li>
+    </ul>
+  </section>
+
+  <section id="viewpoints">
+    <h2>Agent 产品形态的四个界面论点</h2>
+    <ul class="viewpoints">
+      <li>
+        <p class="viewpoint-title">进度 feed 取代进度条</p>
+        <p class="viewpoint-desc">Agent 的工作是事件流,不是百分比。加载动画假设任务单调且可预估,Agent 任务两者都不是;<span class="viewpoint-detail">事件驱动的进度 feed 让用户看到"正在发生什么",而不是"还要等多久"。</span></p>
+      </li>
+      <li>
+        <p class="viewpoint-title">过程信息按需解释</p>
+        <p class="viewpoint-desc">默认不展示推理过程,但用户随时可以追问"你为什么这么做"。<span class="viewpoint-detail">可解释性是按需唤起的对话能力,不是一堵日志墙。全量日志墙(Wall of Logs)是把监督成本转嫁回用户。</span></p>
+      </li>
+      <li>
+        <p class="viewpoint-title">审批按可逆性分级</p>
+        <p class="viewpoint-desc">可逆的操作放手自动执行,软确认用于低风险写入,硬确认用于不可逆动作,有些动作永远禁止。<span class="viewpoint-detail">Agent 压缩的是点击次数,不是决策点;分级的标准是这个动作能不能撤销。</span></p>
+      </li>
+      <li>
+        <p class="viewpoint-title">对话是输入,不是界面</p>
+        <p class="viewpoint-desc">聊天框是向 Agent 传达意图的输入方式,而界面的主体应该是任务工作台:当前状态、待决事项、产物与历史。<span class="viewpoint-detail">Agent 的表面是 agentic surface,决策的表面是 decision surface,两者不该共用同一个容器。</span></p>
+      </li>
+    </ul>
+    <div class="forward-note" id="forward-question">
+      <p class="forward-label">我想在 Kimi 继续回答的问题</p>
+      <p>当 300 个子代理并行工作时,监督者界面应该长什么样?我的假设是异常聚合视图:哪些子任务偏离了轨道、哪些结论相互冲突——监督者需要的不是 300 个进度条,而是一张"哪里需要我"的地图。</p>
+    </div>
+  </section>
+
+  <section id="background">
+    <h2>背景速览</h2>
+    <div class="background-card">
+      <dl class="background-grid">
+        <div>
+          <dt>资历</dt>
+          <dd>12 年设计到产品;6 年 UI/UX;8 项公开交互设计专利</dd>
+        </div>
+        <div>
+          <dt>开源</dt>
+          <dd>14 年 GitHub 账号,累计 2,152 stars;dotclaude 547 stars</dd>
+        </div>
+        <div>
+          <dt>现职 · 雷鸟创新 AI 产品经理</dt>
+          <dd>金星 AI 看板双产物模型;AI 会议助手双路径置信度引擎;眼镜 × Claude Code 业界首批通道</dd>
+        </div>
+        <div>
+          <dt>前职 · VIVO XR Lab 交互设计师</dt>
+          <dd>保密 XR OS 项目;交互架构、窗口管理与跨职能推进,方法论层面可聊</dd>
+        </div>
+      </dl>
+      <div class="contact-row">
+        <a href="mailto:fradser@gmail.com">fradser@gmail.com</a>
+        <a href="https://github.com/FradSer" target="_blank" rel="noopener">GitHub @FradSer</a>
+        <a href="https://frad.me" target="_blank" rel="noopener">frad.me</a>
+      </div>
+    </div>
+    <p class="colophon">本页为面试自述,所有数据均可查证。设计与发展工具:Claude Code。</p>
+  </section>
+</main>

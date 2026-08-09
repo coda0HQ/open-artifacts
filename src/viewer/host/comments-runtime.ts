@@ -393,7 +393,8 @@ export const HOST_UI_SCRIPT = `
     renderList();
   };
   window.__oaOnAnchorOpen=function(msg){
-    if(drawer){drawer.setAttribute("data-open","");drawer.setAttribute("aria-hidden","false");if(toggle)toggle.setAttribute("aria-expanded","true")}
+    if(window.__oaCommentsDrawer&&!window.__oaCommentsDrawer.open())return;
+    if(!window.__oaCommentsDrawer&&drawer){drawer.setAttribute("data-open","");drawer.setAttribute("aria-hidden","false");if(toggle)toggle.setAttribute("aria-expanded","true")}
     var id=msg&&msg.ids&&msg.ids[0];if(!id||!list||typeof id!=="string")return;
     // Avoid attribute-selector injection from frame-supplied ids: walk children.
     var el=null,kids=list.children;

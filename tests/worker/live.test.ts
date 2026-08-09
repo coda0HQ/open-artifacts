@@ -9,6 +9,8 @@ import type { Bindings } from "../../src/api";
 import { createApp } from "../../src/app";
 import type { Authorizer, OwnershipGrant } from "../../src/authorizer";
 import app from "../../src/index";
+import { clampLivePollTimeout } from "../../src/live-api";
+import { MAX_LIVE_POLL_MS } from "../../src/live-do";
 
 // Live editing is OPT-IN: when the deploy did not bind a LIVE_DO Durable
 // Object (the engine's default), the /live* routes 404 and the viewer renders
@@ -131,6 +133,80 @@ async function enqueueRaw(
 }
 
 const SK_BEARER = { authorization: `Bearer sk_${"a".repeat(40)}` };
+
+// Snapshot of the LiveObject's in-flight long-poll waiters (resolve identity +
+// watcher id). Used to make the concurrent-poll assertions deterministic: a
+// poll's HTTP round-trip registers its waiter asynchronously, so asserting on
+// the waiter list (inside the DO's own context) is race-free.
+type WaiterSnap = { resolve: (e: unknown) => void; watcher: string };
+async function liveWaiters(stub: DurableObjectStub): Promise<WaiterSnap[]> {
+  return (await runInDurableObject(stub, (instance) => {
+    const live = instance as unknown as {
+      waiters: { resolve: (e: unknown) => void; watcher: string }[];
+    };
+    return live.waiters.map((w) => ({
+      resolve: w.resolve,
+      watcher: w.watcher,
+    }));
+  })) as WaiterSnap[];
+}
+
+async function waitForWaiters(
+  stub: DurableObjectStub,
+  count: number,
+  timeoutMs = 3000,
+): Promise<WaiterSnap[]> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const ws = await liveWaiters(stub);
+    if (ws.length >= count) return ws;
+    await new Promise((r) => setTimeout(r, 20));
+  }
+  return liveWaiters(stub);
+}
+
+// Wait for a watcher id's re-poll to supersede its previous waiter: the DO
+// prunes the dead waiter and the single remaining waiter must be the new poll
+// (same watcher id, different resolve). Without the prune this never changes
+// and the assertion below fails on timeout.
+async function waitForSupersede(
+  stub: DurableObjectStub,
+  previous: WaiterSnap,
+  timeoutMs = 3000,
+): Promise<WaiterSnap> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const ws = await liveWaiters(stub);
+    if (ws.length === 1 && ws[0].resolve !== previous.resolve) {
+      return ws[0];
+    }
+    await new Promise((r) => setTimeout(r, 20));
+  }
+  const ws = await liveWaiters(stub);
+  expect(ws.length).toBe(1);
+  expect(ws[0].resolve).not.toBe(previous.resolve);
+  return ws[0];
+}
+
+// Deliver a comment through the real enqueue path (browser WebSocket), which
+// is what flushes waiting polls — enqueueRaw only inserts a row and never
+// wakes a waiter.
+async function pushComment(
+  id: string,
+  body: Record<string, unknown>,
+): Promise<void> {
+  const res = await liveStub(id).fetch(
+    new Request(`${BASE}/api/artifacts/${id}/live`, {
+      headers: { Upgrade: "websocket" },
+    }),
+  );
+  expect(res.status).toBe(101);
+  const ws = res.webSocket;
+  if (!ws) throw new Error("no websocket in upgrade response");
+  ws.accept();
+  ws.send(JSON.stringify(body));
+  ws.close();
+}
 
 describe("live routes without LIVE_DO binding", () => {
   it("GET /api/artifacts/:id/live returns 404 (no WebSocket upgrade)", async () => {
@@ -336,6 +412,32 @@ describe("live routes with LIVE_DO bound", () => {
     );
   });
 
+  it("auto-expands the offline startup prompt with a truthful disclosure label", async () => {
+    const { id } = await create({ content: "<p>hi</p>", format: "html" });
+    const res = await fetchWith(new Request(`${BASE}/a/${id}`), ON, true);
+    const html = await res.text();
+
+    expect(html).toContain("function setGuideToggleLabel(open)");
+    expect(html).toContain(
+      "guideToggle.textContent=open?'Hide start prompt':'Show start prompt'",
+    );
+    expect(html).toContain("guideDetails.hidden=false");
+    expect(html).toContain("setGuideToggleLabel(true)");
+    expect(html).toContain("if(guideCopy)guideCopy.focus()");
+    expect(html).toContain("setGuideToggleLabel(!!open)");
+  });
+
+  it("does not let a late edit-commit response resurrect a completed Apply pill", async () => {
+    const { id } = await create({ content: "<p>hi</p>", format: "html" });
+    const res = await fetchWith(new Request(`${BASE}/a/${id}`), ON, true);
+    const html = await res.text();
+
+    expect(html).toContain("var queuedEditId=null, editCommitEpoch=0");
+    expect(html).toContain("var commitEpoch=++editCommitEpoch");
+    expect(html).toContain("if(commitEpoch!==editCommitEpoch)return");
+    expect(html).toContain("editCommitEpoch++");
+  });
+
   it("locks element picking while the selected element prompt is open", async () => {
     const { id } = await create({ content: "<p>hi</p>", format: "html" });
     const res = await fetchWith(new Request(`${BASE}/a/${id}`), ON, true);
@@ -454,6 +556,20 @@ describe("live routes with LIVE_DO bound", () => {
     const res = await fetchWith(new Request(`${BASE}/a/${id}/frame`), ON);
     const html = await res.text();
     expect(html).toContain("oa:live:annot:data");
+  });
+
+  it("the live protocol carries no base64 screenshot machinery", async () => {
+    const { id } = await create({ content: "<p>hi</p>", format: "html" });
+    const res = await fetchWith(new Request(`${BASE}/a/${id}/frame`), ON);
+    const html = await res.text();
+    // Comments/strokes collection stays; the screenshot capture (SVG
+    // foreignObject → canvas → base64 PNG) must not ship — a base64 blob in
+    // the generate event floods the agent watcher's stdout and hides the
+    // actual request content.
+    expect(html).toContain("oa:live:annot:data");
+    expect(html).toContain("sendAnnots");
+    expect(html).not.toContain("toDataURL");
+    expect(html).not.toContain("XMLSerializer");
   });
 
   it("POST /live/heartbeat records presence and GET /live/status reports it", async () => {
@@ -724,6 +840,130 @@ describe("live routes with LIVE_DO bound", () => {
     );
     evt = (await res.json()) as { type: string; id: string };
     expect(evt.id).toBe("ev2");
+  });
+
+  it("clampLivePollTimeout caps a requested timeout at the edge-safe ceiling", () => {
+    // Cloudflare's edge drops an idle long-poll at ~127s; every poll the CLI
+    // requested at 270s was canceled with no response ("other side closed").
+    // The route must clamp so the DO returns a clean {type:'timeout'} instead.
+    expect(MAX_LIVE_POLL_MS).toBeLessThanOrEqual(120_000);
+    expect(clampLivePollTimeout("270000")).toBe(MAX_LIVE_POLL_MS);
+    expect(clampLivePollTimeout("999999")).toBe(MAX_LIVE_POLL_MS);
+    expect(clampLivePollTimeout(String(MAX_LIVE_POLL_MS))).toBe(
+      MAX_LIVE_POLL_MS,
+    );
+    expect(clampLivePollTimeout("30000")).toBe(30_000);
+    // Absent/zero/garbage fall back to the ceiling, not an unbounded wait.
+    expect(clampLivePollTimeout(null)).toBe(MAX_LIVE_POLL_MS);
+    expect(clampLivePollTimeout("0")).toBe(MAX_LIVE_POLL_MS);
+    expect(clampLivePollTimeout("abc")).toBe(MAX_LIVE_POLL_MS);
+    // Floor of 1000ms so the DO never thunders under sub-second polls.
+    expect(clampLivePollTimeout("500")).toBe(1000);
+  });
+
+  it("a superseded poll (same watcher id) cannot consume a queued comment", async () => {
+    // When a watcher's in-flight poll dies on the edge, the watch loop re-polls
+    // with the same watcher id. The new poll must prune the dead waiter, or the
+    // stale waiter (offered first by flushWaiters) would consume a comment and
+    // drop it — its response is gone. Regression for the "other side closed"
+    // retry loop losing comment events.
+    const { id } = await create({ content: "<p>hi</p>", format: "html" });
+    // Warm the schema so the concurrent polls share one queue.
+    await fetchWith(
+      new Request(`${BASE}/api/artifacts/${id}/live/status`, {
+        headers: SK_BEARER,
+      }),
+      ON,
+      true,
+    );
+    const stub = liveStub(id);
+
+    // Fire the first poll (watcher=w1); it blocks with no event available. The
+    // timeout is 10s — NOT 1s — so the stale waiter can't expire on its own
+    // during the wait and mask a missing prune (a 1s poll would false-pass).
+    const pollA = fetchWith(
+      new Request(
+        `${BASE}/api/artifacts/${id}/live/poll?timeout=10000&watcher=w1`,
+        {
+          headers: SK_BEARER,
+        },
+      ),
+      ON,
+      true,
+    );
+    const [waiterA] = await waitForWaiters(stub, 1);
+    // The watch loop re-polls (the connection died); same watcher id.
+    const pollB = fetchWith(
+      new Request(
+        `${BASE}/api/artifacts/${id}/live/poll?timeout=10000&watcher=w1`,
+        {
+          headers: SK_BEARER,
+        },
+      ),
+      ON,
+      true,
+    );
+    // A is superseded by B: the single remaining waiter is B, not A, and the
+    // superseded pollA resolves promptly (the DO resolves pruned waiters).
+    const waiterB = await waitForSupersede(stub, waiterA);
+    expect(waiterB.watcher).toBe("w1");
+    expect((await (await pollA).json()) as { type: string }).toMatchObject({
+      type: "timeout",
+    });
+
+    // The user posts a comment through the real enqueue path (WebSocket), which
+    // flushes waiters — the live poll (B) must get it, not the dead waiter.
+    await pushComment(id, {
+      type: "comment",
+      id: "c_supersede1",
+      body: "never swallowed by a dead poll",
+    });
+
+    const b = (await (await pollB).json()) as { type: string };
+    // The live (current) poll gets the comment; the dead poll timed out above.
+    expect(b).toMatchObject({ type: "comment", id: "c_supersede1" });
+  });
+
+  it("a superseded poll with no watcher id keeps the legacy two-waiter behavior", async () => {
+    // Without a watcher id nothing is pruned: the oldest poll still wins, so a
+    // comment offered during the overlap goes to the first poller. This pins
+    // that non-watcher polls are untouched (the fix only applies to watchers).
+    const { id } = await create({ content: "<p>hi</p>", format: "html" });
+    await fetchWith(
+      new Request(`${BASE}/api/artifacts/${id}/live/status`, {
+        headers: SK_BEARER,
+      }),
+      ON,
+      true,
+    );
+    const stub = liveStub(id);
+    const pollA = fetchWith(
+      new Request(`${BASE}/api/artifacts/${id}/live/poll?timeout=1000`, {
+        headers: SK_BEARER,
+      }),
+      ON,
+      true,
+    );
+    const [waiterA] = await waitForWaiters(stub, 1);
+    const pollB = fetchWith(
+      new Request(`${BASE}/api/artifacts/${id}/live/poll?timeout=1000`, {
+        headers: SK_BEARER,
+      }),
+      ON,
+      true,
+    );
+    const waiters = await waitForWaiters(stub, 2); // both registered, nothing pruned
+    expect(waiters.some((w) => w.resolve === waiterA.resolve)).toBe(true);
+    await pushComment(id, {
+      type: "comment",
+      id: "c_noid1",
+      body: "oldest waiter wins",
+    });
+    const [ra, rb] = await Promise.all([pollA, pollB]);
+    const a = (await ra.json()) as { type: string };
+    const b = (await rb.json()) as { type: string };
+    expect(a).toMatchObject({ type: "comment", id: "c_noid1" });
+    expect(b.type).toBe("timeout");
   });
 
   it("POST /api/artifacts returns liveSupported true when LIVE_DO is bound and false when not", async () => {
@@ -1443,6 +1683,22 @@ describe("live edit stash, commit, and inline-edit chrome", () => {
     // done-branch discrimination: the protocol field decides, lastSubmitType backs it up.
     expect(html).toContain("Array.isArray(msg.appliedEntryIds)");
     expect(html).toContain("lastSubmitType==='edit'");
+  });
+
+  it("the compose-row Cancel (un-pick) button wraps its close glyph in the dock-icon span", async () => {
+    const { id } = await create({ content: "<p>hi</p>", format: "html" });
+    const res = await fetchWith(new Request(`${BASE}/a/${id}`), ON, true);
+    const html = await res.text();
+    // Regression: the un-pick button used to set the bare SVG as innerHTML with
+    // no .oa-dock-icon wrapper, so the 14px dock-icon sizing rule never applied
+    // and the glyph rendered blank/oversized inside the bordered chip. It must
+    // build the icon span the same way the static dock and the handoff dockBtn
+    // helper do. The innerHTML literal is interpolated at serve time (CLOSE_SVG
+    // is a module-scope template ref), so match the served SVG form.
+    expect(html).not.toContain("oa-live-unpick','<svg");
+    expect(html).toContain("var unpickIc=el('span','oa-dock-icon')");
+    expect(html).toContain("unpickIc.setAttribute('aria-hidden','true')");
+    expect(html).toContain("unpickIc.innerHTML='<svg");
   });
 
   it("the frame picker carries the inline edit-mode machinery and a single message listener", async () => {

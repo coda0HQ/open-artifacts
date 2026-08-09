@@ -134,67 +134,11 @@
   function redrawStrokes(){ if(!annotSvg)return; var ns='http://www.w3.org/2000/svg'; while(annotSvg.firstChild)annotSvg.removeChild(annotSvg.firstChild); annotState.strokes.concat(curStroke?[curStroke]:[]).forEach(function(s){ var p=document.createElementNS(ns,'path'); var d=s.points.map(function(pt,i){return (i?'L':'M')+pt[0]+' '+pt[1];}).join(' '); p.setAttribute('d',d); p.setAttribute('stroke','#6457f0'); p.setAttribute('stroke-width','3'); p.setAttribute('fill','none'); p.setAttribute('stroke-linecap','round'); annotSvg.appendChild(p); }); }
   function redrawPins(){ if(!annotPins)return; annotPins.innerHTML=''; annotState.comments.forEach(function(c){ var d=document.createElement('div'); d.style.cssText='position:absolute;left:'+(c.x-9)+'px;top:'+(c.y-9)+'px;width:18px;height:18px;border-radius:50% 50% 50% 2px;background:#6457f0;'; annotPins.appendChild(d); }); }
   // --- annotation collection (host asks on submit) ---
-  // Screenshot: render a clone of the picked element (computed styles copied
-  // inline, so the page stylesheet — unreachable across the foreignObject —
-  // still applies) + the annotation overlay, into an SVG foreignObject, then
-  // to canvas PNG. Best-effort: web-font CDN taint, unsupported engines, or
-  // any throw -> cb(null) (the host omits the screenshot then).
-  var CAP_MAX_NODES=300;
-  function captureShot(cb){
-    try{
-      if(!picked||!window.XMLSerializer||typeof document.createElementNS==='undefined'){ cb(null); return; }
-      var r=picked.getBoundingClientRect();
-      if(r.width<=0||r.height<=0){ cb(null); return; }
-      var clone=picked.cloneNode(true);
-      // Walk the ORIGINAL tree in lockstep with the clone: computed styles
-      // read from the detached clone resolve layout-dependent values
-      // (percentages, flex, width/height) against nothing and collapse.
-      var count=0, walk=[[clone,picked]];
-      while(walk.length){
-        var pair=walk.pop(), n=pair[0], orig=pair[1];
-        if(!n||n.nodeType!==1)continue;
-        if(++count>CAP_MAX_NODES){ cb(null); return; }
-        var cs=getComputedStyle(orig), style='';
-        for(var i=0;i<cs.length;i++){ var k=cs[i], v=cs.getPropertyValue(k); if(v)style+=k+':'+v+';'; }
-        // The clone root must sit flush in the wrapper (0,0): the copied
-        // layout props (margins, offsets, position, transform) would displace
-        // it and the overflow:hidden wrapper would crop the capture.
-        if(n===clone){
-          style+='margin:0;top:auto;left:auto;right:auto;bottom:auto;position:relative;transform:none;translate:none;';
-        }
-        n.setAttribute('style',style);
-        for(var j=0;j<n.children.length;j++)walk.push([n.children[j], orig.children[j]]);
-      }
-      var wrap=document.createElement('div');
-      wrap.style.cssText='position:relative;width:'+r.width+'px;height:'+r.height+'px;overflow:hidden';
-      wrap.appendChild(clone);
-      if(annotSvg){ var s=annotSvg.cloneNode(true); s.style.left='0'; s.style.top='0'; wrap.appendChild(s); }
-      if(annotPins){ var p=annotPins.cloneNode(true); p.style.left='0'; p.style.top='0'; wrap.appendChild(p); }
-      var svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
-      svg.setAttribute('width',String(r.width)); svg.setAttribute('height',String(r.height));
-      var fo=document.createElementNS('http://www.w3.org/2000/svg','foreignObject');
-      fo.setAttribute('width','100%'); fo.setAttribute('height','100%');
-      fo.appendChild(wrap); svg.appendChild(fo);
-      var src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(new XMLSerializer().serializeToString(svg));
-      var img=new Image();
-      img.onload=function(){
-        try{
-          var cv=document.createElement('canvas');
-          cv.width=Math.max(1,Math.round(r.width)); cv.height=Math.max(1,Math.round(r.height));
-          cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
-          cb(cv.toDataURL('image/png'));
-        }catch(e){ cb(null); }
-      };
-      img.onerror=function(){ cb(null); };
-      img.src=src;
-    }catch(e){ cb(null); }
-  }
   function sendAnnots(req){
     // Include the in-progress stroke: redrawStrokes renders it live, so a
     // submit mid-drag must not silently drop what the user sees on screen.
     var strokes=annotState.strokes.concat(drawing&&curStroke?[curStroke]:[]);
-    var payload={type:'oa:live:annot:data', req:req, comments:annotState.comments.slice(), strokes:strokes, screenshot:null};
-    captureShot(function(shot){ if(shot)payload.screenshot=shot; window.__oaSend(payload); });
+    window.__oaSend({type:'oa:live:annot:data', req:req, comments:annotState.comments.slice(), strokes:strokes});
   }
 
   // --- inline text editing (impeccable-style manual copy edits) ---

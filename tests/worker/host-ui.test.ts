@@ -104,6 +104,23 @@ describe("host page interactive UI (tasks 009/010/011)", () => {
     expect(drawerRule).not.toContain("box-shadow:");
   });
 
+  it("keeps the comments drawer mutually exclusive with editing docks", async () => {
+    const html = await hostHtml();
+
+    expect(html).toContain("window.__oaCommentsDrawer={");
+    expect(html).toContain(
+      "if(window.__oaCommentsDrawer&&window.__oaCommentsDrawer.isOpen())",
+    );
+    expect(html).toContain("window.__oaCommentsDrawer.close()");
+    expect(html).toContain("getActive:function(){return active;}");
+    expect(html).toContain(
+      "if(active&&!window.__oaDock.close(active))return false",
+    );
+    expect(html).toContain(
+      "if(window.__oaCommentsDrawer&&!window.__oaCommentsDrawer.open())return",
+    );
+  });
+
   it("still serves the interactive UI on the encrypted unlock shell", async () => {
     // Encrypted artifacts get interactive (unanchored) comments too.
     const html = await hostHtml({

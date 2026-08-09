@@ -49,11 +49,10 @@ Live-edit artifact <ID> at coda0.com:
      prompts). The user drives the page.
 3. The user opens https://coda0.com/a/<ID>, clicks Live (this arms the picker immediately). After an element is picked, the frame picker locks while its prompt input is open, so another element cannot replace the current draft. Pressing Enter (or Add) commits that element+prompt pair and re-arms the picker for the next item. They may also draw strokes or drop comment pins over the picked element. When all elements are described, they hit Submit.
 4. Your watcher prints a generate event:
-   {type:'generate', id, items:[{element:{tagName,id,classes,textContent,outerHTML,computedStyles,parentContext,boundingRect,rect}, prompt}], comments?, strokes?, screenshot?}
+   {type:'generate', id, items:[{element:{tagName,id,classes,textContent,outerHTML,computedStyles,parentContext,boundingRect,rect}, prompt}], comments?, strokes?}
    - Each item carries its own `element` (full context) and `prompt` (the user's freeform description for that element).
    - `comments` (`[{x,y,text}]` in element-local CSS px) and `strokes`
-     (`[{points:[[x,y],…]}]`) are the pins/strokes the user drew; `screenshot`
-     is a data-URL PNG with them baked in when capture is possible.
+     (`[{points:[[x,y],…]}]`) are the pins/strokes the user drew.
    - Another `generate` can arrive while you are still editing a previous one —
      the watcher delivers new submissions immediately. Edit and reply `done`
      for each event id separately.
@@ -93,11 +92,21 @@ LiveObject's SQLite queue (survives hibernation) but won't wake you.
 
 ## Harness note
 
-`live <id>` is one-shot: it blocks for one event (up to ~270s), prints one JSON
-line on stdout, and exits. Claude Code may run it as a background task; Cursor
-uses a background terminal with exit-notify; Codex runs it in the foreground.
-Re-invoke to poll the next event. This is the same harness-agnostic contract
-as `artifact login`.
+`live <id>` is one-shot: it blocks for one event (default ~60s, or
+`OPEN_ARTIFACTS_LIVE_TIMEOUT_MS`), prints one JSON line on stdout, and exits.
+Claude Code may run it as a background task; Cursor uses a background terminal
+with exit-notify; Codex runs it in the foreground. Re-invoke to poll the next
+event. This is the same harness-agnostic contract as `artifact login`.
+
+**Why not longer than 60s?** A poll must complete before Cloudflare's edge
+drops an idle client connection (~127s of no response — confirmed in
+observability: every poll requested above ~127s is canceled with no response,
+so the CLI sees "other side closed" and retries instead of a clean timeout).
+The server clamps any requested timeout to 60s; set
+`OPEN_ARTIFACTS_LIVE_TIMEOUT_MS` below that. The watcher sends a per-process
+`watcher` id on each poll; the LiveObject uses it to supersede a dead in-flight
+poll when the watch loop re-polls, so a stale waiter can't consume a comment
+the watcher would then miss.
 
 `--reply <eid> done --version <v>` is fire-and-forget: it returns once the
 LiveObject has broadcast `done` to the waiting browser.
@@ -156,14 +165,16 @@ blob and lets the agent match it in source by id → class → tag:
 While live mode is open, the picked element carries a small drawing overlay:
 the user can draw strokes or drop comment pins on it. On submit, the `generate`
 event carries `comments` (`[{x,y,text}]` in element-local CSS px) and `strokes`
-(`[{points:[[x,y],…]}]` raw point arrays) and a `screenshot` (a data-URL PNG
-with the annotations baked in, when the browser can capture it — tainted
-canvas or unsupported engines send none). In a multi-element batch the
+(`[{points:[[x,y],…]}]` raw point arrays). In a multi-element batch the
 coordinates are relative to the most recently picked element. Stroke shapes
 are NOT classified by the browser — a closed loop, arrow, or cross is just a
 point array; you infer the intent. A cross/slash on an element means delete; a
-loop means "this thing"; an arrow means direction. No annotations → no
-screenshot is sent.
+loop means "this thing"; an arrow means direction.
+
+Screenshots are **not** part of the live protocol: a base64 data-URL PNG would
+flood the agent watcher's stdout and hide the actual request content, so the
+protocol never transmits one. A direct (non-base64) image channel is future
+work. No annotations → neither `comments` nor `strokes` is sent.
 
 ## Copy edits (inline text editing)
 

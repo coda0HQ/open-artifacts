@@ -2985,6 +2985,34 @@ describe("live watch: heartbeats, 404 hints, prompt delivery", () => {
     }
   });
 
+  it("watch sends a stable watcher id on every poll (supersede support)", async () => {
+    holdPoll = true;
+    const { child, done } = spawnCli(["live", "testid123456", "--watch"], {
+      ...skEnv,
+      OPEN_ARTIFACTS_LIVE_HEARTBEAT_MS: "5000",
+    });
+    try {
+      await new Promise((r) => setTimeout(r, 250));
+      releasePoll?.(200, { type: "timeout" });
+      await new Promise((r) => setTimeout(r, 250));
+      releasePoll?.(200, { type: "exit", id: "ev9" });
+      await done;
+      const polls = requests.filter(
+        (r) => r.method === "GET" && (r.path ?? "").includes("/live/poll"),
+      );
+      expect(polls.length).toBeGreaterThanOrEqual(2);
+      const ids = polls.map((p) => {
+        const m = /[?&]watcher=([^&]+)/.exec(p.path ?? "");
+        return m ? m[1] : null;
+      });
+      // Every poll carries the same per-process watcher id (not blank, not per-request).
+      expect(ids.every((v) => v && v === ids[0])).toBe(true);
+    } finally {
+      if (releasePoll) releasePoll(500, { error: "test teardown" });
+      child.kill();
+    }
+  });
+
   it("one-shot live poll reports the artifact/token hint on 404", async () => {
     nextResponse = { status: 404, body: { error: "not found" } };
     const result = await run(["live", "testid123456"], {
@@ -3066,6 +3094,45 @@ describe("live watch: heartbeats, 404 hints, prompt delivery", () => {
       releasePoll?.(200, { type: "exit", id: "ev9" });
       const { stderr } = await done;
       expect(stderr).toContain("session ended");
+    } finally {
+      if (releasePoll) releasePoll(500, { error: "test teardown" });
+      child.kill();
+    }
+  });
+
+  it("watch never prints a generate event's screenshot to the agent's stdout", async () => {
+    holdPoll = true;
+    const { child, done } = spawnCli(["live", "testid123456", "--watch"], {
+      ...skEnv,
+      OPEN_ARTIFACTS_LIVE_HEARTBEAT_MS: "5000",
+    });
+    try {
+      await new Promise((r) => setTimeout(r, 250));
+      // The browser may submit a screenshot (base64 data-URL PNG) on the
+      // event; the watcher must strip it before printing so a multi-MB blob
+      // can't flood the agent's context and hide the actual request content.
+      releasePoll?.(200, {
+        type: "generate",
+        id: "ev_shot1",
+        items: [{ prompt: "make the title red", element: { tagName: "h1" } }],
+        comments: [{ x: 4, y: 8, text: "here" }],
+        screenshot:
+          "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+      });
+      await new Promise((r) => setTimeout(r, 400));
+      releasePoll?.(200, { type: "exit", id: "ev9" });
+      const { stdout } = await done;
+      const printed = stdout
+        .split("\n")
+        .filter(Boolean)
+        .map((l) => JSON.parse(l));
+      const gen = printed.find((e) => e.id === "ev_shot1");
+      expect(gen).toBeDefined();
+      // The request content stays readable (the prompt rides items[].prompt,
+      // comments top-level); the screenshot is gone.
+      expect(gen.items[0].prompt).toBe("make the title red");
+      expect(gen.comments).toEqual([{ x: 4, y: 8, text: "here" }]);
+      expect(gen.screenshot).toBeUndefined();
     } finally {
       if (releasePoll) releasePoll(500, { error: "test teardown" });
       child.kill();

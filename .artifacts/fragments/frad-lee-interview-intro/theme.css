@@ -1,0 +1,37 @@
+:root {
+  /* Editorial — vermilion seal on true off-white.
+     Neutrals tinted toward the accent hue (~25) at very low chroma. */
+  --bg: oklch(98.5% 0.003 60);
+  --surface: oklch(100% 0.001 60);
+  --fg: oklch(22% 0.015 40);
+  --muted: oklch(46% 0.012 40);
+  --border: oklch(89% 0.006 50);
+  --accent: oklch(50% 0.13 25);
+  --accent-on: oklch(99% 0.002 60);
+
+  --font-display: "Iowan Old Style", "Songti SC", "Noto Serif CJK SC",
+    "Source Han Serif SC", "Palatino Linotype", Georgia, serif;
+  --font-body: -apple-system, BlinkMacSystemFont, "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas,
+    monospace;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+
+  /* Editorial elevation: hairlines, no shadows */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 0 0 1px var(--border);
+}
+
+:root[data-theme="dark"] {
+  --bg: oklch(19% 0.006 50);
+  --surface: oklch(23% 0.007 50);
+  --fg: oklch(92% 0.008 60);
+  --muted: oklch(66% 0.012 55);
+  --border: oklch(33% 0.009 50);
+  --accent: oklch(68% 0.14 30);
+  --accent-on: oklch(20% 0.02 30);
+}

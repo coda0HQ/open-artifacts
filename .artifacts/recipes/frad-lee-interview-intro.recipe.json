@@ -1,0 +1,35 @@
+{
+  "$schema": "../../skills/using-open-artifacts/references/recipe.schema.json",
+  "version": 1,
+  "artifact": {
+    "title": "李惜 — AI-native 产品设计师 · Kimi 面试",
+    "description": "李惜 (Frad LEE) 面向 Kimi 产品设计师 (AI Agent) 岗位的面试自述:以「Agent 时代的界面不是聊天框,而是监督者的工作台」为论点,呈现三组产品设计与 Agent 工程的交叉案例、设计系统与交互功底,以及四条界面主张。",
+    "favicon": "🎨",
+    "format": "html",
+    "level": 2,
+    "canvas": false,
+    "channel": "frad-lee-interview-intro",
+    "visibility": "public",
+    "scope": "李惜 Kimi 面试自我介绍:定位、产品设计与 Agent 工程交叉案例(金星 AI 看板、AI 会议助手、Code Terrier)、设计系统与交互功底(is-yi、FluidInterfacesSwiftUI、openclaw)、Agent 界面主张、背景速览。",
+    "watch": [],
+    "local": false,
+    "autoUpdate": false
+  },
+  "document": {
+    "language": "zh-CN",
+    "theme": "editorial-seal-ink",
+    "fragments": {
+      "theme": ["../fragments/frad-lee-interview-intro/theme.css"],
+      "styles": ["../fragments/frad-lee-interview-intro/styles.css"],
+      "body": ["../fragments/frad-lee-interview-intro/body.html"],
+      "scripts": []
+    }
+  },
+  "security": {
+    "encrypted": false,
+    "passwordCredential": null
+  },
+  "build": {
+    "strategy": "auto"
+  }
+}

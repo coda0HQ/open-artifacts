@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import {
   loadConfig,
   loadCredentials,
@@ -5,6 +6,15 @@ import {
 } from "../lib/cli-state.mjs";
 import { waitForEventAck } from "../lib/live-ack.mjs";
 import { deepestCause, request } from "../lib/transport.mjs";
+
+function stripForAgent(event) {
+  if (!event || typeof event !== "object" || !("screenshot" in event)) {
+    return event;
+  }
+  const clean = { ...event };
+  delete clean.screenshot;
+  return clean;
+}
 
 export async function commandLive(rest, flags) {
   const config = loadConfig(flags);
@@ -56,7 +66,8 @@ export async function commandLive(rest, flags) {
   const typesRaw = flags.types;
   const timeoutMs = Number(process.env.OPEN_ARTIFACTS_LIVE_TIMEOUT_MS);
   const timeout =
-    Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 270_000;
+    Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 60_000;
+  const watcherId = `w_${randomBytes(8).toString("hex")}`;
   const headers = {
     "content-type": "application/json",
     "Open-Artifacts-Protocol": "1",
@@ -84,6 +95,7 @@ export async function commandLive(rest, flags) {
   };
   const pollOnce = async (exclude = []) => {
     const params = new URLSearchParams({ timeout: String(timeout) });
+    params.set("watcher", watcherId);
     if (typesRaw) params.set("types", typesRaw);
     if (exclude.length) params.set("exclude", exclude.join(","));
     const { status: httpStatus, json } = await fetchJson(
@@ -160,7 +172,7 @@ export async function commandLive(rest, flags) {
     return;
   }
   if (!flags.watch) {
-    console.log(JSON.stringify(await pollOnce()));
+    console.log(JSON.stringify(stripForAgent(await pollOnce())));
     return;
   }
 
@@ -205,7 +217,7 @@ export async function commandLive(rest, flags) {
     }
     if (event.type === "timeout") continue;
     delivered.add(event.id);
-    console.log(JSON.stringify(event));
+    console.log(JSON.stringify(stripForAgent(event)));
     if (event.type === "exit") {
       clearInterval(heartbeatTimer);
       await consumeExit();

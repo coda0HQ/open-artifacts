@@ -114,6 +114,19 @@
         "wrangler.jsonc": "9a07f04e8e0cfe656f054c644c9546ef59aa8697666b960616d0d58b8b672e48"
       },
       "updatedAt": "2026-07-25T16:05:35.406Z"
+    },
+    {
+      "id": "MB3f3RsuRd8a",
+      "url": "https://coda0.com/a/MB3f3RsuRd8a",
+      "version": 2,
+      "recipe": ".artifacts/recipes/frad-lee-interview-intro.recipe.json",
+      "recipeHash": "sha256:85c16bbf44629f651fb2edeba73de421e04010ce72b6ad0eb4a85456542def52",
+      "inputHash": "sha256:5ff428816051007d711766f868de28a4bb03322576c2717a54238b2ebfafb32d",
+      "outputHash": "sha256:efd515a8c547bfe2b4b83bf0fc849af40b5b943b5dcd6b3460125dec10250f26",
+      "strategy": "direct",
+      "autoUpdate": false,
+      "snapshot": {},
+      "updatedAt": "2026-08-06T05:47:38.522Z"
     }
   ]
 }

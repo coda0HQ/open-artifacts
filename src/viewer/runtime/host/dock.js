@@ -4,6 +4,11 @@
   function refuse(d){ if(d&&d.refuseMessage&&window.__oaShowError){ var m=d.refuseMessage(); if(m)window.__oaShowError(m); } }
   function open(name){
     var d=docks[name]; if(!d)return false;
+    // Comments and editing docks share the same workspace. Close the drawer
+    // through its public API so its ARIA state and transition stay in sync.
+    if(window.__oaCommentsDrawer&&window.__oaCommentsDrawer.isOpen()){
+      if(!window.__oaCommentsDrawer.close())return false;
+    }
     if(active===name)return true;
     if(active){ var o=docks[active]; if(o&&!o.close()){ refuse(o); return false; } }
     d.open(); active=name; return true;
@@ -18,7 +23,8 @@
     open:open,
     close:close,
     toggle:function(name){ var d=docks[name]; if(!d)return false; return active===name?close(name):open(name); },
-    isActive:function(name){return active===name;}
+    isActive:function(name){return active===name;},
+    getActive:function(){return active;}
   };
   // One Escape closes the active dock, but only after any open comments surface
   // (drawer/compose/menu) has had its turn. The surfaces' own Escape handlers
@@ -38,7 +44,7 @@
       if(details&&!details.hidden){
         details.hidden=true;
         var t=document.getElementById('oa-live-guide-toggle');
-        if(t)t.setAttribute('aria-expanded','false');
+        if(t){t.setAttribute('aria-expanded','false');t.textContent='Show start prompt';}
       }
       return;
     }

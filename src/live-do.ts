@@ -47,8 +47,6 @@ export type LiveEvent = {
     | "edit"
     | "version";
   id: string;
-  /** Best-effort base64 data-URL PNG of the picked content; omitted when capture fails. */
-  screenshot?: string;
   [key: string]: unknown;
 };
 
@@ -78,9 +76,13 @@ type PollWaiter = {
   types: Set<LiveEvent["type"]> | null; // null = any
   skip: Set<string>; // event ids this poller must not be offered
   timer: ReturnType<typeof setTimeout>;
+  watcher: string;
 };
 
-const DEFAULT_POLL_TIMEOUT_MS = 270_000; // under undici's 300s header ceiling
+// Keep every long-poll comfortably below the edge idle-connection cutoff so
+// callers receive a timeout response instead of an interrupted connection.
+export const MAX_LIVE_POLL_MS = 60_000;
+const DEFAULT_POLL_TIMEOUT_MS = MAX_LIVE_POLL_MS;
 const LEASE_MS = 30_000; // a poll holds an event for 30s before re-offering it
 const GC_AGE_MS = 3600_000; // drop undelivered events after 1h
 // Staged copy edits age out after a day. They differ from pending events: a
@@ -296,6 +298,7 @@ export class LiveObject extends DurableObject<Env> {
     types: LiveEvent["type"][] | null,
     timeoutMs: number = DEFAULT_POLL_TIMEOUT_MS,
     excludeIds: string[] = [],
+    watcher = "",
   ): Promise<LiveEvent | { type: "timeout" }> {
     await this.ensureSchema();
     const want = types ? new Set(types) : null;
@@ -308,7 +311,19 @@ export class LiveObject extends DurableObject<Env> {
         this.waiters = this.waiters.filter((w) => w !== waiter);
         resolve({ type: "timeout" });
       }, timeoutMs);
-      const waiter: PollWaiter = { resolve, types: want, skip, timer };
+      // A sequential watcher reuses one id. If its old HTTP connection died,
+      // the next poll supersedes that dead waiter so it cannot consume and
+      // discard the next queued event.
+      if (watcher) {
+        for (const stale of this.waiters) {
+          if (stale.watcher === watcher) {
+            clearTimeout(stale.timer);
+            stale.resolve({ type: "timeout" });
+          }
+        }
+        this.waiters = this.waiters.filter((w) => w.watcher !== watcher);
+      }
+      const waiter: PollWaiter = { resolve, types: want, skip, timer, watcher };
       this.waiters.push(waiter);
     });
   }

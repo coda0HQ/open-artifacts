@@ -126,25 +126,37 @@ export const LIVE_SCRIPT = `
       'Keep the watcher running while I make Live edits.'
     ].join(String.fromCharCode(10));
   }
+  function setGuideToggleLabel(open){
+    if(!guideToggle)return;
+    guideToggle.textContent=open?'Hide start prompt':'Show start prompt';
+  }
   function hideGuide(){
     if(liveGuide)liveGuide.hidden=true;
     // Collapse the disclosure so the next banner opens slim.
     if(guideDetails&&!guideDetails.hidden){
       guideDetails.hidden=true;
       if(guideToggle)guideToggle.setAttribute('aria-expanded','false');
+      setGuideToggleLabel(false);
     }
   }
   function showGuide(){
     if(!liveGuide)return;
     liveGuide.hidden=false;
-    // The banner itself never steals focus — the artifact stays the focus of
-    // the session; expanding the prompt moves focus to the copy button.
+    // Make the watcher command visible on first entry instead of requiring a
+    // second discovery click. The copy control is the first useful action.
+    if(guideDetails&&guideDetails.hidden){
+      guideDetails.hidden=false;
+      if(guideToggle)guideToggle.setAttribute('aria-expanded','true');
+      setGuideToggleLabel(true);
+      if(guideCopy)guideCopy.focus();
+    }
   }
   function toggleGuideDetails(){
     if(!guideDetails)return;
     var open=guideDetails.hidden;
     guideDetails.hidden=!open;
     if(guideToggle)guideToggle.setAttribute('aria-expanded', open?'true':'false');
+    setGuideToggleLabel(!!open);
     if(open&&guideCopy)guideCopy.focus();
   }
   function markGuideCopied(ok){
@@ -332,7 +344,7 @@ export const LIVE_SCRIPT = `
   // A committed edit event waits in the DO queue until a watcher applies it.
   // The pill then becomes the cancel affordance ("Queued — click to cancel",
   // DELETE /live/events/:eid) so "it will queue" is a promise the UI can keep.
-  var queuedEditId=null;
+  var queuedEditId=null, editCommitEpoch=0;
   function paintQueued(){
     if(!applyBtn)return;
     if(queuedEditId){
@@ -370,6 +382,7 @@ export const LIVE_SCRIPT = `
       return;
     }
     clearTimeout(applyArmed); applyArmed=null;
+    var commitEpoch=++editCommitEpoch;
     lastSubmitType='edit';
     setState('APPLYING');
     // A dead watcher still queues the edit server-side (the DO persists
@@ -382,11 +395,16 @@ export const LIVE_SCRIPT = `
     fetch('/api/artifacts/'+encodeURIComponent(cfg.artifactId)+'/live/edit-commit',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({pageUrl:window.location.pathname})})
       .then(function(r){ if(!r.ok) throw {status:r.status}; return r.json(); })
       .then(function(s){
+        // A very fast agent may reply done before this POST response reaches
+        // the browser. Do not let the late response resurrect a completed
+        // event as a cancellable queued pill.
+        if(commitEpoch!==editCommitEpoch)return;
         // Committed: the event sits in the queue until a watcher applies it.
         queuedEditId=String(s&&s.eventId||'');
         paintQueued();
       })
       .catch(function(err){
+        if(commitEpoch!==editCommitEpoch)return;
         // 409 = the stash changed under us (empty/consumed); anything else is
         // a network blip — the stash is still there either way. Surface the
         // difference instead of the old "still here" line, which lied once
@@ -554,8 +572,12 @@ export const LIVE_SCRIPT = `
     ff.addEventListener('input',function(){ done.disabled=!ff.value.trim(); });
     // Un-pick: cancel the draft and re-arm the picker (disarm clears the
     // frame's picked element, highlight, and annotation overlay).
-    var unpick=el('button','oa-dock-btn oa-live-unpick','${CLOSE_SVG}'); unpick.type='button';
+    var unpick=el('button','oa-dock-btn oa-live-unpick'); unpick.type='button';
     unpick.setAttribute('aria-label','Cancel this pick'); unpick.title='Cancel this pick';
+    var unpickIc=el('span','oa-dock-icon');
+    unpickIc.setAttribute('aria-hidden','true');
+    unpickIc.innerHTML='${CLOSE_SVG}';
+    unpick.appendChild(unpickIc);
     unpick.onclick=function(){ toFrame({type:'oa:live:pick:disarm'}); draft=null; setState('PICKING'); toFrame({type:'oa:live:pick:arm'}); };
     r.appendChild(edit); r.appendChild(ff); r.appendChild(done); r.appendChild(unpick);
     // Once the batch has items, the bar carries the batch action too — the
@@ -597,11 +619,11 @@ export const LIVE_SCRIPT = `
     setState('PICKING');
     toFrame({type:'oa:live:pick:arm'});
   }
-  // Ask the frame for the annotations (comment pins + strokes + a screenshot
-  // with them baked in) drawn over the picked element. The frame replies
+  // Ask the frame for the annotations (comment pins + strokes) drawn over the
+  // picked element. The frame replies
   // oa:live:annot:data echoing the request token; if it never does (no overlay
-  // ever shown, capture unsupported, taint), fall back after 1.5s so a stalled
-  // frame can't block the submit. The token stops a slow capture from a
+  // ever shown), fall back after 1.5s so a stalled frame can't block the
+  // submit. The token stops a slow response from a
   // previous submit satisfying a newer one's listener.
   function collectAnnots(cb){
     var done=false, req=genId();
@@ -630,15 +652,14 @@ export const LIVE_SCRIPT = `
     lastSubmitType=null;
     setState('GENERATING');
     // The user's comment pins/strokes ride the generate event (live.md):
-    // the agent sees them with the change. Omit all three when empty.
+    // the agent sees them with the change. Omit both when empty.
     collectAnnots(function(annot){
       var payload={type:'generate', id:sessionId, items:items};
       if(annot){
-        var hasAnnot=(annot.comments&&annot.comments.length)||(annot.strokes&&annot.strokes.length)||annot.screenshot;
+        var hasAnnot=(annot.comments&&annot.comments.length)||(annot.strokes&&annot.strokes.length);
         if(hasAnnot){
           payload.comments=annot.comments||[];
           payload.strokes=annot.strokes||[];
-          if(annot.screenshot) payload.screenshot=annot.screenshot;
         }
       }
       send(payload);
@@ -679,6 +700,9 @@ export const LIVE_SCRIPT = `
         var isEditDone=Array.isArray(msg.appliedEntryIds)||lastSubmitType==='edit';
         setState('CONFIRMED');
         if(isEditDone){
+          // Invalidate an edit-commit response still in flight. The done event
+          // is authoritative and its queue row/stash have already cleared.
+          editCommitEpoch++;
           var applied=Array.isArray(msg.appliedEntryIds)?msg.appliedEntryIds.length:0;
           var failed=Array.isArray(msg.failed)?msg.failed.length:0;
           var summary='✓ Applied '+applied+' edit'+(applied===1?'':'s');

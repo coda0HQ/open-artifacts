@@ -16,7 +16,12 @@ import { validateUpdate } from "./domain";
 import { CheckpointService } from "./live/checkpoint-service";
 import { LiveDraftIndex } from "./live/draft-index";
 import { rollbackAsCheckpoint } from "./live/rollback";
-import type { LiveEvent, LiveObject, LiveTrace } from "./live-do";
+import {
+  type LiveEvent,
+  type LiveObject,
+  type LiveTrace,
+  MAX_LIVE_POLL_MS,
+} from "./live-do";
 import type { LiveDraftPayload } from "./ports/realtime-session-store";
 import { QuotaService, quotaLimitsFromEnv } from "./quota/service";
 import { actorKeyForRequest } from "./rate-limit";
@@ -47,6 +52,16 @@ import { generateId, sha256Hex } from "./tokens";
 // watcher carries a Bearer sk_ for coordination and a write token for edits.
 
 export const liveApi = new Hono<AppContext>();
+
+export function clampLivePollTimeout(
+  raw: string | null | undefined,
+  fallback = MAX_LIVE_POLL_MS,
+): number {
+  const requested = Number(raw ?? 0);
+  const timeout =
+    Number.isFinite(requested) && requested > 0 ? requested : fallback;
+  return Math.min(Math.max(timeout, 1000), MAX_LIVE_POLL_MS);
+}
 
 function liveEnabled(c: Context<AppContext>): boolean {
   // Indirect access so TS does not statically resolve the check to always-true
@@ -164,11 +179,9 @@ liveApi.get("/artifacts/:id/live/poll", async (c) => {
     : null;
   const excludeRaw = c.req.query("exclude");
   const exclude = excludeRaw ? excludeRaw.split(",").filter(Boolean) : [];
-  const timeout = Math.min(
-    Math.max(Number(c.req.query("timeout") ?? 0) || 270_000, 1000),
-    270_000,
-  );
-  const event = await stubFor(c, id).rpcPoll(types, timeout, exclude);
+  const timeout = clampLivePollTimeout(c.req.query("timeout"));
+  const watcher = c.req.query("watcher") ?? "";
+  const event = await stubFor(c, id).rpcPoll(types, timeout, exclude, watcher);
   return c.json(event);
 });
 

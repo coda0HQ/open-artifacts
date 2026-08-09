@@ -52,10 +52,11 @@ Feature: Live editing
   Scenario: An offline Live toggle guides the user to start the watcher
     Given no agent is connected to the artifact
     When the user activates the Live toggle
-    Then the Live dock opens a slim "Live agent not connected" banner with a "Show start prompt" disclosure
-    And the startup prompt's copy button sits inside the expanded disclosure
+    Then the Live dock opens a "Live agent not connected" banner with the start prompt already expanded
+    And the disclosure reads "Hide start prompt" and focuses the startup prompt's copy button
+    And collapsing the disclosure changes its label to "Show start prompt"
     And the prompt tells the agent to run `node artifact.mjs live <id> --watch`
-    And the banner auto-shows only once per session — a reopened offline dock keeps just the status row
+    And the expanded banner auto-shows only once per session — a reopened offline dock keeps just the status row
     And while the banner is open, Escape closes the banner before it closes the dock
     And the Live editor still opens in PICKING mode so the user can select an element
 
@@ -160,8 +161,9 @@ Feature: Live editing
     When the user opens Live in the viewer
     Then the host arms the frame picker and enables annotations (oa:live:annot:enable)
     And on submit the host collects the frame's annotations (oa:live:annot:collect)
-    And the frame replies oa:live:annot:data with comments, strokes, and a screenshot when capturable
-    And the host sends generate with those comments/strokes/screenshot, or omits them when empty
+    And the frame replies oa:live:annot:data with comments and strokes only
+    But the live protocol never carries a screenshot - base64 image transmission is not used
+    And the host sends generate with those comments/strokes, or omits them when empty
 
   Scenario: A posted comment streams to the watcher immediately
     When a live channel is up (the owner's page holds a WebSocket)
@@ -176,6 +178,20 @@ Feature: Live editing
     Then the one-shot `live <id>` exits with a hint naming the artifact/token problem
     And `--watch` prints the hint once and keeps retrying
 
+  Scenario: A poll timeout must complete before the edge drops the connection
+    Given Cloudflare's edge kills an idle long-poll at about 127 seconds with no response
+    When the agent CLI requests a poll with a longer timeout
+    Then the server clamps the poll timeout to its 60s ceiling (the DO returns {type:'timeout'} instead of the connection being dropped)
+    And the CLI defaults its poll timeout to 60s, so every poll completes before the edge cutoff
+    But a requested timeout above the ceiling is never honored
+
+  Scenario: A superseded poll never consumes a queued comment
+    Given a watcher is polling and its in-flight poll dies (the edge drops it)
+    When the watch loop re-polls with the same watcher id
+    Then the LiveObject prunes the dead waiter so it cannot be offered a queued comment
+    And a comment enqueued after the re-poll is delivered to the live poll, not swallowed by the stale waiter
+    But a watcher with no id keeps the old behavior
+
   Scenario: An empty prompt cannot be committed
     When the user picks an element and the compose row opens
     Then the Add button is disabled until the prompt input has text
@@ -185,6 +201,7 @@ Feature: Live editing
   Scenario: The user can cancel a pick
     When the user picks an element and the compose row opens
     Then the compose row offers a "Cancel this pick" button
+    And its close glyph renders at dock-icon size (wrapped in the .oa-dock-icon span)
     And clicking it clears the draft, disarms the frame picker, and re-arms it
     And the dock returns to PICKING without a chip
 
@@ -261,6 +278,7 @@ Feature: Live editing
     And the agent edits the artifact source and runs `node artifact.mjs live <id> --reply <eid> done --data '{"status":"done","appliedEntryIds":[...],"failed":[],"files":[...],"notes":[]}'`
     Then the DO clears that page's staged edits and broadcasts {type:'done', id, status, appliedEntryIds, failed}
     And the host shows "Applied" with the applied/failed summary, empties the Apply pill, and reloads the frame
+    And a late edit-commit response cannot resurrect the queued Apply pill after done
 
   Scenario: Discarding the stash clears staged ops
     When the user clicks the discard button on the Apply pill
