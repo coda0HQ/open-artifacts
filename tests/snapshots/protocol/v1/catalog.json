@@ -1,0 +1,83 @@
+{
+  "protocolVersion": 1,
+  "generatedBy": "scripts/build-protocol-snapshots.mjs",
+  "catalogHash": "fb6abc654372f9528835adbd917e9429fa5c9eb16200c06582693c3bd93f75d5",
+  "files": {
+    "protocol/v1/create-request.schema.json": {
+      "bytes": 1227,
+      "sha256": "2cf3237d982ccc37995226c23e5cb90f312505e91f0e87d4bb26d4479e3ce7b6"
+    },
+    "protocol/v1/error.schema.json": {
+      "bytes": 1390,
+      "sha256": "bbdd69d04304ce15aaa58aacfb462288aa283bb7b69bdd78a55628a6dd7f6b41"
+    },
+    "protocol/v1/live-checkpoint-response.schema.json": {
+      "bytes": 671,
+      "sha256": "200ebf57a78b89ffbcfdbfd99d675f7e5fc17ac8230c21287856b0c885fc9e6a"
+    },
+    "protocol/v1/live-checkpoint.schema.json": {
+      "bytes": 421,
+      "sha256": "40bdb2e98c4851ba3f5ff766fb0804702571820976a3f748621c4d0f7d54ff09"
+    },
+    "protocol/v1/live-draft-response.schema.json": {
+      "bytes": 2597,
+      "sha256": "55afd0b53ffd708717d8f8c101e090f18b2e50791e7f346700b74dd64371334c"
+    },
+    "protocol/v1/live-draft.schema.json": {
+      "bytes": 1282,
+      "sha256": "a2750f291fc8bf99f5a6e37370f87bcc9ea52d8ede9ae6ebb64febec7b222f0c"
+    },
+    "protocol/v1/live-error.schema.json": {
+      "bytes": 773,
+      "sha256": "eabfb88d7f74d8e4d08830a4b892f5c153f7e1bd6122c0fecf41302e69282c11"
+    },
+    "protocol/v1/manifest.schema.json": {
+      "bytes": 2192,
+      "sha256": "b06a9d8fc30e8c4a5d48e783df191104ea07d91c499afbd0848cb054141182e2"
+    },
+    "protocol/v1/publish-request.schema.json": {
+      "bytes": 1460,
+      "sha256": "19489c48d14f254a88d7693c36ebb0c0506c5c03b8c56cea2385194b78703707"
+    },
+    "protocol/v1/update-request.schema.json": {
+      "bytes": 1157,
+      "sha256": "360d9dc4c97331ee8a8fe6abadb694d4981953745745c789afbe7752242967f8"
+    },
+    "tests/fixtures/protocol/v1/create.json": {
+      "bytes": 204,
+      "sha256": "b756f40ec64b772f6bb77c50fe850d9912fa5b5e9dc128a3ab2332c9659ff296"
+    },
+    "tests/fixtures/protocol/v1/error.json": {
+      "bytes": 139,
+      "sha256": "5cba5853824bac1ede8821daf5c96dbaf54c8519dcdfee9c3893f0898cca982e"
+    },
+    "tests/fixtures/protocol/v1/live-checkpoint-response.json": {
+      "bytes": 200,
+      "sha256": "a120190ba02b96862c429bf6ce1e0bc96bf273d7b2d0d8513871fd96b25f33be"
+    },
+    "tests/fixtures/protocol/v1/live-checkpoint.json": {
+      "bytes": 52,
+      "sha256": "78b6e565a99d11483580dbfe287abf25e01193b8d75c5c710934c7e7001e4ca2"
+    },
+    "tests/fixtures/protocol/v1/live-draft-response.json": {
+      "bytes": 551,
+      "sha256": "443f5886743a7c96c7ffc5d49fd3aecad4b87805824f9a021bda724b16f800b0"
+    },
+    "tests/fixtures/protocol/v1/live-draft.json": {
+      "bytes": 143,
+      "sha256": "942826e2d2c32fb5c5fc63a167c24ad0fa88ee4b934ff7d9a123c9d4ee6a2f2d"
+    },
+    "tests/fixtures/protocol/v1/live-error.json": {
+      "bytes": 118,
+      "sha256": "3882f885015a1881898c16a6674d0a4f3c79a1eb5eb979b098d5889c8647a17b"
+    },
+    "tests/fixtures/protocol/v1/manifest.json": {
+      "bytes": 757,
+      "sha256": "39bd0ca295a2220e935bfee0c1367047533b8e3a37f714fe10b09547fcffa8bf"
+    },
+    "tests/fixtures/protocol/v1/update.json": {
+      "bytes": 246,
+      "sha256": "b443a2ab1d70e70230887e79c91114f6e965fb542eae43ef5689231e38a8c490"
+    }
+  }
+}

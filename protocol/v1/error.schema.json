@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-artifacts.dev/protocol/v1/error.schema.json",
+  "title": "Open Artifacts v1 structured error",
+  "type": "object",
+  "required": ["error"],
+  "properties": {
+    "error": { "type": "string", "minLength": 1 },
+    "code": {
+      "enum": [
+        "AUTH_REQUIRED",
+        "FORBIDDEN",
+        "NOT_FOUND",
+        "RATE_LIMITED",
+        "QUOTA_EXCEEDED",
+        "VERSION_CONFLICT",
+        "IDEMPOTENCY_KEY_REUSED",
+        "SCHEMA_INCOMPATIBLE",
+        "LIVE_PROTOCOL_UPGRADE_REQUIRED",
+        "REVISION_CONFLICT",
+        "BASE_VERSION_CONFLICT",
+        "LEASE_HELD",
+        "CHECKPOINT_CONFLICT",
+        "INTERNAL_ERROR"
+      ]
+    },
+    "requestId": { "type": "string", "minLength": 3, "maxLength": 200 },
+    "requestedVersion": { "type": "string", "minLength": 1 },
+    "currentVersion": { "type": "integer", "minimum": 1 },
+    "currentRevision": { "type": "integer", "minimum": 0 },
+    "retryAfterSeconds": { "type": "integer", "minimum": 0 },
+    "supportedVersions": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "integer", "minimum": 1 }
+    },
+    "resource": { "type": "string" },
+    "usage": { "type": "integer", "minimum": 0 },
+    "limit": { "type": "integer", "minimum": 0 },
+    "details": { "type": "object" }
+  },
+  "additionalProperties": false
+}

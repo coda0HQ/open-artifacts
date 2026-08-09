@@ -1,7 +1,12 @@
 import type { Context } from "hono";
 import { Hono } from "hono";
+import {
+  createCloudflareArtifactStore,
+  featureFlagsFromBindings,
+} from "./adapters/cloudflare/composition";
 import type { Authorizer } from "./authorizer";
 import { validateVisibility } from "./authorizer";
+import { resolveRuntimePolicy } from "./config";
 import type { CreateInput } from "./domain";
 import {
   MAX_COMMENT_BODY_BYTES,
@@ -10,9 +15,18 @@ import {
   validateUpdate,
 } from "./domain";
 import { broadcastVersionIfLive } from "./live-api";
-import type { ArtifactRecord, ArtifactStore } from "./store";
-import { D1R2Store } from "./store";
+import type { RequestContext } from "./request-context";
+import type {
+  ArtifactRecord,
+  ArtifactStore,
+  PublicationContext,
+  PublicationResult,
+  PublishedArtifact,
+} from "./store";
+import { IdempotencyConflictError } from "./store";
+import type { MetricsDataset, Telemetry } from "./telemetry";
 import {
+  deriveWriteToken,
   generateId,
   generateWriteToken,
   looksLikeChannelToken,
@@ -22,6 +36,24 @@ import {
 import { generateNonce, userContentHeaders } from "./wrap";
 
 export type Bindings = Env & {
+  ENVIRONMENT?: "development" | "test" | "preview" | "staging" | "production";
+  IDEMPOTENCY_SECRET?: string;
+  REPAIR_TOKEN?: string;
+  PUBLIC_CREATE_MODE?: "disabled" | "token" | "open";
+  ANONYMOUS_COMMENTS?: "disabled" | "enabled";
+  RATE_LIMIT_MODE?: "local" | "cloudflare";
+  RATE_LIMITER?: {
+    limit(input: { key: string }): Promise<{ success: boolean }>;
+  };
+  QUOTA_STORAGE_BYTES?: string;
+  QUOTA_VERSIONS?: string;
+  QUOTA_COMMENTS?: string;
+  QUOTA_HANDOFF_BYTES?: string;
+  QUOTA_DAILY_WRITES?: string;
+  QUOTA_LIVE_SESSIONS?: string;
+  METRICS?: MetricsDataset;
+  TELEMETRY_ENV?: "development" | "test" | "preview" | "staging" | "production";
+  TELEMETRY_LOGS?: "enabled" | "disabled";
   CREATE_TOKEN?: string;
   BRAND_URL?: string;
   BRAND_NAME?: string;
@@ -51,10 +83,19 @@ export type Bindings = Env & {
   // (recording is host-side getUserMedia + R2 media/events); the flag only
   // gates the surface, mirroring OPEN_ARTIFACTS_WEB_FONTS.
   OPEN_ARTIFACTS_HANDOFF?: string;
+  // Operational fail-safe controls. Remote configs pin each switch to "0";
+  // setting one to "1" disables the named write surface without a code deploy.
+  KILL_SWITCH_WRITES?: "0" | "1";
+  KILL_SWITCH_LIVE?: "0" | "1";
+  KILL_SWITCH_COMMENTS?: "0" | "1";
 };
 export type AppContext = {
   Bindings: Bindings;
-  Variables: { authorizer: Authorizer };
+  Variables: {
+    authorizer: Authorizer;
+    requestContext: RequestContext;
+    telemetry: Telemetry;
+  };
 };
 
 // The content cap defaults to 4 MiB — a deliberate free-tier envelope — and is
@@ -80,8 +121,9 @@ export function resolveMaxContentBytes(env: Bindings): number {
 export const bodyCapFor = (maxContentBytes: number): number =>
   maxContentBytes * 1.5 + 16 * 1024;
 
-export const storeFrom = (c: Context<AppContext>): ArtifactStore =>
-  new D1R2Store(c.env.DB, c.env.CONTENT);
+export const storeFrom = (c: Context<AppContext>): ArtifactStore => {
+  return createCloudflareArtifactStore(c.env, c.get("telemetry"));
+};
 
 // Canonical origin for every generated link. A non-empty PUBLIC_URL pins
 // links to the SaaS domain no matter which host the request arrived on (so
@@ -107,7 +149,7 @@ export const liveWsUrl = (c: Context<AppContext>, id: string): string =>
 // chrome inlines these same-origin URLs so the play UI can fetch media/events
 // (connect-src 'self') and object-URL them into a <video> overlay.
 export const handoffEnabled = (c: Context<AppContext>): boolean =>
-  c.env.OPEN_ARTIFACTS_HANDOFF === "1";
+  featureFlagsFromBindings(c.env).handoff;
 
 function bearerToken(c: Context<AppContext>): string | null {
   const header = c.req.header("authorization");
@@ -116,6 +158,34 @@ function bearerToken(c: Context<AppContext>): string | null {
 }
 
 export { bearerToken };
+
+const IDEMPOTENCY_KEY = /^[A-Za-z0-9._:-]{8,200}$/;
+
+export function publicationContextFrom(
+  c: Context<AppContext>,
+  artifactId: string,
+  operation: PublicationContext["operation"] = "update",
+): PublicationContext | undefined {
+  const key = c.req.header("idempotency-key");
+  return key
+    ? { actorScope: `artifact:${artifactId}`, idempotencyKey: key, operation }
+    : undefined;
+}
+
+export function idempotencyKeyError(c: Context<AppContext>): Response | null {
+  const key = c.req.header("idempotency-key");
+  if (key !== undefined && !IDEMPOTENCY_KEY.test(key)) {
+    return c.json(
+      {
+        error:
+          "Idempotency-Key must be 8-200 URL-safe characters (letters, digits, dot, underscore, colon, or hyphen)",
+        code: "INVALID_IDEMPOTENCY_KEY",
+      },
+      400,
+    );
+  }
+  return null;
+}
 
 type AuthResult =
   | { ok: true; record: ArtifactRecord }
@@ -140,7 +210,9 @@ export async function authorizeWrite(
     const authorized = looksLikeChannelToken(token)
       ? record.channelHash !== null &&
         timingSafeEqual(tokenHash, record.channelHash)
-      : timingSafeEqual(tokenHash, record.tokenHash);
+      : store.isWriteCredentialAuthorized
+        ? await store.isWriteCredentialAuthorized(record, tokenHash)
+        : timingSafeEqual(tokenHash, record.tokenHash);
     if (authorized) {
       return { ok: true, record };
     }
@@ -188,27 +260,42 @@ async function publishToChannel(
   record: ArtifactRecord,
   input: CreateInput,
   channel: string,
+  publication?: PublicationContext,
 ): Promise<Response> {
   let snapshot: ArtifactRecord | null = record;
   let currentVersion = record.currentVersion;
   for (let attempt = 0; attempt < 3 && snapshot !== null; attempt += 1) {
-    const result = await store.update(snapshot, {
-      content: input.content,
-      format: input.format,
-      title: input.title,
-      description: input.description,
-      favicon: input.favicon,
-      label: input.label,
-      encrypted: input.encrypted,
-      baseVersion: null,
-      force: false,
-    });
-    if (typeof result === "number") {
-      await broadcastVersionIfLive(c, snapshot.id, result);
+    let result: PublicationResult;
+    try {
+      result = await store.update(
+        snapshot,
+        {
+          content: input.content,
+          format: input.format,
+          title: input.title,
+          description: input.description,
+          favicon: input.favicon,
+          label: input.label,
+          encrypted: input.encrypted,
+          baseVersion: null,
+          force: false,
+        },
+        publication,
+      );
+    } catch (error) {
+      if (error instanceof IdempotencyConflictError) {
+        return c.json({ error: error.message, code: error.code }, 409);
+      }
+      throw error;
+    }
+    if (!("conflict" in result)) {
+      await broadcastVersionIfLive(c, snapshot.id, result.version);
       return c.json({
         id: snapshot.id,
         url: artifactUrl(c, snapshot.id),
-        version: result,
+        version: result.version,
+        publicationId: result.publicationId,
+        idempotentReplay: result.replayed,
         channel,
       });
     }
@@ -224,6 +311,8 @@ const isChannelBindingConflict = (error: unknown): boolean =>
   error.message.includes("channel_hash");
 
 api.post("/artifacts", async (c) => {
+  const invalidIdempotencyKey = idempotencyKeyError(c);
+  if (invalidIdempotencyKey) return invalidIdempotencyKey;
   const maxContentBytes = resolveMaxContentBytes(c.env);
   const declaredLength = Number(c.req.header("content-length") ?? "0");
   if (declaredLength > bodyCapFor(maxContentBytes)) {
@@ -259,24 +348,68 @@ api.post("/artifacts", async (c) => {
   }
 
   const channelHash = channelRaw !== null ? await sha256Hex(channelRaw) : null;
+  const idempotencyKey = c.req.header("idempotency-key");
+  const createPublication: PublicationContext | undefined = idempotencyKey
+    ? {
+        actorScope:
+          channelHash !== null
+            ? `channel:${channelHash}`
+            : `create:${grant.ownerId || "open-instance"}`,
+        idempotencyKey,
+        operation: channelHash !== null ? "channel" : "create",
+      }
+    : undefined;
   if (channelRaw !== null && channelHash !== null) {
     const existing = await store.findByChannel(channelHash);
     if (existing !== null) {
-      return publishToChannel(c, store, existing, parsed.value, channelRaw);
+      return publishToChannel(
+        c,
+        store,
+        existing,
+        parsed.value,
+        channelRaw,
+        createPublication,
+      );
     }
   }
 
   const id = generateId();
-  const writeToken = generateWriteToken();
+  const idempotencySecret = c.env.IDEMPOTENCY_SECRET;
+  if (createPublication && !idempotencySecret) {
+    return c.json(
+      {
+        error:
+          "IDEMPOTENCY_SECRET must be configured before idempotent creation is enabled",
+        code: "IDEMPOTENCY_SECRET_MISSING",
+      },
+      503,
+    );
+  }
+  let writeToken = generateWriteToken();
+  if (createPublication) {
+    if (!idempotencySecret) {
+      throw new Error("idempotency secret guard was bypassed");
+    }
+    writeToken = await deriveWriteToken(
+      idempotencySecret,
+      createPublication.actorScope,
+      createPublication.idempotencyKey,
+    );
+  }
+  let created: PublishedArtifact;
   try {
-    await store.create(
+    created = await store.create(
       id,
       await sha256Hex(writeToken),
       parsed.value,
       channelHash,
       grant,
+      createPublication,
     );
   } catch (error) {
+    if (error instanceof IdempotencyConflictError) {
+      return c.json({ error: error.message, code: error.code }, 409);
+    }
     // Two concurrent first publishes to one channel: the unique index lets
     // exactly one create win; the loser lands here and becomes a version
     // update on the winner's artifact, keeping the channel's URL stable.
@@ -284,7 +417,14 @@ api.post("/artifacts", async (c) => {
     if (!isChannelBindingConflict(error)) throw error;
     const winner = await store.findByChannel(channelHash);
     if (winner === null) throw error;
-    return publishToChannel(c, store, winner, parsed.value, channelRaw);
+    return publishToChannel(
+      c,
+      store,
+      winner,
+      parsed.value,
+      channelRaw,
+      createPublication,
+    );
   }
 
   // Indirect access so TS does not statically resolve the check to always-true
@@ -296,10 +436,12 @@ api.post("/artifacts", async (c) => {
   );
   return c.json(
     {
-      id,
-      url: artifactUrl(c, id),
+      id: created.id,
+      url: artifactUrl(c, created.id),
       writeToken,
       version: 1,
+      publicationId: created.publication.publicationId,
+      idempotentReplay: created.publication.replayed,
       liveSupported,
       ...(channelRaw ? { channel: channelRaw } : {}),
     },
@@ -308,6 +450,8 @@ api.post("/artifacts", async (c) => {
 });
 
 api.put("/artifacts/:id", async (c) => {
+  const invalidIdempotencyKey = idempotencyKeyError(c);
+  if (invalidIdempotencyKey) return invalidIdempotencyKey;
   const store = storeFrom(c);
   const auth = await authorizeWrite(c, store, c.req.param("id"));
   if (!auth.ok) return auth.response;
@@ -331,23 +475,20 @@ api.put("/artifacts/:id", async (c) => {
   const parsed = validateUpdate(body, maxContentBytes);
   if (!parsed.ok) return c.json({ error: parsed.error }, parsed.status);
 
-  const { baseVersion, force } = parsed.value;
-  if (
-    baseVersion !== null &&
-    baseVersion !== auth.record.currentVersion &&
-    !force
-  ) {
-    return c.json(
-      {
-        error: `baseVersion ${baseVersion} does not match current version ${auth.record.currentVersion}`,
-        currentVersion: auth.record.currentVersion,
-      },
-      409,
+  let result: PublicationResult;
+  try {
+    result = await store.update(
+      auth.record,
+      parsed.value,
+      publicationContextFrom(c, auth.record.id),
     );
+  } catch (error) {
+    if (error instanceof IdempotencyConflictError) {
+      return c.json({ error: error.message, code: error.code }, 409);
+    }
+    throw error;
   }
-
-  const result = await store.update(auth.record, parsed.value);
-  if (typeof result !== "number") {
+  if ("conflict" in result) {
     return c.json(
       {
         error: `version conflict: artifact is at version ${result.currentVersion}`,
@@ -358,11 +499,13 @@ api.put("/artifacts/:id", async (c) => {
   }
   // Tell staying viewers a new version landed so the host reloads in place.
   // No-ops when the deploy did not bind LIVE_DO.
-  await broadcastVersionIfLive(c, auth.record.id, result);
+  await broadcastVersionIfLive(c, auth.record.id, result.version);
   return c.json({
     id: auth.record.id,
     url: artifactUrl(c, auth.record.id),
-    version: result,
+    version: result.version,
+    publicationId: result.publicationId,
+    idempotentReplay: result.replayed,
   });
 });
 
@@ -469,6 +612,18 @@ api.post("/artifacts/:id/comments", async (c) => {
   if (record === null) return c.json({ error: "artifact not found" }, 404);
   if (!(await c.get("authorizer").authorizeView(c, record))) {
     return c.json({ error: "artifact not found" }, 404);
+  }
+  if (!resolveRuntimePolicy(c.env).anonymousComments) {
+    const auth = await authorizeWrite(c, store, record.id);
+    if (!auth.ok) {
+      return c.json(
+        {
+          error: "anonymous comments are disabled",
+          code: "ANONYMOUS_COMMENTS_DISABLED",
+        },
+        403,
+      );
+    }
   }
 
   const declaredLength = Number(c.req.header("content-length") ?? "0");

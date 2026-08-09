@@ -1,0 +1,21 @@
+{
+  "draft": {
+    "artifactId": "protocol-artifact",
+    "protocolVersion": 1,
+    "revision": 2,
+    "baseVersion": 3,
+    "state": "active",
+    "actorId": "actor_protocol_fixture",
+    "leaseOwner": "actor_protocol_fixture",
+    "leaseUntil": "2026-08-04T12:00:30.000Z",
+    "payload": {
+      "content": "<p>draft</p>",
+      "format": "html",
+      "encrypted": null
+    },
+    "createdAt": "2026-08-04T12:00:00.000Z",
+    "updatedAt": "2026-08-04T12:00:01.000Z",
+    "expiresAt": "2026-08-11T12:00:01.000Z",
+    "checkpointVersion": null
+  }
+}

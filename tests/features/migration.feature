@@ -1,6 +1,6 @@
-Feature: In-place schema migration
+Feature: Explicit versioned schema migration
   As an operator upgrading a long-running instance
-  I want new metadata columns to be added and backfilled automatically
+  I want new metadata columns to be applied by a reviewed migration command
   So that artifacts published before the upgrade keep working with full metadata
 
   # SCHEMA is the full current shape for fresh DBs. MIGRATIONS ALTERs every
@@ -12,7 +12,7 @@ Feature: In-place schema migration
   Scenario: Version metadata columns are backfilled from the parent artifact
     Given a database created before versions carried title, description, favicon, format, and encrypted columns
     And an artifact with version rows stored under that old schema
-    When any request touches the store after the upgrade
+    When the operator applies the numbered migrations before the new Worker
     Then the version history reports the artifact's title, favicon, and format for the old rows
 
   Scenario: A pre-existing database gains every column the current schema declares
@@ -21,7 +21,13 @@ Feature: In-place schema migration
     Then every column SCHEMA declares on comments exists
     And every column MIGRATIONS adds to comments exists
 
-  Scenario: A genuinely failed migration is retried, not memoized as success
+  Scenario: A production request never creates or alters schema
+    Given a production database whose schema metadata table is absent
+    When a request touches the production store
+    Then the request fails with a schema-incompatible error
+    And no application table is created
+
+  Scenario: A genuinely failed test migration is retried, not memoized as success
     Given a migration that fails for an unexpected reason
     When a later request calls ensureSchema on the same database
     Then the migration is attempted again

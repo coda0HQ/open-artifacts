@@ -18,12 +18,20 @@
   // surface: the host-chrome Record/Play dock, the /api/artifacts/:id/handoffs*
   // routes, and the frame record/play shims. Self-hosters who don't want the
   // camera/mic surface omit it; the viewer stays unchanged.
-  "vars": { "OPEN_ARTIFACTS_WEB_FONTS": "1", "OPEN_ARTIFACTS_HANDOFF": "1" },
+  "vars": {
+    "ENVIRONMENT": "production",
+    "PUBLIC_CREATE_MODE": "disabled",
+    "ANONYMOUS_COMMENTS": "disabled",
+    "RATE_LIMIT_MODE": "local",
+    "OPEN_ARTIFACTS_WEB_FONTS": "1",
+    "OPEN_ARTIFACTS_HANDOFF": "1"
+  },
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "open-artifacts",
-      "database_id": "a01d21cd-86cb-4832-872d-d196e6918a3b"
+      "database_id": "a01d21cd-86cb-4832-872d-d196e6918a3b",
+      "migrations_dir": "migrations"
     }
   ],
   "r2_buckets": [
@@ -40,8 +48,10 @@
   // namespace whose class_name is the engine's LiveObject (src/live-do.ts).
   // The engine ships without the binding — self-hosters keep today's viewer
   // (no Live button, /api/artifacts/:id/live* 404). A SaaS deploy (coda0)
-  // adds it under durable_objects + a new_sqlite_classes migration. See
-  // docs/plans and skills/using-open-artifacts/references/live.md.
+  // adds it under durable_objects and declares LiveObject in the declarative
+  // `exports` map with storage "sqlite". This repository standardizes on
+  // `exports`; never add the mutually-exclusive legacy `migrations` array.
+  // See docs/runbooks/live.md and skills/using-open-artifacts/references/live.md.
   // For LOCAL DEV with Live + owner perms, use wrangler.dev.jsonc:
   //   wrangler dev -c wrangler.dev.jsonc
   "observability": { "enabled": true }

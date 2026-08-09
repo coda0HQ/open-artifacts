@@ -241,6 +241,24 @@ describe("host page interactive UI (tasks 009/010/011)", () => {
     expect(html).toContain("navigator.clipboard.writeText");
   });
 
+  it("renders accessible Live Draft and Checkpoint states", async () => {
+    const html = await hostHtml();
+
+    expect(html).toContain('id="oa-live-publication"');
+    expect(html).toContain('aria-live="polite" aria-atomic="true"');
+    expect(html).toContain("Published history is immutable");
+    expect(html).toContain("Saving Draft…");
+    expect(html).toContain("Unsaved Draft r");
+    expect(html).toContain("Checkpointing Draft r");
+    expect(html).toContain("Conflict — Draft r");
+    expect(html).toContain('id="oa-live-checkpoint"');
+    expect(html).toContain("/live/draft");
+    expect(html).toContain("/live/checkpoint");
+    expect(html).toContain("paintPublication(true)");
+    expect(html).toContain("@media (prefers-reduced-motion:reduce)");
+    expect(html).toContain("@media (max-width:480px)");
+  });
+
   it("grants owner moderation from ?wt= and strips the token from the URL", async () => {
     const html = await hostHtml();
     expect(html).toContain("function ownerToken()");

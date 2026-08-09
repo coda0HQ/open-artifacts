@@ -76,12 +76,12 @@ Feature: Live editing
     And the host reloads the frame and shows CONFIRMED "Applied"
     And then re-arms pick and returns to PICKING for the next item
 
-  Scenario: A Live edit replaces the current version in place
+  Scenario: A Live edit checkpoints an immutable new version
     Given the artifact is currently served at version 10
     When the agent applies the Live-edited Recipe with the Live update command
-    Then the artifact content changes while the served version remains 10
-    And the version history still contains no version 11
-    And a later ordinary update still creates version 11
+    Then the artifact content is committed as version 11
+    And the content hash behind version 10 remains unchanged
+    And a later ordinary update creates version 12
 
   Scenario: The viewer is told when a new version is published mid-session
     Given a live channel is up (the owner's page holds a WebSocket)

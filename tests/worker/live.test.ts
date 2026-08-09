@@ -356,7 +356,7 @@ describe("live routes with LIVE_DO bound", () => {
     );
   });
 
-  it("replaces the current version for a Live edit", async () => {
+  it("checkpoints a Live edit as an immutable new version", async () => {
     const { id } = await create({ content: "<p>v1</p>", format: "html" });
     let res = await fetchWith(
       jsonRequest("PUT", `/api/artifacts/${id}`, { content: "<p>v2</p>" }),
@@ -366,7 +366,9 @@ describe("live routes with LIVE_DO bound", () => {
     expect(res.status).toBe(200);
 
     res = await fetchWith(
-      jsonRequest("PUT", `/api/artifacts/${id}/live`, {
+      jsonRequest("PUT", `/api/artifacts/${id}/live/draft`, {
+        protocolVersion: 1,
+        expectedRevision: 0,
         content: "<p>live v2</p>",
         baseVersion: 2,
       }),
@@ -374,7 +376,18 @@ describe("live routes with LIVE_DO bound", () => {
       true,
     );
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ id, version: 2 });
+    expect(await res.json()).toMatchObject({ draft: { revision: 1 } });
+
+    res = await fetchWith(
+      jsonRequest("POST", `/api/artifacts/${id}/live/checkpoint`, {
+        protocolVersion: 1,
+        expectedRevision: 1,
+      }),
+      ON,
+      true,
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ id, version: 3 });
 
     const metaRes = await fetchWith(
       new Request(`${BASE}/api/artifacts/${id}`),
@@ -385,8 +398,15 @@ describe("live routes with LIVE_DO bound", () => {
       version: number;
       versions: { version: number }[];
     };
-    expect(meta.version).toBe(2);
-    expect(meta.versions.map((item) => item.version)).toEqual([1, 2]);
+    expect(meta.version).toBe(3);
+    expect(meta.versions.map((item) => item.version)).toEqual([1, 2, 3]);
+
+    const prior = await fetchWith(
+      new Request(`${BASE}/api/artifacts/${id}/raw?v=2`),
+      ON,
+      true,
+    );
+    expect(await prior.text()).toContain("v2");
 
     const frame = await fetchWith(
       new Request(`${BASE}/a/${id}/frame`),
@@ -397,14 +417,14 @@ describe("live routes with LIVE_DO bound", () => {
 
     res = await fetchWith(
       jsonRequest("PUT", `/api/artifacts/${id}`, {
-        content: "<p>v3</p>",
-        baseVersion: 2,
+        content: "<p>v4</p>",
+        baseVersion: 3,
       }),
       ON,
       true,
     );
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ id, version: 3 });
+    expect(await res.json()).toMatchObject({ id, version: 4 });
 
     const latestMetaRes = await fetchWith(
       new Request(`${BASE}/api/artifacts/${id}`),
@@ -415,8 +435,10 @@ describe("live routes with LIVE_DO bound", () => {
       version: number;
       versions: { version: number }[];
     };
-    expect(latestMeta.version).toBe(3);
-    expect(latestMeta.versions.map((item) => item.version)).toEqual([1, 2, 3]);
+    expect(latestMeta.version).toBe(4);
+    expect(latestMeta.versions.map((item) => item.version)).toEqual([
+      1, 2, 3, 4,
+    ]);
   });
 
   it("a non-owner viewer sees no Live toggle even when LIVE_DO is bound", async () => {
@@ -766,20 +788,34 @@ describe("version broadcast on publish (staying-viewer auto-refresh)", () => {
     ws.close();
   });
 
-  it("the Live in-place replace broadcasts the replaced version", async () => {
+  it("a Live checkpoint broadcasts its new immutable version", async () => {
     const { id } = await create({ content: "<p>v1</p>", format: "html" });
     const { ws, messages } = await connectLive(id);
 
-    const res = await fetchWith(
-      jsonRequest("PUT", `/api/artifacts/${id}/live`, { content: "<p>r1</p>" }),
+    let res = await fetchWith(
+      jsonRequest("PUT", `/api/artifacts/${id}/live/draft`, {
+        protocolVersion: 1,
+        expectedRevision: 0,
+        baseVersion: 1,
+        content: "<p>r1</p>",
+      }),
       ON,
       true,
     );
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ version: 1 });
+    res = await fetchWith(
+      jsonRequest("POST", `/api/artifacts/${id}/live/checkpoint`, {
+        protocolVersion: 1,
+        expectedRevision: 1,
+      }),
+      ON,
+      true,
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ version: 2 });
 
     const msg = await waitForMessage(messages, "version");
-    expect(msg).toMatchObject({ type: "version", version: 1 });
+    expect(msg).toMatchObject({ type: "version", version: 2 });
     ws.close();
   });
 

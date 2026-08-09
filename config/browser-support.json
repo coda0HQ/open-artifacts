@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "reviewedAt": "2026-08-04",
+  "browsers": [
+    {
+      "id": "chromium",
+      "releaseRequired": true,
+      "status": "supported",
+      "owner": "viewer"
+    },
+    {
+      "id": "firefox",
+      "releaseRequired": false,
+      "status": "temporary-exception",
+      "owner": "viewer",
+      "expiresAt": "2026-08-18",
+      "reason": "The first invited-team RC supports the Chromium engine while Firefox E2E infrastructure is stabilized; shared DOM, protocol, CSP, and WCAG suites remain mandatory.",
+      "exitCriteria": "Add a pinned Firefox Playwright project to required main and release checks with the full core-flow suite green."
+    },
+    {
+      "id": "webkit",
+      "releaseRequired": false,
+      "status": "temporary-exception",
+      "owner": "viewer",
+      "expiresAt": "2026-08-18",
+      "reason": "The first invited-team RC supports the Chromium engine while WebKit E2E infrastructure is stabilized; shared DOM, protocol, CSP, and WCAG suites remain mandatory.",
+      "exitCriteria": "Add a pinned WebKit Playwright project to required main and release checks with the full core-flow suite green."
+    }
+  ]
+}

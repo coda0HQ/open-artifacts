@@ -1,0 +1,12 @@
+# Interim ownership for the foundation hardening fork.
+* @Jiqize
+
+# Security- and release-critical surfaces require the repository owner.
+/.github/ @Jiqize
+/migrations/ @Jiqize
+/src/authorizer.ts @Jiqize
+/src/publication/ @Jiqize
+/src/credentials/ @Jiqize
+/src/live/ @Jiqize
+/docs/security/ @Jiqize
+/docs/runbooks/ @Jiqize

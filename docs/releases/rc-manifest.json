@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "candidate": "v1.0.0-rc.1",
+  "status": "build-ready-awaiting-immutable-commit-and-external-approval",
+  "upstreamBaseline": "a03a8c3721dd0021c78ea24533d6f7a7f4af07b3",
+  "databaseSchemaVersion": 5,
+  "protocolVersion": 1,
+  "requiredArtifacts": [
+    "release-manifest.json",
+    "sbom.cdx.json",
+    "provenance.json",
+    "SHA256SUMS",
+    "worker/"
+  ],
+  "promotionOrder": ["preview", "staging", "canary", "expanded", "general-team"],
+  "externalGates": [
+    "clean committed candidate",
+    "independent security and platform review",
+    "remote staging rehearsal receipt",
+    "protected production environment approval",
+    "canary observation and promotion approvals"
+  ]
+}

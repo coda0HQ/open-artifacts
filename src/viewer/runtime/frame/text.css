@@ -1,0 +1,8 @@
+
+::highlight(oa-cm){background-color:color-mix(in oklab,var(--oa-accent),transparent 72%)}
+/* font-family is pinned to --oa-font — never inherit the artifact face. */
+.oa-cm-sel{position:fixed;z-index:2147483647;display:inline-flex;align-items:center;gap:.35rem;padding:.28rem .55rem .28rem .45rem;border-radius:6px;border:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 8%);background:var(--oa-bg);color:var(--oa-fg);font-family:var(--oa-font);font-size:.78rem;font-weight:600;line-height:1;letter-spacing:-.01em;cursor:pointer;transform:translate(-50%,.4rem);opacity:.98;transition:border-color .12s,background .12s,opacity .12s}
+.oa-cm-sel svg{display:block;width:14px;height:14px;flex-shrink:0}
+.oa-cm-sel:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+.oa-cm-sel:active{transform:translate(-50%,.4rem) translateY(1px)}
+@media (hover:hover) and (pointer:fine){.oa-cm-sel:hover{border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 28%)}}

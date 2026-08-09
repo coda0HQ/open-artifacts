@@ -1,0 +1,8 @@
+{
+  "id": "protocol-artifact",
+  "url": "https://artifacts.example/a/protocol-artifact",
+  "version": 4,
+  "publicationId": "pub_protocol_fixture",
+  "draftRevision": 2,
+  "idempotentReplay": false
+}

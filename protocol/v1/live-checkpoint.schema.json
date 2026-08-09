@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-artifacts.dev/protocol/v1/live-checkpoint.schema.json",
+  "title": "Open Artifacts v1 Live checkpoint",
+  "type": "object",
+  "required": ["protocolVersion", "expectedRevision"],
+  "properties": {
+    "protocolVersion": { "const": 1 },
+    "expectedRevision": { "type": "integer", "minimum": 1 }
+  },
+  "additionalProperties": false
+}

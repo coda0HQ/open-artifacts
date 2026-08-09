@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "scheduleHours": 24,
+  "encryption": {
+    "algorithm": "aes-256-gcm",
+    "keySource": "secret-manager",
+    "rotationDays": 90
+  },
+  "destination": {
+    "separateAccountRequired": true,
+    "separateBucketRequired": true,
+    "immutableObjects": true,
+    "prefix": "production/"
+  },
+  "retention": {
+    "timeTravelPaidDays": 30,
+    "timeTravelFreeDays": 7,
+    "longTermDays": 90,
+    "deleteExpired": true,
+    "r2LifecycleRuleId": "open-artifacts-backup-retention"
+  },
+  "verification": {
+    "downloadAfterUpload": true,
+    "checksum": "sha256",
+    "restoreDrillDays": 30
+  },
+  "recovery": {
+    "target": "isolated-staging-only",
+    "rpoHours": 24,
+    "rtoHours": 4
+  }
+}

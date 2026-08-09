@@ -17,7 +17,7 @@ pnpm test         # Worker integration tests (cloudflare vitest pool, needs work
 pnpm test:cli     # skill CLI tests (plain node vitest) — tests/cli/**  (NOT interchangeable with `pnpm test`)
 pnpm typecheck    # runs BOTH tsconfig.json (Worker) and tsconfig.cli.json (CLI/skill) — both must pass
 pnpm check        # biome check . (lint + format)
-pnpm run deploy   # wrangler deploy — direct to prod. No CI gates; review a PR first.
+pnpm run deploy   # gated deployment wrapper; production requires CI evidence and approval
 ```
 
 Run a single Worker test: `pnpm test -- tests/worker/<file>.test.ts`.
@@ -39,7 +39,7 @@ fails with the command to clear it.
 
 - **Strict CSP on the viewer**: artifacts render under `sandbox allow-scripts; default-src 'none'` with an opaque origin. No external requests, no storage, no `fetch`. Any viewer-side data (e.g. a version picker) must be **inlined at serve time** — runtime fetching is impossible inside the sandbox.
 - **Run-worker-first**: `wrangler.jsonc` sets `run_worker_first: ["/", "/api/*", "/a/*", "/og/*", "/fonts/*", "/vendor/*"]` even though `public/` is a static assets dir — the Worker intercepts those routes for the coda0 rebrand, the `/fonts` proxy, the `/vendor/*` self-hosted mermaid bundle (served with a correct JS MIME + nosniff), and dynamic paths. Don't assume `public/` is served as-is for them.
-- **D1 schema auto-applies** on first request — no separate migration step. Local dev state lives in `.wrangler/state`.
+- **D1 schema is migration-owned.** Production requests only validate compatibility; run numbered migrations before deploy. Tests/local development may initialize explicitly. Local state lives in `.wrangler/state`.
 - **Max artifact content size: 4 MiB** (default; override per instance with the `MAX_CONTENT_MIB` env var).
 - Bindings: D1 = `DB`, R2 = `CONTENT`.
 

@@ -1,4 +1,17 @@
 import { DurableObject } from "cloudflare:workers";
+import { D1QuotaLedger } from "./adapters/cloudflare/d1-quota-ledger";
+import { DurableObjectRealtimeStore } from "./adapters/cloudflare/durable-object-realtime";
+import type { Bindings } from "./api";
+import { DraftService, type SaveDraftInput } from "./live/draft-service";
+import type { LiveDraft } from "./ports/realtime-session-store";
+import { Telemetry } from "./telemetry";
+
+export interface LiveTrace {
+  requestId: string;
+  traceId: string;
+  actorId: string;
+  startedAt: string;
+}
 
 // LiveObject — the per-artifact coordination point for live editing.
 //
@@ -80,10 +93,38 @@ const STASH_GC_AGE_MS = 86_400_000;
 // within this window is treated as offline (the viewer's Connected indicator clears).
 const AGENT_ACTIVE_WINDOW_MS = 60_000;
 
-export class LiveObject extends DurableObject<Record<string, unknown>> {
+export class LiveObject extends DurableObject<Env> {
   // In-memory only; a missed wake after hibernation just re-polls.
   private waiters: PollWaiter[] = [];
   private schemaReady = false;
+  private readonly draftService = new DraftService(
+    new DurableObjectRealtimeStore(this.ctx.storage),
+  );
+
+  private telemetry(
+    artifactId: string,
+    trace: LiveTrace | undefined,
+    route: "live_draft" | "checkpoint",
+    method: string,
+  ): Telemetry | null {
+    if (!trace) return null;
+    const bindings = this.env as Bindings;
+    return new Telemetry(
+      {
+        ...trace,
+        artifactId,
+        route,
+        method,
+      },
+      bindings.TELEMETRY_ENV ?? bindings.ENVIRONMENT ?? "production",
+      bindings.METRICS,
+      bindings.TELEMETRY_LOGS === "disabled" ||
+        (bindings.ENVIRONMENT === "test" &&
+          bindings.TELEMETRY_LOGS !== "enabled")
+        ? () => {}
+        : undefined,
+    );
+  }
 
   // --- WebSocket (browser host chrome) ---
 
@@ -94,6 +135,11 @@ export class LiveObject extends DurableObject<Record<string, unknown>> {
     }
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
+    const artifactId = request.headers.get("x-oa-artifact-id");
+    const sessionId = request.headers.get("x-oa-live-session");
+    if (artifactId && sessionId) {
+      server.serializeAttachment({ artifactId, sessionId });
+    }
     this.ctx.acceptWebSocket(server);
     return new Response(null, { status: 101, webSocket: client });
   }
@@ -142,6 +188,20 @@ export class LiveObject extends DurableObject<Record<string, unknown>> {
     reason: string,
     _wasClean: boolean,
   ) {
+    const attachment = ws.deserializeAttachment() as {
+      artifactId?: string;
+      sessionId?: string;
+    } | null;
+    if (attachment?.artifactId && attachment.sessionId) {
+      await new D1QuotaLedger(this.env.DB)
+        .release(
+          `artifact:${attachment.artifactId}`,
+          "live_sessions",
+          `live:${attachment.sessionId}`,
+          new Date().toISOString(),
+        )
+        .catch(() => false);
+    }
     try {
       ws.close(code, reason);
     } catch {
@@ -150,6 +210,81 @@ export class LiveObject extends DurableObject<Record<string, unknown>> {
   }
 
   // --- Agent (CLI) RPC ---
+
+  async rpcGetDraft(
+    artifactId: string,
+    trace?: LiveTrace,
+  ): Promise<LiveDraft | null> {
+    const telemetry = this.telemetry(artifactId, trace, "live_draft", "GET");
+    const startedAt = Date.now();
+    const draft = await this.draftService.get(artifactId);
+    telemetry?.info("live.do.draft_read.completed", {
+      revision: draft?.revision ?? null,
+      draftState: draft?.state ?? "missing",
+      durationMs: Date.now() - startedAt,
+    });
+    return draft;
+  }
+
+  async rpcSaveDraft(input: SaveDraftInput, trace?: LiveTrace) {
+    const telemetry = this.telemetry(
+      input.artifactId,
+      trace,
+      "live_draft",
+      "PUT",
+    );
+    const startedAt = Date.now();
+    telemetry?.info("live.do.draft_save.started", {
+      expectedRevision: input.expectedRevision,
+      baseVersion: input.baseVersion,
+    });
+    const result = await this.draftService.save(input);
+    telemetry?.info("live.do.draft_save.completed", {
+      result: result.ok ? "success" : "conflict",
+      revision: result.ok ? result.draft.revision : result.currentRevision,
+      durationMs: Date.now() - startedAt,
+    });
+    telemetry?.metric("live_operation", {
+      value: 1,
+      durationMs: Date.now() - startedAt,
+      route: "live_draft",
+      operation: "draft_save",
+      result: result.ok ? "success" : "conflict",
+      status: result.ok ? 200 : 409,
+    });
+    return result;
+  }
+
+  async rpcMarkDraftCheckpointed(
+    artifactId: string,
+    revision: number,
+    checkpointVersion: number,
+    trace?: LiveTrace,
+  ): Promise<boolean> {
+    const marked = await this.draftService.markCheckpointed(
+      artifactId,
+      revision,
+      checkpointVersion,
+    );
+    this.telemetry(artifactId, trace, "checkpoint", "POST")?.info(
+      "live.do.draft_checkpointed",
+      { revision, checkpointVersion, marked },
+    );
+    return marked;
+  }
+
+  async rpcMarkDraftConflict(
+    artifactId: string,
+    revision: number,
+    trace?: LiveTrace,
+  ): Promise<boolean> {
+    const marked = await this.draftService.markConflict(artifactId, revision);
+    this.telemetry(artifactId, trace, "checkpoint", "POST")?.warn(
+      "live.do.draft_conflict",
+      { revision, marked },
+    );
+    return marked;
+  }
 
   // Block until a matching event arrives or timeout. Lease prevents
   // double-delivery: the row is marked leased for LEASE_MS; if the agent

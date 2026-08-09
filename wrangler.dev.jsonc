@@ -16,6 +16,12 @@
   // "without LIVE_DO" contract stays covered. Keep in sync with wrangler.jsonc.
   // Run: wrangler dev -c wrangler.dev.jsonc
   "vars": {
+    "ENVIRONMENT": "development",
+    "PUBLIC_CREATE_MODE": "open",
+    "ANONYMOUS_COMMENTS": "enabled",
+    "RATE_LIMIT_MODE": "local",
+    "TELEMETRY_LOGS": "disabled",
+    "IDEMPOTENCY_SECRET": "local-development-only",
     "OPEN_ARTIFACTS_WEB_FONTS": "1",
     "OPEN_ARTIFACTS_HANDOFF": "1",
     "DEV_AUTHORIZER": "1"
@@ -24,7 +30,8 @@
     {
       "binding": "DB",
       "database_name": "open-artifacts",
-      "database_id": "a01d21cd-86cb-4832-872d-d196e6918a3b"
+      "database_id": "a01d21cd-86cb-4832-872d-d196e6918a3b",
+      "migrations_dir": "migrations"
     }
   ],
   "r2_buckets": [
@@ -40,6 +47,8 @@
   "durable_objects": {
     "bindings": [{ "name": "LIVE_DO", "class_name": "LiveObject" }]
   },
+  // Durable Object lifecycle source of truth. Do not combine this declarative
+  // form with the legacy `migrations` array; see docs/runbooks/live.md.
   "exports": {
     "LiveObject": { "type": "durable-object", "storage": "sqlite" }
   },

@@ -1,0 +1,8 @@
+{
+  "protocolVersion": 1,
+  "expectedRevision": 0,
+  "baseVersion": 3,
+  "leaseSeconds": 30,
+  "content": "<p>draft</p>",
+  "format": "html"
+}

@@ -27,6 +27,27 @@ export function generateWriteToken(): string {
   return `wt_${base64Url(crypto.getRandomValues(new Uint8Array(32)))}`;
 }
 
+export async function deriveWriteToken(
+  secret: string,
+  actorScope: string,
+  idempotencyKey: string,
+): Promise<string> {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const signature = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    encoder.encode(`${actorScope}\0${idempotencyKey}`),
+  );
+  return `wt_${base64Url(new Uint8Array(signature))}`;
+}
+
 export function generateChannelToken(): string {
   return `ch_${base64Url(crypto.getRandomValues(new Uint8Array(32)))}`;
 }

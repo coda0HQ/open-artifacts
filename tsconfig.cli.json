@@ -9,13 +9,19 @@
     "types": [
       "node"
     ],
+    "allowJs": true,
+    "checkJs": true,
     "strict": true,
+    "noImplicitAny": false,
+    "strictNullChecks": false,
+    "useUnknownInCatchVariables": false,
     "noEmit": true,
     "skipLibCheck": true,
     "isolatedModules": true
   },
   "include": [
     "tests/cli/**/*.ts",
+    "scripts/**/*.mjs",
     "skills/using-open-artifacts/scripts/**/*.mjs",
     "skills/using-open-artifacts/scripts/**/*.d.mts"
   ]

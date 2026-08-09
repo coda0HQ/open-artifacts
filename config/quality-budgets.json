@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "owner": "Platform / SRE",
+  "reviewedAt": "2026-08-04",
+  "static": {
+    "workerBundleRawBytes": 7340032,
+    "workerBundleGzipBytes": 3670016,
+    "viewerRuntimeBytes": 112640,
+    "wrapLines": 1800,
+    "cliCompositionRootLines": 400
+  },
+  "localPerformance": {
+    "compositionStartupMs": 250,
+    "memoryBlobWriteP95Ms": 10,
+    "memoryBlobReadP95Ms": 5,
+    "heapGrowthBytes": 67108864
+  },
+  "stagingP95Ms": {
+    "publish": 1500,
+    "read": 750,
+    "comment": 1000,
+    "live": 1000
+  },
+  "exceptions": []
+}
