@@ -132,6 +132,27 @@ liveApi.get("/artifacts/:id/live", async (c) => {
   return stubFor(c, id).fetch(c.req.raw);
 });
 
+// Single-use ticket minting for agent CLI WebSocket connections. Requires
+// authorizeLive with sk_ bearer token.
+liveApi.post("/artifacts/:id/live/ticket", async (c) => {
+  if (!liveEnabled(c)) return c.text("not found", 404);
+  const id = c.req.param("id") ?? "";
+  if (!(await authorizeLive(c, id))) return c.text("not found", 404);
+  const ticket = await stubFor(c, id).rpcMintTicket();
+  return c.json(ticket);
+});
+
+// Agent CLI WebSocket channel. Forwarded to the DO stub, which verifies the
+// single-use ticket in DO storage. Ticket check happens atomically in the DO.
+liveApi.get("/artifacts/:id/live/ws", async (c) => {
+  if (!liveEnabled(c)) return c.text("not found", 404);
+  if (c.req.header("Upgrade") !== "websocket") {
+    return c.text("Expected Upgrade: websocket", 426);
+  }
+  const id = c.req.param("id") ?? "";
+  return stubFor(c, id).fetch(c.req.raw);
+});
+
 liveApi.get("/artifacts/:id/live/poll", async (c) => {
   if (!liveEnabled(c)) return c.text("not found", 404);
   const id = c.req.param("id") ?? "";

@@ -85,37 +85,57 @@ const STASH_GC_AGE_MS = 86_400_000;
 // A watcher heartbeats roughly every 20s; an agent that has not been seen
 // within this window is treated as offline (the viewer's Connected indicator clears).
 const AGENT_ACTIVE_WINDOW_MS = 60_000;
+const TICKET_TTL_MS = 60_000; // one-time ticket expires after 60s
+const GC_SWEEP_INTERVAL_MS = 1800_000; // 30m background GC alarm interval
 
 export class LiveObject extends DurableObject<Record<string, unknown>> {
   // In-memory only; a missed wake after hibernation just re-polls.
   private waiters: PollWaiter[] = [];
   private schemaReady = false;
 
-  // --- WebSocket (browser host chrome) ---
+  // --- WebSocket (browser host chrome & agent CLI watcher) ---
 
   async fetch(request: Request): Promise<Response> {
     const upgrade = request.headers.get("Upgrade");
     if (!upgrade || upgrade !== "websocket") {
       return new Response("Expected Upgrade: websocket", { status: 426 });
     }
+    const url = new URL(request.url);
+    const isAgent = url.pathname.endsWith("/ws");
+    if (isAgent) {
+      const ticket = url.searchParams.get("ticket") ?? "";
+      const valid = await this.checkTicket(ticket);
+      if (!valid) {
+        return new Response("invalid or expired ticket", { status: 401 });
+      }
+    }
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
-    this.ctx.acceptWebSocket(server);
+    this.ctx.acceptWebSocket(server, [isAgent ? "agent" : "browser"]);
     return new Response(null, { status: 101, webSocket: client });
   }
 
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer) {
-    let msg: LiveEvent;
+    let raw: Record<string, unknown>;
     try {
-      msg = JSON.parse(
+      raw = JSON.parse(
         typeof message === "string"
           ? message
           : new TextDecoder().decode(message),
-      ) as LiveEvent;
+      ) as Record<string, unknown>;
     } catch {
       return; // ignore malformed
     }
-    if (!msg?.type || !msg?.id) return;
+    if (typeof raw?.type !== "string") return;
+
+    const tags = this.ctx.getTags(ws);
+    if (tags.includes("agent")) {
+      await this.handleAgentMessage(ws, raw);
+      return;
+    }
+
+    const msg = raw as unknown as LiveEvent;
+    if (!msg?.id) return;
     // The browser channel may only enqueue user actions (generate, comment,
     // exit). Reply types (ack/done/error) and the publish signal (version)
     // are produced server-side — accepting them here would let a WS client
@@ -140,6 +160,47 @@ export class LiveObject extends DurableObject<Record<string, unknown>> {
       return;
     }
     await this.enqueue(msg);
+  }
+
+  private async handleAgentMessage(
+    ws: WebSocket,
+    msg: Record<string, unknown>,
+  ) {
+    if (msg.type === "hb") {
+      await this.ctx.storage.put("lastAgentSeen", Date.now());
+      try {
+        ws.send(JSON.stringify({ type: "hb" }));
+      } catch {
+        // socket closed
+      }
+      return;
+    }
+    if (msg.type === "ready") {
+      const delivered = Array.isArray(msg.delivered)
+        ? (msg.delivered as unknown[]).filter(
+            (x): x is string => typeof x === "string",
+          )
+        : [];
+      await this.syncToAgent(ws, delivered);
+      return;
+    }
+    // Any other message type from an agent socket is ignored: the agent channel
+    // only accepts ready and hb; events and signals cannot be injected.
+  }
+
+  private async syncToAgent(ws: WebSocket, delivered: string[]) {
+    const skip = new Set(delivered);
+    const now = Date.now();
+    while (true) {
+      const evt = await this.pickAvailable(null, now, skip);
+      if (!evt) break;
+      skip.add(evt.id);
+      try {
+        ws.send(JSON.stringify({ type: "event", event: evt }));
+      } catch {
+        break;
+      }
+    }
   }
 
   async webSocketClose(
@@ -315,7 +376,28 @@ export class LiveObject extends DurableObject<Record<string, unknown>> {
       `DELETE FROM pending WHERE id = ? AND type = 'edit'`,
       eid,
     );
+    this.broadcastAgents({ type: "cleared", id: eid });
     return { ok: true };
+  }
+
+  // --- Agent ticket for WebSocket upgrade ---
+
+  async rpcMintTicket(): Promise<{ ok: true; ticket: string }> {
+    const bytes = crypto.getRandomValues(new Uint8Array(16));
+    const ticket = `lt_${[...bytes]
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("")}`;
+    await this.ctx.storage.put(`ws_ticket_${ticket}`, Date.now());
+    return { ok: true, ticket };
+  }
+
+  private async checkTicket(ticket: string): Promise<boolean> {
+    if (!ticket) return false;
+    const key = `ws_ticket_${ticket}`;
+    const minted = await this.ctx.storage.get<number>(key);
+    if (minted === undefined) return false;
+    await this.ctx.storage.delete(key);
+    return Date.now() - minted <= TICKET_TTL_MS;
   }
 
   // --- inline copy-edit stash (impeccable-style manual edits) ---
@@ -579,6 +661,43 @@ export class LiveObject extends DurableObject<Record<string, unknown>> {
       Date.now(),
     );
     await this.flushWaiters();
+    await this.pushToAgent(event);
+    await this.scheduleGcAlarm();
+  }
+
+  private async pushToAgent(event: LiveEvent): Promise<void> {
+    const agents = this.ctx.getWebSockets("agent");
+    if (agents.length === 0) return;
+    if (event.type === "comment") {
+      for (const ws of agents) {
+        try {
+          ws.send(JSON.stringify({ type: "event", event }));
+        } catch {
+          // ignore dead socket
+        }
+      }
+      await this.ctx.storage.sql.exec(
+        `DELETE FROM pending WHERE id = ? AND type = ?`,
+        event.id,
+        event.type,
+      );
+      return;
+    }
+    // Generate, edit, and exit events are offered to the first connected agent
+    // watcher and leased, matching pickAvailable's lease semantics so concurrent
+    // watchers do not double-process the same event.
+    const target = agents[0];
+    try {
+      target.send(JSON.stringify({ type: "event", event }));
+      await this.ctx.storage.sql.exec(
+        `UPDATE pending SET leased_until = ? WHERE id = ? AND type = ?`,
+        Date.now() + LEASE_MS,
+        event.id,
+        event.type,
+      );
+    } catch {
+      // send failed; runtime prunes dead sockets
+    }
   }
 
   // Acknowledge a `done`/`error` reply: drop the fulfilled event row(s) for
@@ -590,6 +709,7 @@ export class LiveObject extends DurableObject<Record<string, unknown>> {
       `DELETE FROM pending WHERE id = ? AND type != 'exit'`,
       id,
     );
+    this.broadcastAgents({ type: "cleared", id });
   }
 
   private async pickAvailable(
@@ -664,14 +784,90 @@ export class LiveObject extends DurableObject<Record<string, unknown>> {
 
   private broadcast(msg: LiveEvent) {
     const data = JSON.stringify(msg);
-    // ctx.getWebSockets() is runtime-tracked and survives hibernation (an
-    // in-memory Set would reset and miss post-hibernate connections).
-    for (const ws of this.ctx.getWebSockets()) {
+    // Broadcasts (ack/done/version) are delivered only to browser viewers;
+    // agent sockets receive event pushes and cleared notifications instead.
+    for (const ws of this.ctx.getWebSockets("browser")) {
       try {
         ws.send(data);
       } catch {
         // send failed; the runtime prunes dead sockets from getWebSockets()
       }
     }
+  }
+
+  private broadcastAgents(msg: Record<string, unknown>) {
+    const data = JSON.stringify(msg);
+    for (const ws of this.ctx.getWebSockets("agent")) {
+      try {
+        ws.send(data);
+      } catch {
+        // dead socket
+      }
+    }
+  }
+
+  // --- Storage alarm GC ---
+
+  async alarm(): Promise<void> {
+    await this.ensureSchema();
+    const sweptIds = await this.sweep(Date.now());
+    for (const id of sweptIds) {
+      this.broadcastAgents({ type: "cleared", id });
+    }
+    const hasRows = await this.hasSweepableRows();
+    if (hasRows) {
+      await this.ctx.storage.setAlarm(Date.now() + GC_SWEEP_INTERVAL_MS);
+    }
+  }
+
+  private async scheduleGcAlarm(): Promise<void> {
+    const existing = await this.ctx.storage.getAlarm();
+    if (existing === null) {
+      await this.ctx.storage.setAlarm(Date.now() + GC_SWEEP_INTERVAL_MS);
+    }
+  }
+
+  private async sweep(now: number): Promise<string[]> {
+    const cutoff = now - GC_AGE_MS;
+    const agedRows = this.ctx.storage.sql
+      .exec<{ id: string }>(
+        `SELECT id FROM pending WHERE created_at < ?`,
+        cutoff,
+      )
+      .toArray();
+    const sweptIds = agedRows.map((r) => r.id);
+    if (sweptIds.length > 0) {
+      await this.ctx.storage.sql.exec(
+        `DELETE FROM pending WHERE created_at < ?`,
+        cutoff,
+      );
+    }
+    const stashCutoff = now - STASH_GC_AGE_MS;
+    await this.ctx.storage.sql.exec(
+      `DELETE FROM stashed_edits WHERE updated_at < ?`,
+      stashCutoff,
+    );
+    const tickets = await this.ctx.storage.list<number>({
+      prefix: "ws_ticket_",
+    });
+    for (const [key, minted] of tickets) {
+      if (now - minted > TICKET_TTL_MS) {
+        await this.ctx.storage.delete(key);
+      }
+    }
+    return sweptIds;
+  }
+
+  private async hasSweepableRows(): Promise<boolean> {
+    const pCount =
+      this.ctx.storage.sql
+        .exec<{ c: number }>(`SELECT COUNT(*) AS c FROM pending`)
+        .toArray()[0]?.c ?? 0;
+    if (pCount > 0) return true;
+    const sCount =
+      this.ctx.storage.sql
+        .exec<{ c: number }>(`SELECT COUNT(*) AS c FROM stashed_edits`)
+        .toArray()[0]?.c ?? 0;
+    return sCount > 0;
   }
 }

@@ -1083,9 +1083,6 @@ const HOST_FRAME_CSS = `
 const ACCOUNT_CSS = `
 .oa-account-slot{position:relative;display:inline-flex;align-items:center;flex-shrink:0;min-height:28px}
 .oa-account-slot:empty{display:none}
-.oa-account-loading{width:20px;height:20px;border:2px solid color-mix(in oklab,var(--oa-fg),transparent 85%);border-top-color:var(--oa-accent);border-radius:50%;animation:oa-spin .8s linear infinite}
-@keyframes oa-spin{to{transform:rotate(360deg)}}
-@media (prefers-reduced-motion:reduce){.oa-account-loading{animation:none;opacity:.5}}
 .oa-account-btn{position:relative;display:inline-flex;align-items:center;gap:.4rem;height:28px;padding:0 .35rem 0 .3rem;border-radius:6px;border:1px solid transparent;background:transparent;color:var(--oa-fg);font:inherit;font-size:.75rem;line-height:1;cursor:pointer;transition:color .15s,background .15s}
 .oa-account-btn:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 .oa-account-btn:active{transform:translateY(1px)}
@@ -1117,7 +1114,6 @@ const ACCOUNT_SCRIPT = `
   function initialAvatar(name){var fallback=document.createElement('span');fallback.className='oa-account-av';fallback.setAttribute('aria-hidden','true');fallback.textContent=initial(name);return fallback;}
   function syncOverflow(){if(window.__oaSyncHeaderOverflow)window.__oaSyncHeaderOverflow();}
   function clear(){slot.innerHTML='';syncOverflow();}
-  function showLoading(){slot.innerHTML='<div class="oa-account-loading" role="status" aria-label="Loading account"></div>';syncOverflow();}
   function renderSignin(){slot.innerHTML='<a class="oa-account-signin" href="/login">Sign in</a>';syncOverflow();}
   function renderUser(name,picture){
     var btn=document.createElement('button');btn.type='button';btn.id='oa-account-button';btn.className='oa-account-btn';btn.setAttribute('aria-haspopup','menu');btn.setAttribute('aria-expanded','false');btn.setAttribute('aria-controls','oa-account-menu');
@@ -1140,7 +1136,6 @@ const ACCOUNT_SCRIPT = `
     document.addEventListener('click',function(){menu.hidden=true;btn.setAttribute('aria-expanded','false');});
     slot.innerHTML='';slot.appendChild(btn);slot.appendChild(menu);syncOverflow();
   }
-  showLoading();
   // Defer the /api/me fetch so it doesn't compete with the iframe load for
   // network bandwidth. The account chip is above-the-fold but non-critical;
   // requestIdleCallback (or a 0ms timeout fallback) lets the browser finish
@@ -4205,10 +4200,10 @@ const STATUS_CSS = `
 .oa-status a:hover{text-decoration:underline;text-underline-offset:2px}
 .oa-status a:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 .oa-status-guidance{margin:.5rem 0 0;max-width:28rem;color:var(--oa-muted);font-size:.75rem;line-height:1.5}
-.oa-status-actions{display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin-top:1rem}
-.oa-status-copy{min-height:28px;padding:0 .75rem;border:1px solid var(--oa-border);border-radius:6px;background:var(--oa-surface);color:var(--oa-fg);font:inherit;font-size:.75rem;cursor:pointer;transition:border-color .15s,color .15s}
-.oa-status-copy:hover{border-color:var(--oa-accent);color:var(--oa-accent)}
-.oa-status-copy:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+.oa-status-actions{display:flex;align-items:center;justify-content:center;gap:.75rem;flex-wrap:wrap;margin-top:1rem}
+.oa-status-actions .oa-status-btn{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;width:8rem;min-height:44px;padding:0 .875rem;border:1px solid var(--oa-border);border-radius:6px;background:var(--oa-surface);color:var(--oa-fg);font:inherit;font-size:.75rem;text-decoration:none;cursor:pointer;transition:border-color .15s,color .15s}
+.oa-status-actions .oa-status-btn:hover{border-color:var(--oa-accent);color:var(--oa-accent);text-decoration:none}
+.oa-status-actions .oa-status-btn:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 `;
 
 const DARK_CONSOLE_STATUS_CSS = `
@@ -4218,10 +4213,7 @@ const DARK_CONSOLE_STATUS_CSS = `
 .oa-status-branded .oa-mark{width:32px;height:32px;margin-bottom:1rem}
 .oa-status-branded .oa-status-brand{margin-bottom:.35rem;color:var(--oa-accent);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:9px;font-weight:500;letter-spacing:.12em;line-height:1.5;text-transform:uppercase}
 .oa-status-branded h1{font-family:var(--oa-font);font-size:1.25rem;font-weight:600;letter-spacing:-.02em}
-.oa-status-branded a{min-height:44px;display:inline-flex;align-items:center;margin-top:1.35rem;padding:0 .875rem;border:1px solid var(--oa-border);border-radius:6px;background:var(--oa-surface);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.75rem;color:var(--oa-fg)}
-.oa-status-branded a:hover{border-color:var(--oa-accent);color:var(--oa-accent);text-decoration:none}
-.oa-status-branded .oa-status-copy{border-color:var(--oa-border);background:var(--oa-surface);color:var(--oa-fg)}
-.oa-status-branded .oa-status-copy:hover{border-color:var(--oa-accent);color:var(--oa-accent)}
+.oa-status-branded .oa-status-actions .oa-status-btn{margin-top:0;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 .oa-status-branded .oa-status-guidance{color:var(--oa-muted)}
 `;
 
@@ -4262,8 +4254,8 @@ ${branded ? `<p class="oa-status-brand">${escapeHtml(brand.wordmark)} / artifact
 <p>${options.body}</p>
 ${guidance}
 <div class="oa-status-actions">
-<a href="${escapeHtml(linkHref)}">${escapeHtml(linkText)}</a>
-<button type="button" class="oa-status-copy" id="oa-status-copy">Copy link</button>
+<a class="oa-status-btn" href="${escapeHtml(linkHref)}">${escapeHtml(linkText)}</a>
+<button type="button" class="oa-status-btn" id="oa-status-copy">Copy link</button>
 </div>
 </main>
 <script>(function(){var b=document.getElementById("oa-status-copy");if(!b)return;b.addEventListener("click",function(){var t=b.textContent;try{navigator.clipboard.writeText(location.href).then(function(){b.textContent="Copied";setTimeout(function(){b.textContent=t},2000)}).catch(function(){b.textContent="Copy failed";setTimeout(function(){b.textContent=t},2000)})}catch(e){b.textContent="Copy failed";setTimeout(function(){b.textContent=t},2000)}})})();</script>
