@@ -1804,6 +1804,51 @@ async function commandLive(rest, flags) {
     20_000,
     1,
   );
+
+  // Ids delivered this session (grow-only). Passed as the poll exclude so a
+  // lease-expired, unreplied event is never re-delivered ahead of newer ones,
+  // even when the ack-wait early-returns on a new submission.
+  const delivered = new Set();
+
+  // WebSocket transport: when supported by the runtime (Node >= 22 has global
+  // WebSocket) and not explicitly disabled via OPEN_ARTIFACTS_LIVE_TRANSPORT=poll,
+  // connect to the DO via ticketed WebSocket. This allows the Durable Object
+  // to hibernate between events (zero duration billing when idle) instead of
+  // holding continuous 60s long-poll promises. On connection or ticket failure,
+  // falls back automatically to the HTTP long-poll loop below.
+  const transportPreference = process.env.OPEN_ARTIFACTS_LIVE_TRANSPORT;
+  const allowWs =
+    transportPreference !== "poll" && typeof WebSocket === "function";
+
+  if (allowWs) {
+    try {
+      const ended = await watchOverWs({
+        base,
+        sk,
+        delivered,
+        fetchJson,
+        reply,
+        consumeExit,
+        stripForAgent,
+        heartbeatMs,
+        ackTimeoutMs,
+      });
+      if (ended) return;
+    } catch (e) {
+      const auth =
+        e && (e.status === 401 || e.status === 403 || e.status === 404);
+      if (auth) {
+        console.error(
+          `[live watch] ticket rejected (${e.status}); the artifact may not exist or this token is not authorized for it — falling back to poll`,
+        );
+      } else {
+        console.error(
+          `[live watch] ticket/ws unavailable (${e.message}); falling back to HTTP long-poll`,
+        );
+      }
+    }
+  }
+
   const heartbeat = async () => {
     try {
       await fetchJson("POST", `${base}/heartbeat`);
@@ -1813,10 +1858,6 @@ async function commandLive(rest, flags) {
   };
   void heartbeat();
   const heartbeatTimer = setInterval(heartbeat, heartbeatMs);
-  // Ids delivered this session (grow-only). Passed as the poll exclude so a
-  // lease-expired, unreplied event is never re-delivered ahead of newer ones,
-  // even when the ack-wait early-returns on a new submission.
-  const delivered = new Set();
   let authWarned = false;
   while (true) {
     let evt;
@@ -1897,6 +1938,201 @@ async function commandLive(rest, flags) {
     // until the next event (another generate, or exit). We do NOT auto-reply
     // `done` — that's the agent's job after it republishes; the agent calls
     // `live <id> --reply <eid> done --version <n>` itself.
+  }
+}
+
+async function watchOverWs({
+  base,
+  sk: _sk,
+  delivered,
+  fetchJson,
+  reply,
+  consumeExit,
+  stripForAgent,
+  heartbeatMs,
+  ackTimeoutMs,
+}) {
+  let ws = null;
+  let heartbeatTimer = null;
+  let closedExpected = false;
+
+  const { status, json } = await fetchJson("POST", `${base}/ticket`);
+  if (status !== 200 || typeof json?.ticket !== "string") {
+    const err = new Error(
+      `ticket request failed (${status}): ${json?.error ?? "tickets unsupported"}`,
+    );
+    err.status = status;
+    throw err;
+  }
+  const ticket = json.ticket;
+  const wsUrl = `${base.replace(/^http/, "ws")}/ws?ticket=${encodeURIComponent(ticket)}`;
+
+  const incomingEvents = [];
+  let pendingEventResolve = null;
+  let pendingEventReject = null;
+  const clearedIds = new Set();
+  const ackResolvers = new Map(); // evtId -> resolver
+
+  await new Promise((resolve, reject) => {
+    let socket;
+    try {
+      socket = new WebSocket(wsUrl);
+    } catch (err) {
+      return reject(err);
+    }
+    let opened = false;
+    socket.onopen = () => {
+      opened = true;
+      ws = socket;
+      resolve();
+    };
+    socket.onerror = (e) => {
+      if (!opened) {
+        reject(new Error(e?.message || "websocket connection failed"));
+      }
+    };
+    socket.onclose = () => {
+      if (!opened) {
+        reject(new Error("websocket closed before open"));
+      }
+    };
+  });
+
+  ws.onmessage = (event) => {
+    let msg;
+    try {
+      msg = JSON.parse(event.data);
+    } catch {
+      return;
+    }
+    if (msg.type === "event" && msg.event) {
+      const evt = msg.event;
+      // If waiting on an ack for a different event, a new generate/edit event
+      // triggers the "new" fast-path to deliver it without waiting out the ack timeout.
+      // An exit event aborts the ack-wait.
+      for (const [id, resolver] of ackResolvers.entries()) {
+        if (evt.type === "exit") {
+          resolver("exit");
+        } else if (evt.id !== id) {
+          resolver("new");
+        }
+      }
+      if (pendingEventResolve) {
+        const r = pendingEventResolve;
+        pendingEventResolve = null;
+        pendingEventReject = null;
+        r(evt);
+      } else {
+        incomingEvents.push(evt);
+      }
+    } else if (msg.type === "cleared" && typeof msg.id === "string") {
+      clearedIds.add(msg.id);
+      const resolver = ackResolvers.get(msg.id);
+      if (resolver) {
+        ackResolvers.delete(msg.id);
+        resolver("cleared");
+      }
+    }
+  };
+
+  let isClosed = false;
+  let closeError = null;
+
+  ws.onclose = () => {
+    isClosed = true;
+    closeError = new Error("websocket closed unexpectedly");
+    if (heartbeatTimer) clearInterval(heartbeatTimer);
+    if (!closedExpected && pendingEventReject) {
+      pendingEventReject(closeError);
+    }
+    for (const resolver of ackResolvers.values()) {
+      resolver("timeout");
+    }
+    ackResolvers.clear();
+  };
+
+  const getNextEvent = () => {
+    if (incomingEvents.length > 0) {
+      return Promise.resolve(incomingEvents.shift());
+    }
+    if (isClosed && !closedExpected) {
+      return Promise.reject(
+        closeError || new Error("websocket closed unexpectedly"),
+      );
+    }
+    return new Promise((resolve, reject) => {
+      pendingEventResolve = resolve;
+      pendingEventReject = reject;
+    });
+  };
+
+  // Sync ready with already-delivered ids so pending events in SQLite are delivered
+  ws.send(JSON.stringify({ type: "ready", delivered: [...delivered] }));
+
+  // Periodic heartbeat frames over WebSocket (wakes DO briefly without holding duration)
+  heartbeatTimer = setInterval(() => {
+    try {
+      ws.send(JSON.stringify({ type: "hb" }));
+    } catch {
+      // socket closed
+    }
+  }, heartbeatMs);
+
+  while (true) {
+    const evt = await getNextEvent();
+    if (evt.type === "timeout") continue;
+    delivered.add(evt.id);
+    console.log(JSON.stringify(stripForAgent(evt)));
+
+    if (evt.type === "exit") {
+      closedExpected = true;
+      clearInterval(heartbeatTimer);
+      try {
+        ws.close();
+      } catch {}
+      await consumeExit();
+      console.error("[live watch] session ended");
+      return true;
+    }
+
+    if (evt.type === "generate" || evt.type === "edit") {
+      try {
+        await reply(evt.id, "ack");
+      } catch (e) {
+        console.error(`[live watch] ack failed: ${e.message}`);
+      }
+
+      if (ackTimeoutMs > 0 && !clearedIds.has(evt.id)) {
+        let timer = null;
+        const result = await new Promise((resolve) => {
+          timer = setTimeout(() => {
+            ackResolvers.delete(evt.id);
+            resolve("timeout");
+          }, ackTimeoutMs);
+          ackResolvers.set(evt.id, (res) => {
+            clearTimeout(timer);
+            ackResolvers.delete(evt.id);
+            resolve(res);
+          });
+        });
+
+        if (result === "exit") {
+          closedExpected = true;
+          clearInterval(heartbeatTimer);
+          try {
+            ws.close();
+          } catch {}
+          await consumeExit();
+          console.error("[live watch] session ended during edit");
+          return true;
+        }
+        if (result === "timeout") {
+          console.error(
+            `[live watch] ack timeout on event ${evt.id}; continuing`,
+          );
+        }
+      }
+    }
   }
 }
 

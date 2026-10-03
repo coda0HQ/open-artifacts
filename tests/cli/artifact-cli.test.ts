@@ -3560,6 +3560,61 @@ describe("live watch: heartbeats, 404 hints, prompt delivery", () => {
     });
   });
 
+  it("OPEN_ARTIFACTS_LIVE_TRANSPORT=poll skips ticket request and polls HTTP directly", async () => {
+    holdPoll = true;
+    const { child, done } = spawnCli(["live", "testid123456", "--watch"], {
+      ...skEnv,
+      OPEN_ARTIFACTS_LIVE_TRANSPORT: "poll",
+      OPEN_ARTIFACTS_LIVE_HEARTBEAT_MS: "5000",
+    });
+    try {
+      await new Promise((r) => setTimeout(r, 250));
+      releasePoll?.(200, { type: "exit", id: "ev9" });
+      const { stderr } = await done;
+      expect(stderr).toContain("session ended");
+      // Must not have called /live/ticket.
+      const tickets = requests.filter(
+        (r) => r.method === "POST" && r.path.includes("/live/ticket"),
+      );
+      expect(tickets.length).toBe(0);
+      const polls = requests.filter(
+        (r) => r.method === "GET" && r.path.includes("/live/poll"),
+      );
+      expect(polls.length).toBeGreaterThanOrEqual(1);
+    } finally {
+      if (releasePoll) releasePoll(500, { error: "test teardown" });
+      child.kill();
+    }
+  });
+
+  it("watch falls back to HTTP long-poll when ticket request returns 404", async () => {
+    holdPoll = true;
+    nextResponse = { status: 404, body: { error: "not found" } };
+    const { child, done } = spawnCli(["live", "testid123456", "--watch"], {
+      ...skEnv,
+      OPEN_ARTIFACTS_LIVE_HEARTBEAT_MS: "5000",
+    });
+    try {
+      await new Promise((r) => setTimeout(r, 250));
+      // First ticket failed 404, watch fell back to poll and is now waiting on holdPoll.
+      releasePoll?.(200, { type: "exit", id: "ev9" });
+      const { stderr } = await done;
+      expect(stderr).toContain("falling back to poll");
+      expect(stderr).toContain("session ended");
+      const tickets = requests.filter(
+        (r) => r.method === "POST" && r.path.includes("/live/ticket"),
+      );
+      expect(tickets.length).toBe(1);
+      const polls = requests.filter(
+        (r) => r.method === "GET" && r.path.includes("/live/poll"),
+      );
+      expect(polls.length).toBeGreaterThanOrEqual(1);
+    } finally {
+      if (releasePoll) releasePoll(500, { error: "test teardown" });
+      child.kill();
+    }
+  });
+
   it("live --reply fails on invalid --data JSON", async () => {
     const result = await run(
       [

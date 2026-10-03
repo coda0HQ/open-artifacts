@@ -7,6 +7,32 @@ republishes. A WebSocket pushes the `done` ack to the browser, which reloads
 the frame to show the new content. One shot — no variant cycling, no
 accept/discard loop.
 
+## Transport: WebSocket vs. Long-poll
+
+`node "$ARTIFACT_CLI" live <ID> --watch` defaults to a single-use ticketed
+WebSocket transport (`ws://` / `wss://`).
+
+**Why WebSocket?** Cloudflare charges for Durable Object *duration* while an
+object is active. In HTTP long-poll mode, holding a pending 60-second request
+keeps the DO continuously active in memory (costing ~450 GB-s duration per DO
+per active hour). Over WebSocket with hibernation (`ctx.acceptWebSocket`), the
+DO sleeps completely while idle — billing **zero duration** until a user
+action, message, or alarm wakes it. Heartbeats run as lightweight WebSocket
+frames (`hb`), and event completions push `cleared` frames without 1-second
+HTTP `/live/status` poll wakeups.
+
+**Automatic Fallback:**
+If WebSocket transport is unavailable (e.g. self-hosted instance without
+ticket support, connection error, or older Node environment), `--watch` logs a
+notice and automatically falls back to the HTTP long-poll loop.
+
+To force HTTP long-poll transport explicitly, set:
+```
+OPEN_ARTIFACTS_LIVE_TRANSPORT=poll node "$ARTIFACT_CLI" live <ID> --watch
+```
+
+One-shot `live <ID>` commands continue to use HTTP poll mode.
+
 ## Starting live after a publish
 
 On a live-capable instance, `create` responses include `liveSupported: true`,
