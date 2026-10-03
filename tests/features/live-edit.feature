@@ -299,6 +299,57 @@ Feature: Live editing
     Then the agent's poll returns the edit event first (priority: exit > edit > generate > other)
     And the edit event id starts with `ev_`
 
+  Scenario: The watcher connects over a single-use ticket WebSocket
+    Given the deploy binds a LIVE_DO Durable Object (SQLite, class LiveObject)
+    When the watcher POSTs /api/artifacts/<id>/live/ticket with its sk_ bearer
+    Then the route returns a one-time ticket valid for 60 seconds
+    And a WebSocket upgrade to /api/artifacts/<id>/live/ws?ticket=<t> is accepted and tagged agent
+    But a second upgrade reusing the same ticket is rejected 401
+    And an upgrade with an unknown or expired ticket is rejected 401
+    And the ticket route uses the artifact view gate and 404s when the deploy has no LIVE_DO binding
+
+  Scenario: A connected watcher receives events without long-polling
+    Given a watcher is connected over the ticket WebSocket and has sent ready
+    When the browser sends a generate event over the browser WebSocket
+    Then the watcher receives {type:'event', event} on its socket and the pending row is leased
+    And the hibernatable agent socket holds no request, so the DO can sleep between events
+    But with no watcher connected the event stays queued until one connects
+
+  Scenario: A reconnecting watcher syncs the pending queue over the socket
+    Given events are pending while no watcher is connected
+    When the watcher sends {type:'ready', delivered:[ids]} over its socket
+    Then the DO pushes the available events in priority order (exit > edit > generate > other) and marks them leased
+    But delivered event ids are never re-delivered to that watcher
+
+  Scenario: The agent socket cannot inject events or fake signals
+    When an agent-tagged socket sends {type:'generate'} or {type:'version'} or {type:'done'}
+    Then the message is ignored - the agent channel only accepts ready and hb messages
+    And the queued pending events are unchanged
+
+  Scenario: The watcher heartbeats over the socket
+    When the watcher sends {type:'hb'} over its socket
+    Then the server echoes {type:'hb'} back and GET /live/status reports agentActive true
+
+  Scenario: The watcher learns when an event leaves the queue
+    Given the watcher received a generate event over its socket
+    When the agent replies done via POST /live/reply
+    Then the watcher's socket receives {type:'cleared', id}
+    And a cancelled queued event also pushes {type:'cleared', id} to the agent socket
+
+  Scenario: The watcher falls back to long-poll
+    Given the CLI's default --watch transport is the ticket WebSocket when WebSocket is available
+    When the ticket POST or the socket upgrade fails (no LIVE_DO, bad token, transport error)
+    Then the watch falls back to the HTTP long-poll loop and behaves exactly as before
+    And OPEN_ARTIFACTS_LIVE_TRANSPORT=poll forces the long-poll loop directly
+
+  Scenario: The pending queue is garbage-collected by a storage alarm
+    Given a generate event sits in the pending queue
+    And enqueue schedules a storage alarm when none is set
+    When the alarm fires after the event ages out
+    Then the aged row is deleted and the agent socket receives {type:'cleared', id} for it
+    And the alarm reschedules while pending or stashed rows remain and stops when none are left
+    And stale minted tickets are swept by the same alarm
+
   Scenario: The frame picker registers a single message listener
     Then the picker script contains exactly one addEventListener('message' handler
     And its annotation reply handler calls sendAnnots with the request token (sendAnnots(m.req))

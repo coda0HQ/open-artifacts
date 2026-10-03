@@ -131,6 +131,13 @@ describe("status pages", () => {
     expect(html).toContain('<main class="oa-status oa-status-branded">');
     expect(html).toContain("--oa-bg:#050505");
     expect(html).toContain("--oa-accent:#3c7bff");
+    expect(html).toContain(
+      ".oa-status-actions .oa-status-btn{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;width:8rem;min-height:44px",
+    );
+    expect(html).toContain('<a class="oa-status-btn"');
+    expect(html).toContain(
+      '<button type="button" class="oa-status-btn" id="oa-status-copy">Copy link</button>',
+    );
   });
 
   it("links 'Go to Open Artifacts' on a 404 without brand env", async () => {

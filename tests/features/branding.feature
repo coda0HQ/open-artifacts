@@ -44,6 +44,10 @@ Feature: Instance identity beyond the landing page
     And the status content is contained in a main landmark
     And the branded status page uses the configured dark console theme
 
+  Scenario: Branded status-page actions have matching control sizes
+    When I GET /a/nonexistent with BRAND_NAME set to "coda0"
+    Then the sign-in and copy-link actions use the same 128px by 44px control size
+
   Scenario: Not-found reads "Go to Open Artifacts" without brand env
     When I GET /a/nonexistent without brand env
     Then the response status is 404

@@ -1,5 +1,6 @@
 import {
   createExecutionContext,
+  runDurableObjectAlarm,
   runInDurableObject,
   waitOnExecutionContext,
 } from "cloudflare:test";
@@ -1735,5 +1736,586 @@ describe("live edit stash, commit, and inline-edit chrome", () => {
     // keeps its request token (the second copy dropped it — a real bug).
     expect((picker.match(/addEventListener\('message'/g) ?? []).length).toBe(1);
     expect(picker).toContain("sendAnnots(m.req)");
+  });
+});
+
+describe("agent WebSocket (ticket transport)", () => {
+  async function mintTicket(id: string): Promise<string> {
+    const res = await fetchWith(
+      jsonRequest(
+        "POST",
+        `/api/artifacts/${id}/live/ticket`,
+        undefined,
+        SK_BEARER,
+      ),
+      ON,
+      true,
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; ticket: string };
+    expect(body.ok).toBe(true);
+    expect(typeof body.ticket).toBe("string");
+    return body.ticket;
+  }
+
+  async function upgradeAgent(
+    id: string,
+    ticket: string,
+  ): Promise<{
+    status: number;
+    ws?: WebSocket;
+    messages: { type: string; [key: string]: unknown }[];
+  }> {
+    const res = await liveStub(id).fetch(
+      new Request(`${BASE}/api/artifacts/${id}/live/ws?ticket=${ticket}`, {
+        headers: { Upgrade: "websocket" },
+      }),
+    );
+    if (res.status !== 101) {
+      return { status: res.status, messages: [] };
+    }
+    const ws = res.webSocket;
+    if (!ws) throw new Error("no websocket on 101 response");
+    const messages: { type: string; [key: string]: unknown }[] = [];
+    ws.addEventListener("message", (e) => {
+      try {
+        messages.push(JSON.parse(e.data as string));
+      } catch {
+        // ignore malformed
+      }
+    });
+    ws.accept();
+    return { status: 101, ws, messages };
+  }
+
+  async function waitForWsMessage(
+    messages: { type: string; [key: string]: unknown }[],
+    predicate: (m: { type: string; [key: string]: unknown }) => boolean,
+    timeoutMs = 3000,
+  ): Promise<{ type: string; [key: string]: unknown }> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const found = messages.find(predicate);
+      if (found) return found;
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    throw new Error("timed out waiting for matching message");
+  }
+
+  it("POST /live/ticket 404s when LIVE_DO is not bound", async () => {
+    const { id } = await create({ content: "<p>hi</p>", format: "html" }, OFF);
+    const res = await fetchWith(
+      jsonRequest(
+        "POST",
+        `/api/artifacts/${id}/live/ticket`,
+        undefined,
+        SK_BEARER,
+      ),
+      OFF,
+      true,
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("mints a single-use ticket and rejects reuse, unknown, and expired tickets with 401", async () => {
+    const { id } = await create({ content: "<p>hi</p>", format: "html" });
+    const ticket = await mintTicket(id);
+
+    // First upgrade succeeds.
+    const first = await upgradeAgent(id, ticket);
+    expect(first.status).toBe(101);
+    first.ws?.close();
+
+    // Reusing the same ticket is rejected (single-use).
+    const second = await upgradeAgent(id, ticket);
+    expect(second.status).toBe(401);
+
+    // Unknown ticket rejected.
+    const unknown = await upgradeAgent(id, "lt_garbage");
+    expect(unknown.status).toBe(401);
+
+    // Expired ticket rejected (> 60s).
+    const expiredTicket = await mintTicket(id);
+    await runInDurableObject(liveStub(id), async (_inst, state) => {
+      const key = `ws_ticket_${expiredTicket}`;
+      const ts = (await state.storage.get<number>(key)) ?? Date.now();
+      await state.storage.put(key, ts - 61_000);
+    });
+    const expired = await upgradeAgent(id, expiredTicket);
+    expect(expired.status).toBe(401);
+  });
+
+  it("ready syncs pending events in priority order, leases them, and honors delivered", async () => {
+    const { id } = await create({ content: "<p>hi</p>", format: "html" });
+    // Enqueue two events: an older generate and a newer edit.
+    await enqueueRaw(id, {
+      id: "ev_gen1",
+      type: "generate",
+      items: [{ prompt: "fix" }],
+    });
+    await enqueueRaw(id, {
+      id: "ev_edit1",
+      type: "edit",
+      pageUrl: `/a/${id}`,
+      items: [],
+    });
+
+    const ticket = await mintTicket(id);
+    const conn = await upgradeAgent(id, ticket);
+    expect(conn.status).toBe(101);
+    expect(conn.ws).toBeDefined();
+    const ws = conn.ws as WebSocket;
+
+    // Send ready with empty delivered set.
+    ws.send(JSON.stringify({ type: "ready", delivered: [] }));
+
+    // Priority: edit (priority 1) must be pushed before generate (priority 2).
+    const m1 = await waitForWsMessage(
+      conn.messages,
+      (m) =>
+        m.type === "event" && (m.event as { id: string }).id === "ev_edit1",
+    );
+    expect(m1).toBeDefined();
+
+    const m2 = await waitForWsMessage(
+      conn.messages,
+      (m) => m.type === "event" && (m.event as { id: string }).id === "ev_gen1",
+    );
+    expect(m2).toBeDefined();
+
+    // Verify ordering in collected messages: edit before generate.
+    const eventIds = conn.messages
+      .filter((m) => m.type === "event")
+      .map((m) => (m.event as { id: string }).id);
+    expect(eventIds).toEqual(["ev_edit1", "ev_gen1"]);
+
+    // Both rows must now be leased in SQLite.
+    await runInDurableObject(liveStub(id), async (_inst, state) => {
+      const rows = state.storage.sql
+        .exec<{ id: string; leased_until: number }>(
+          "SELECT id, leased_until FROM pending",
+        )
+        .toArray();
+      for (const row of rows) {
+        expect(row.leased_until).toBeGreaterThan(Date.now());
+      }
+      // Un-lease both to test reconnect with delivered filter.
+      await state.storage.sql.exec("UPDATE pending SET leased_until = 0");
+    });
+    ws.close();
+
+    // Reconnect with delivered: ["ev_edit1"] -> only ev_gen1 should be pushed.
+    const ticket2 = await mintTicket(id);
+    const conn2 = await upgradeAgent(id, ticket2);
+    conn2.ws?.send(JSON.stringify({ type: "ready", delivered: ["ev_edit1"] }));
+    await waitForWsMessage(
+      conn2.messages,
+      (m) => m.type === "event" && (m.event as { id: string }).id === "ev_gen1",
+    );
+    // Give a brief window to ensure ev_edit1 is NOT delivered.
+    await new Promise((r) => setTimeout(r, 100));
+    const reDelivered = conn2.messages
+      .filter((m) => m.type === "event")
+      .map((m) => (m.event as { id: string }).id);
+    expect(reDelivered).toEqual(["ev_gen1"]);
+    conn2.ws?.close();
+  });
+
+  it("pushes a newly enqueued event to the connected agent and leases the row", async () => {
+    const { id } = await create({ content: "<p>hi</p>", format: "html" });
+    const ticket = await mintTicket(id);
+    const conn = await upgradeAgent(id, ticket);
+    conn.ws?.send(JSON.stringify({ type: "ready", delivered: [] }));
+
+    // Real enqueue path via browser WebSocket.
+    const browserRes = await liveStub(id).fetch(
+      new Request(`${BASE}/api/artifacts/${id}/live`, {
+        headers: { Upgrade: "websocket" },
+      }),
+    );
+    expect(browserRes.webSocket).toBeDefined();
+    const bws = browserRes.webSocket as WebSocket;
+    bws.accept();
+    bws.send(
+      JSON.stringify({
+        type: "generate",
+        id: "ev_live_push",
+        items: [{ prompt: "live push" }],
+      }),
+    );
+
+    const pushed = await waitForWsMessage(
+      conn.messages,
+      (m) =>
+        m.type === "event" && (m.event as { id: string }).id === "ev_live_push",
+    );
+    expect(pushed).toBeDefined();
+
+    // Verify row was leased.
+    await runInDurableObject(liveStub(id), async (_inst, state) => {
+      const row = state.storage.sql
+        .exec<{ leased_until: number }>(
+          "SELECT leased_until FROM pending WHERE id = 'ev_live_push'",
+        )
+        .toArray()[0];
+      expect(row?.leased_until).toBeGreaterThan(Date.now());
+    });
+    conn.ws?.close();
+    bws.close();
+  });
+
+  it("ignores generate/done/version frames from an agent socket", async () => {
+    const { id } = await create({ content: "<p>hi</p>", format: "html" });
+    const ticket = await mintTicket(id);
+    const conn = await upgradeAgent(id, ticket);
+    expect(conn.ws).toBeDefined();
+    const ws = conn.ws as WebSocket;
+
+    // An agent socket tries to inject user actions or replies.
+    ws.send(JSON.stringify({ type: "generate", id: "ev_fake", items: [] }));
+    ws.send(JSON.stringify({ type: "done", id: "ev_fake" }));
+    ws.send(JSON.stringify({ type: "version", version: 99 }));
+    await new Promise((r) => setTimeout(r, 100));
+
+    // Queue must remain completely empty (table not even created, or 0 rows).
+    await runInDurableObject(liveStub(id), async (_inst, state) => {
+      const tableExists =
+        state.storage.sql
+          .exec<{ c: number }>(
+            "SELECT COUNT(*) AS c FROM sqlite_master WHERE type='table' AND name='pending'",
+          )
+          .toArray()[0]?.c ?? 0;
+      if (tableExists > 0) {
+        const count =
+          state.storage.sql
+            .exec<{ c: number }>("SELECT COUNT(*) AS c FROM pending")
+            .toArray()[0]?.c ?? 0;
+        expect(count).toBe(0);
+      }
+    });
+    ws.close();
+  });
+
+  it("echoes hb frames and marks presence active in /live/status", async () => {
+    const { id } = await create({ content: "<p>hi</p>", format: "html" });
+    const ticket = await mintTicket(id);
+    const conn = await upgradeAgent(id, ticket);
+
+    conn.ws?.send(JSON.stringify({ type: "hb" }));
+    const echo = await waitForWsMessage(conn.messages, (m) => m.type === "hb");
+    expect(echo).toBeDefined();
+
+    // /live/status reflects active agent presence.
+    const statusRes = await fetchWith(
+      new Request(`${BASE}/api/artifacts/${id}/live/status`),
+      ON,
+      true,
+    );
+    const status = (await statusRes.json()) as { agentActive: boolean };
+    expect(status.agentActive).toBe(true);
+    conn.ws?.close();
+  });
+
+  it("pushes cleared to the agent when done reply lands and on event cancel", async () => {
+    const { id } = await create({ content: "<p>hi</p>", format: "html" });
+    await enqueueRaw(id, {
+      id: "ev_done_test",
+      type: "generate",
+      items: [],
+    });
+
+    const ticket = await mintTicket(id);
+    const conn = await upgradeAgent(id, ticket);
+    conn.ws?.send(JSON.stringify({ type: "ready", delivered: [] }));
+    await waitForWsMessage(
+      conn.messages,
+      (m) =>
+        m.type === "event" && (m.event as { id: string }).id === "ev_done_test",
+    );
+
+    // Agent replies done via HTTP -> agent socket receives cleared.
+    const replyRes = await fetchWith(
+      jsonRequest(
+        "POST",
+        `/api/artifacts/${id}/live/reply`,
+        { id: "ev_done_test", type: "done" },
+        SK_BEARER,
+      ),
+      ON,
+      true,
+    );
+    expect(replyRes.status).toBe(200);
+
+    const cleared = await waitForWsMessage(
+      conn.messages,
+      (m) => m.type === "cleared" && m.id === "ev_done_test",
+    );
+    expect(cleared).toBeDefined();
+
+    // Cancel path: enqueue an un-leased edit event, connect second watcher, cancel it.
+    await enqueueRaw(id, {
+      id: "ev_cancel_test",
+      type: "edit",
+      pageUrl: `/a/${id}`,
+      items: [],
+    });
+    // Cancel route requires write access (ownerApp).
+    const cancelRes = await fetchWith(
+      jsonRequest("DELETE", `/api/artifacts/${id}/live/events/ev_cancel_test`),
+      ON,
+      true,
+    );
+    expect(cancelRes.status).toBe(200);
+
+    const clearedCancel = await waitForWsMessage(
+      conn.messages,
+      (m) => m.type === "cleared" && m.id === "ev_cancel_test",
+    );
+    expect(clearedCancel).toBeDefined();
+    conn.ws?.close();
+  });
+
+  it("browser broadcasts (ack/done/version) are filtered away from the agent socket", async () => {
+    const { id } = await create({ content: "<p>hi</p>", format: "html" });
+    const ticket = await mintTicket(id);
+    const agentConn = await upgradeAgent(id, ticket);
+
+    // Connect browser channel too.
+    const browserRes = await liveStub(id).fetch(
+      new Request(`${BASE}/api/artifacts/${id}/live`, {
+        headers: { Upgrade: "websocket" },
+      }),
+    );
+    expect(browserRes.webSocket).toBeDefined();
+    const bws = browserRes.webSocket as WebSocket;
+    const bMessages: { type: string }[] = [];
+    bws.addEventListener("message", (e) => {
+      try {
+        bMessages.push(JSON.parse(e.data as string));
+      } catch {}
+    });
+    bws.accept();
+
+    // Enqueue an event and reply done with broadcast.
+    await enqueueRaw(id, { id: "ev_filter_test", type: "generate", items: [] });
+    await fetchWith(
+      jsonRequest(
+        "POST",
+        `/api/artifacts/${id}/live/reply`,
+        { id: "ev_filter_test", type: "done" },
+        SK_BEARER,
+      ),
+      ON,
+      true,
+    );
+
+    // Browser receives {type:'done'} frame.
+    while (!bMessages.some((m) => m.type === "done")) {
+      await new Promise((r) => setTimeout(r, 20));
+    }
+
+    // Agent receives cleared, but NOT a bare {type:'done'} frame.
+    await waitForWsMessage(
+      agentConn.messages,
+      (m) => m.type === "cleared" && m.id === "ev_filter_test",
+    );
+    expect(agentConn.messages.some((m) => m.type === "done")).toBe(false);
+
+    // Publish update: browser gets version; agent gets nothing.
+    await fetchWith(
+      jsonRequest("PUT", `/api/artifacts/${id}`, { content: "<p>v2</p>" }),
+      ON,
+      true,
+    );
+    while (!bMessages.some((m) => m.type === "version")) {
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    expect(agentConn.messages.some((m) => m.type === "version")).toBe(false);
+
+    agentConn.ws?.close();
+    bws.close();
+  });
+});
+
+describe("live GC storage alarm", () => {
+  it("enqueue schedules a storage alarm, fresh rows survive the sweep, and the alarm reschedules", async () => {
+    const { id } = await create({ content: "<p>hi</p>", format: "html" });
+    const stub = liveStub(id);
+
+    // Browser-WS enqueue schedules the alarm.
+    const browserRes = await stub.fetch(
+      new Request(`${BASE}/api/artifacts/${id}/live`, {
+        headers: { Upgrade: "websocket" },
+      }),
+    );
+    expect(browserRes.webSocket).toBeDefined();
+    const bws = browserRes.webSocket as WebSocket;
+    bws.accept();
+    bws.send(
+      JSON.stringify({
+        type: "generate",
+        id: "ev_alarm_fresh",
+        items: [],
+      }),
+    );
+    // Wait for the row to land.
+    for (let i = 0; i < 30; i++) {
+      const hasRow = await runInDurableObject(stub, (_i, state) => {
+        return (
+          state.storage.sql
+            .exec<{ c: number }>(
+              "SELECT COUNT(*) AS c FROM pending WHERE id = 'ev_alarm_fresh'",
+            )
+            .toArray()[0]?.c ?? 0
+        );
+      });
+      if (hasRow > 0) break;
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    bws.close();
+
+    // Alarm must be scheduled.
+    const alarmTime = await runInDurableObject(stub, (_i, state) =>
+      state.storage.getAlarm(),
+    );
+    expect(alarmTime).not.toBe(null);
+
+    // Fire the alarm while the row is fresh -> row survives, alarm reschedules.
+    const ran = await runDurableObjectAlarm(stub);
+    expect(ran).toBe(true);
+
+    const rowStillExists = await runInDurableObject(stub, (_i, state) => {
+      return (
+        state.storage.sql
+          .exec<{ c: number }>(
+            "SELECT COUNT(*) AS c FROM pending WHERE id = 'ev_alarm_fresh'",
+          )
+          .toArray()[0]?.c ?? 0
+      );
+    });
+    expect(rowStillExists).toBe(1);
+
+    // Rescheduled alarm must be set.
+    const rescheduled = await runInDurableObject(stub, (_i, state) =>
+      state.storage.getAlarm(),
+    );
+    expect(rescheduled).not.toBe(null);
+  });
+
+  it("aged rows are swept by the alarm, cleared is pushed to the agent, and alarm stops when queue empties", async () => {
+    const { id } = await create({ content: "<p>hi</p>", format: "html" });
+    const stub = liveStub(id);
+
+    // Mint ticket and connect agent first so it can observe cleared.
+    const ticketRes = await fetchWith(
+      jsonRequest(
+        "POST",
+        `/api/artifacts/${id}/live/ticket`,
+        undefined,
+        SK_BEARER,
+      ),
+      ON,
+      true,
+    );
+    const { ticket } = (await ticketRes.json()) as { ticket: string };
+    const agentRes = await stub.fetch(
+      new Request(`${BASE}/api/artifacts/${id}/live/ws?ticket=${ticket}`, {
+        headers: { Upgrade: "websocket" },
+      }),
+    );
+    expect(agentRes.webSocket).toBeDefined();
+    const aws = agentRes.webSocket as WebSocket;
+    const aMessages: { type: string; [key: string]: unknown }[] = [];
+    aws.addEventListener("message", (e) => {
+      try {
+        aMessages.push(JSON.parse(e.data as string));
+      } catch {}
+    });
+    aws.accept();
+
+    // Enqueue an event via browser WS, wait for push.
+    const bRes = await stub.fetch(
+      new Request(`${BASE}/api/artifacts/${id}/live`, {
+        headers: { Upgrade: "websocket" },
+      }),
+    );
+    expect(bRes.webSocket).toBeDefined();
+    const bws = bRes.webSocket as WebSocket;
+    bws.accept();
+    bws.send(
+      JSON.stringify({
+        type: "generate",
+        id: "ev_to_age",
+        items: [],
+      }),
+    );
+    while (!aMessages.some((m) => m.type === "event")) {
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    bws.close();
+
+    // Backdate the row past the 1h GC cutoff.
+    await runInDurableObject(stub, async (_inst, state) => {
+      await state.storage.sql.exec(
+        "UPDATE pending SET created_at = ? WHERE id = 'ev_to_age'",
+        Date.now() - 3600_000 - 10_000,
+      );
+    });
+
+    // Fire alarm -> row deleted, cleared pushed, queue empty so no reschedule.
+    const ran = await runDurableObjectAlarm(stub);
+    expect(ran).toBe(true);
+
+    while (
+      !aMessages.some((m) => m.type === "cleared" && m.id === "ev_to_age")
+    ) {
+      await new Promise((r) => setTimeout(r, 20));
+    }
+
+    const rowCount = await runInDurableObject(stub, (_i, state) => {
+      return (
+        state.storage.sql
+          .exec<{ c: number }>("SELECT COUNT(*) AS c FROM pending")
+          .toArray()[0]?.c ?? 0
+      );
+    });
+    expect(rowCount).toBe(0);
+
+    const nextAlarm = await runInDurableObject(stub, (_i, state) =>
+      state.storage.getAlarm(),
+    );
+    expect(nextAlarm).toBe(null);
+    aws.close();
+  });
+
+  it("stale tickets are swept by the alarm", async () => {
+    const { id } = await create({ content: "<p>hi</p>", format: "html" });
+    const stub = liveStub(id);
+    const ticketRes = await fetchWith(
+      jsonRequest(
+        "POST",
+        `/api/artifacts/${id}/live/ticket`,
+        undefined,
+        SK_BEARER,
+      ),
+      ON,
+      true,
+    );
+    const { ticket } = (await ticketRes.json()) as { ticket: string };
+
+    // Backdate ticket past 60s TTL and schedule an alarm to run.
+    await runInDurableObject(stub, async (_inst, state) => {
+      const key = `ws_ticket_${ticket}`;
+      await state.storage.put(key, Date.now() - 70_000);
+      await state.storage.setAlarm(Date.now() + 100);
+    });
+
+    await runDurableObjectAlarm(stub);
+
+    // Ticket key must be deleted.
+    const ticketStillThere = await runInDurableObject(stub, (_i, state) => {
+      return state.storage.get(`ws_ticket_${ticket}`);
+    });
+    expect(ticketStillThere).toBeUndefined();
   });
 });

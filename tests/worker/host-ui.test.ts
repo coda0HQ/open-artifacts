@@ -59,6 +59,12 @@ describe("host page interactive UI (tasks 009/010/011)", () => {
     expect(html).toContain("window.__oaSyncHeaderOverflow");
   });
 
+  it("keeps the account slot empty while account details load", async () => {
+    const html = await hostHtml();
+    expect(html).not.toContain("oa-account-loading");
+    expect(html).not.toContain("showLoading()");
+  });
+
   it("renders the coda0 account picture with an initial fallback", async () => {
     const created = await exports.default.fetch(
       new Request(`${BASE}/api/artifacts`, {

@@ -60,6 +60,12 @@ Feature: View an artifact
     And the remaining artifact controls are available from a More panel
     And a secondary dock returns focus to the visible More trigger when closed
 
+  Scenario: Account loading does not flash in the service header
+    Given the hosted viewer resolves account details asynchronously
+    When I GET /a/:id
+    Then the account slot stays empty until the account response is ready
+    And the header does not render a temporary loading spinner
+
   Scenario: Unknown artifact id
     When I GET /a/doesnotexist
     Then the response status is 404
