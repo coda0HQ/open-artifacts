@@ -3217,13 +3217,13 @@ html:has(.oa-canvas .oa-plane) body{margin:0;border:0;border-radius:0;min-height
 // Frame boundary ring, drawn on an overlay rather than as the body's own
 // inset box-shadow. The vendored canvas kit sanctions `padding: 0` for a
 // full-bleed frame (an edge-to-edge device screen), and a child that fills
-// the body paints over an inset shadow — so the ring survived on the left and
-// right only, because the kit insets direct children horizontally and never
-// vertically. A positioned ::after paints the boundary above frame content at
-// every zoom. It needs a positioning context on the body; the body's box
-// coincides with .oa-frame's, so absolutely positioned author content keeps
-// the same containing-block origin. The kit carries the same overlay, so an
-// artifact renders correctly outside the viewer as well.
+// the body paints over an inset shadow — the ring then vanished wherever the
+// child reached. The kit's inset is the body padding alone, so a full-bleed
+// child reaches every edge. A positioned ::after paints the boundary above
+// frame content at every zoom. It needs a positioning context on the body;
+// the body's box coincides with .oa-frame's, so absolutely positioned author
+// content keeps the same containing-block origin. The kit carries the same
+// overlay, so an artifact renders correctly outside the viewer as well.
 const FRAME_CANVAS_CSS = `
 .oa-frame-body{position:relative}
 .oa-frame-body::after{content:"";position:absolute;inset:0;border-radius:inherit;box-shadow:inset 0 0 0 1px var(--border,var(--oa-border));pointer-events:none}
