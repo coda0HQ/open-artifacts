@@ -142,3 +142,12 @@ Feature: Agent skill for creating and maintaining artifacts
     And chrome controls press with a one-pixel translate
     And the canvas suppresses text selection except inside editable fields and the compact stacked read
     So that a tap reliably enters a frame, a drag pans from every surface, and selection never fights the pan
+
+  Scenario: A full-bleed canvas frame is edge-to-edge from its padding alone
+    Given a Recipe with canvas true whose frame body declares padding 0 for an edge-to-edge screen
+    When the agent builds a standalone preview
+    Then the frame body's own inline padding carries the horizontal content inset
+    And no rule insets a direct child of the frame body horizontally
+    And a frame body left at the kit default keeps 20 world px block and 28 world px inline padding
+    So that clearing the padding is the whole full-bleed contract and no full-width child is
+    stranded with an unpainted strip either side of it

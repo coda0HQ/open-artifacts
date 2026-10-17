@@ -636,6 +636,28 @@ describe("Recipe builder", () => {
     expect(requests).toHaveLength(0);
   });
 
+  it("insets the frame body by its own padding, never by a child margin", async () => {
+    // A full-bleed frame is an edge-to-edge device screen: it clears the body
+    // padding. While the horizontal inset lived on `.oa-frame-body > *`'s
+    // margin, clearing the padding was only half the contract — a full-width
+    // child kept the 8 world-px side margin and the screen sat inset, leaving
+    // an unpainted strip either side of it. One mechanism: inline padding.
+    const { recipePath } = writeRecipe("flush", { canvas: true });
+    const output = join(projectDir, "flush-preview.html");
+
+    await run(["build", recipePath, "--output", output, "--standalone"]);
+
+    const html = readFileSync(output, "utf8");
+    expect(html).toMatch(
+      /\.oa-frame-body\s*\{[^}]*padding:\s*var\(--space-5\)\s+var\(--space-7\)/,
+    );
+    expect(html).not.toMatch(/\.oa-frame-body\s*>\s*\*\s*\{[^}]*margin-inline/);
+    // The child rule still owns the no-inner-scrollport contract.
+    expect(html).toMatch(
+      /\.oa-frame-body\s*>\s*\*\s*\{[^}]*overflow:\s*visible/,
+    );
+  });
+
   it("refuses to overwrite a Recipe through a preview symlink", async () => {
     const { recipePath } = writeRecipe("preview-alias");
     const alias = join(projectDir, "preview-alias.json");
