@@ -2615,14 +2615,14 @@ const FRAME_BRIDGE_SCRIPT = `
       if(typeof window.__oaRenderMarkers==="function")window.__oaRenderMarkers(window.__oaComments);
     }
   });
-  // Mode is a runtime property of the artifact content (a canvas has a
-  // transformed .oa-plane), so the frame detects it and reports it: the host
+  // Mode is a runtime property of the artifact content (a canvas has an
+  // .oa-canvas/.oa-plane pair), so the frame detects it and reports it: the host
   // hides the drawer toggle on a canvas (comments live as pins at their point,
   // Figma-style) and keeps it on a document (comments list in the drawer,
   // Notion-style). The armed comment cursor is canvas-only — on a document the
-  // native text caret must stay so a selection can be made.
-  var pl=document.querySelector('.oa-plane');
-  window.__oaMode=(pl&&getComputedStyle(pl).transform!=='none')?'canvas':'text';
+  // native text caret must stay so a selection can be made. Reads the shared
+  // structural helper, never computed style: see FRAME_SHELL_SCRIPT.
+  window.__oaMode=typeof window.__oaIsCanvas==='function'&&window.__oaIsCanvas()?'canvas':'text';
   window.__oaOnArm=function(armed){root.classList.toggle('oa-cm-arming',!!armed&&window.__oaMode==='canvas')};
   send({type:"oa:ready",mode:window.__oaMode});
 })();
@@ -3198,15 +3198,19 @@ html.oa-cm-arming,html.oa-cm-arming *{cursor:url("data:image/svg+xml,%3Csvg xmln
 // window stays the scroll container — the handoff record/play shim drives
 // window.scrollTo — so authored position:sticky bars are re-pinned to the
 // sheet's inner top edge by FRAME_SHELL_SCRIPT instead. Canvas-mode artifacts
-// opt out: the frame detects the transformed .oa-plane before first paint (the
-// same signal the comments bridge uses) and stamps data-shell="flat",
-// restoring the full-bleed plane the canvas runtime owns.
+// opt out: the frame detects the .oa-plane/.oa-canvas pair before first paint
+// (the same signal the comments bridge uses) and stamps data-shell="flat",
+// restoring the full-bleed plane the canvas runtime owns. The flat rules also
+// carry a :has() twin, because canvas mode must never depend on script
+// timing — see FRAME_SHELL_SCRIPT.
 const FRAME_SHELL_CSS = `
 :root{--oa-shell-gap:.75rem;--oa-shell-radius:8px;--oa-shell-backdrop:color-mix(in oklab,var(--oa-surface),var(--oa-fg) 3%)}
 html{background:var(--oa-shell-backdrop)}
 body{margin:var(--oa-shell-gap);background:var(--oa-bg);border:1px solid var(--oa-border);border-radius:var(--oa-shell-radius);min-height:calc(100dvh - 2*var(--oa-shell-gap) - 2px)}
 html[data-shell="flat"]{background:var(--oa-bg)}
 html[data-shell="flat"] body{margin:0;border:0;border-radius:0;min-height:100dvh}
+html:has(.oa-canvas .oa-plane){background:var(--oa-bg)}
+html:has(.oa-canvas .oa-plane) body{margin:0;border:0;border-radius:0;min-height:100dvh}
 @media (max-width:52rem){body{margin:.5rem}html[data-shell="flat"] body{margin:0}}
 `;
 
@@ -3230,11 +3234,20 @@ const FRAME_CANVAS_CSS = `
 // the host LAYOUT_SCRIPT contract — only authored sticky bars pinned at 0/auto
 // move, an authored top value is respected. React content mounts after this
 // walk, matching the host script's one-shot behavior.
+//
+// Canvas detection is STRUCTURAL, never computed-style. A <style> in the body
+// can still be pending in the CSSOM when a parser-inserted script runs, so
+// `getComputedStyle(plane).transform` intermittently read 'none' and a canvas
+// artifact fell back to the sheet presentation: an inset, bordered page whose
+// 100dvh canvas then overflowed the frame, leaving a strip without the dot
+// lattice at the frame's top and edges. The class pair is the canvas kit's own
+// contract (.oa-canvas > .oa-plane), so it needs no style resolution. Every
+// canvas-aware frame script asks this one helper instead of re-testing.
 const FRAME_SHELL_SCRIPT = `
 (function(){
   var root=document.documentElement;
-  var plane=document.querySelector('.oa-plane');
-  if(plane&&getComputedStyle(plane).transform!=='none'){root.setAttribute('data-shell','flat');return}
+  window.__oaIsCanvas=function(){return !!document.querySelector('.oa-canvas .oa-plane')};
+  if(window.__oaIsCanvas()){root.setAttribute('data-shell','flat');return}
   var stack=[];
   for(var i=0;i<document.body.children.length;i++)stack.push(document.body.children[i]);
   while(stack.length){
@@ -3250,11 +3263,12 @@ const FRAME_SHELL_SCRIPT = `
 
 // Frame side, canvas mode: capture a click to drop a pin (world coords, read
 // once from the plane transform) and render existing point anchors as passive
-// plane children. No-op on non-canvas documents (text mode is separate).
+// plane children. No-op on non-canvas documents (text mode is separate) and
+// gated by the shared structural helper, never computed style.
 const FRAME_ANCHOR_SCRIPT = `
 (function(){
   var plane=document.querySelector('.oa-plane');
-  if(!plane||getComputedStyle(plane).transform==='none')return;
+  if(!plane||typeof window.__oaIsCanvas!=='function'||!window.__oaIsCanvas())return;
   // Origin must be the UNtransformed container (.oa-canvas). The plane's own
   // getBoundingClientRect already includes translate(tx,ty), so using it and
   // then subtracting m.e/m.f double-counts pan and drops pins off-click.
@@ -3322,7 +3336,7 @@ const FRAME_TEXT_CSS = `
 // opens compose. Armed mode still skips the chip and opens compose immediately.
 const FRAME_TEXT_SCRIPT = `
 (function(){
-  if(document.querySelector('.oa-plane'))return;
+  if(typeof window.__oaIsCanvas==='function'&&window.__oaIsCanvas())return;
   // esbuild's keepNames wraps named inner functions in __name(); that helper
   // lives in the worker bundle, not this sandboxed frame, so the injected
   // matcher sources below reference it. A passthrough shim makes them run here.

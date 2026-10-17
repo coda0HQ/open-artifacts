@@ -33,6 +33,8 @@ Feature: View an artifact
     Given a published canvas artifact whose plane carries a transform
     When I GET /a/:id/frame
     Then the frame detects the canvas mode before first paint
+    And the flat opt-out is decided structurally, not by resolved style
+    And the sheet presentation carries a style-only opt-out for the same class pair
     And the sheet inset is removed so the plane owns the full frame viewport
     And the frame exposes no header height, so the canvas and its dot lattice cover every edge
 

@@ -70,8 +70,11 @@ describe("bridge scripts are injected with identity guards", () => {
     const frame = await (
       await exports.default.fetch(`${BASE}/a/${id}/frame`)
     ).text();
-    // Frame derives its mode from the transformed plane of a canvas artifact.
-    expect(frame).toContain("querySelector('.oa-plane')");
+    // Frame derives its mode from the canvas kit's structural class pair — not
+    // from a computed style, which can still be unresolved while a
+    // parser-inserted script runs.
+    expect(frame).toContain("querySelector('.oa-canvas .oa-plane')");
+    expect(frame).toContain("window.__oaMode=typeof window.__oaIsCanvas");
     // Host: canvas → show pin tool; document → hide it. The drawer toggle stays
     // in both modes, so the whole thread is always reachable.
     expect(host).toContain('msg.mode==="canvas"');

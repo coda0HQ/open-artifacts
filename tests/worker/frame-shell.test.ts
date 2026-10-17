@@ -59,10 +59,27 @@ describe("frameDocument — sheet presentation", () => {
       nonce: "n",
     });
     expect(doc).toContain('html[data-shell="flat"]');
-    // Same signal the comments bridge uses: a transformed .oa-plane.
-    expect(doc).toMatch(/querySelector\('\.oa-plane'\)/);
-    expect(doc).toMatch(/transform!=='none'/);
+    // Structural signal: the canvas kit's own class pair, resolved without the
+    // CSSOM. A body <style> can still be pending in the style engine when a
+    // parser-inserted script runs, so a computed-style test intermittently read
+    // transform 'none' and flipped a canvas artifact into the sheet
+    // presentation — an inset, bordered page whose 100dvh canvas overflowed the
+    // frame and lost its dot lattice at the edges.
+    expect(doc).toContain(
+      "window.__oaIsCanvas=function(){return !!document.querySelector('.oa-canvas .oa-plane')}",
+    );
     expect(doc).toMatch(/setAttribute\('data-shell','flat'\)/);
+    // The sheet presentation also carries a :has() twin, so flat rendering does
+    // not depend on the script running at all.
+    expect(doc).toContain("html:has(.oa-canvas .oa-plane) body{margin:0");
+    // Every canvas-aware frame script asks the one helper, and none gates on
+    // computed style any more.
+    expect(doc.match(/__oaIsCanvas\(\)/g)?.length ?? 0).toBeGreaterThanOrEqual(
+      4,
+    );
+    expect(doc).not.toMatch(
+      /getComputedStyle\([^()]*\)\.transform\s*[!=]==\s*['"]none['"]/,
+    );
   });
 
   it("re-pins authored sticky headers below the sheet inset", () => {
