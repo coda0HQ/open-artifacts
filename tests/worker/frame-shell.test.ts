@@ -75,6 +75,39 @@ describe("frameDocument — sheet presentation", () => {
     expect(doc).toMatch(/style\.top='var\(--oa-shell-gap\)'/);
   });
 
+  it("exposes no in-frame header height so author viewport math subtracts nothing", () => {
+    // The service header belongs to the host page and sits above the iframe,
+    // so a full-viewport canvas or hero inside the frame owns the whole frame.
+    // Leaking the host's header height here left a header-tall strip with no
+    // canvas dot lattice at the bottom of the frame.
+    const doc = frameDocument({
+      format: "html",
+      content: "<p>hi</p>",
+      nonce: "n",
+    });
+    expect(doc).toContain(":root{--oa-header-h:0px}");
+    expect(doc).not.toContain("--oa-header-h:calc(2.5rem + 1px)");
+    // The host page still measures its own header into the same variable.
+    expect(doc).not.toMatch(
+      /[id]\{scroll-margin-top:calc\(var\(--oa-header-h\)/,
+    );
+  });
+
+  it("paints the canvas frame ring above frame content", () => {
+    // A full-bleed frame (padding: 0) sets a child flush to the body, and a
+    // child paints over the body's own inset box-shadow — the boundary ring
+    // then survived on the left and right only.
+    const doc = frameDocument({
+      format: "html",
+      content: "<p>hi</p>",
+      nonce: "n",
+    });
+    expect(doc).toContain(".oa-frame-body{position:relative}");
+    expect(doc).toMatch(
+      /\.oa-frame-body::after\{content:"";position:absolute;inset:0;border-radius:inherit;box-shadow:inset 0 0 0 1px var\(--border,var\(--oa-border\)\);pointer-events:none\}/,
+    );
+  });
+
   it("flows through the encrypted unlock template", () => {
     const shell = unlockShell({
       title: "Encrypted",

@@ -34,6 +34,13 @@ Feature: View an artifact
     When I GET /a/:id/frame
     Then the frame detects the canvas mode before first paint
     And the sheet inset is removed so the plane owns the full frame viewport
+    And the frame exposes no header height, so the canvas and its dot lattice cover every edge
+
+  Scenario: A full-bleed canvas frame keeps its boundary ring
+    Given a published canvas artifact whose frame body sits flush with a full-bleed child
+    When I GET /a/:id/frame
+    Then the frame body boundary ring paints on an overlay above frame content
+    So the top and bottom edges of the frame stay visible at every zoom
 
   Scenario: Authored sticky headers pin inside the sheet edge
     Given a published HTML artifact whose own CSS pins a sticky header at the viewport top

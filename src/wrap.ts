@@ -213,8 +213,18 @@ img,video,canvas{max-width:100%}
 @media (prefers-color-scheme: dark){:root{--oa-bg:#131316;--oa-fg:#e7e7ea;--oa-muted:#9a9aa2;--oa-border:#2e2e33;--oa-surface:#1c1c21;--oa-accent:#8d82f5;--oa-accent-on:#16151b;--oa-danger:#ff8f85}}
 :root[data-theme="light"]{color-scheme:light;--oa-bg:#ffffff;--oa-fg:#18181b;--oa-muted:#71717a;--oa-border:#e4e4e7;--oa-surface:#f8f8f8;--oa-accent:#6457f0;--oa-accent-on:#ffffff;--oa-danger:#b42318}
 :root[data-theme="dark"]{color-scheme:dark;--oa-bg:#131316;--oa-fg:#e7e7ea;--oa-muted:#9a9aa2;--oa-border:#2e2e33;--oa-surface:#1c1c21;--oa-accent:#8d82f5;--oa-accent-on:#16151b;--oa-danger:#ff8f85}
-:root{--oa-header-h:calc(2.5rem + 1px)}
-[id]{scroll-margin-top:calc(var(--oa-header-h) + .5rem)}
+/* The frame carries no service header: the host page owns it and positions
+   the iframe below it, so the frame viewport already is the visible area.
+   Author CSS that sizes a viewport as calc(100dvh - var(--oa-header-h)) —
+   the vendored canvas kit's own rule, and the documented pattern for a
+   full-height hero — must therefore subtract nothing here. The host's header
+   height used to leak in as this default, which left a header-tall strip
+   with no dot lattice at the bottom of every canvas artifact and pulled
+   full-height author content short by the same amount. */
+:root{--oa-header-h:0px}
+/* Anchor jumps clear the sheet's own top inset instead of a header that is
+   not in this document. */
+[id]{scroll-margin-top:calc(var(--oa-shell-gap, .75rem) + .5rem)}
 `;
 
 const RESET_CSS = `
@@ -1215,7 +1225,7 @@ document.getElementById("oa-content").innerHTML=marked.parse(${jsonForInlineScri
 <head>
 <meta charset="utf-8">
 ${cspMeta}<meta name="viewport" content="width=device-width, initial-scale=1">
-<style>${FRAME_RESET_CSS}${format === "markdown" ? MARKDOWN_CSS : ""}${FRAME_SHELL_CSS}${FRAME_ANCHOR_CSS}${FRAME_TEXT_CSS}</style>
+<style>${FRAME_RESET_CSS}${format === "markdown" ? MARKDOWN_CSS : ""}${FRAME_SHELL_CSS}${FRAME_CANVAS_CSS}${FRAME_ANCHOR_CSS}${FRAME_TEXT_CSS}</style>
 </head>
 <body>
 ${body}
@@ -3198,6 +3208,21 @@ body{margin:var(--oa-shell-gap);background:var(--oa-bg);border:1px solid var(--o
 html[data-shell="flat"]{background:var(--oa-bg)}
 html[data-shell="flat"] body{margin:0;border:0;border-radius:0;min-height:100dvh}
 @media (max-width:52rem){body{margin:.5rem}html[data-shell="flat"] body{margin:0}}
+`;
+
+// Frame boundary ring, drawn on an overlay rather than as the body's own
+// inset box-shadow. The vendored canvas kit sanctions `padding: 0` for a
+// full-bleed frame (an edge-to-edge device screen), and a child that fills
+// the body paints over an inset shadow — so the ring survived on the left and
+// right only, because the kit insets direct children horizontally and never
+// vertically. A positioned ::after paints the boundary above frame content at
+// every zoom. It needs a positioning context on the body; the body's box
+// coincides with .oa-frame's, so absolutely positioned author content keeps
+// the same containing-block origin. The kit carries the same overlay, so an
+// artifact renders correctly outside the viewer as well.
+const FRAME_CANVAS_CSS = `
+.oa-frame-body{position:relative}
+.oa-frame-body::after{content:"";position:absolute;inset:0;border-radius:inherit;box-shadow:inset 0 0 0 1px var(--border,var(--oa-border));pointer-events:none}
 `;
 
 // Runs before first paint (synchronous, parser-inserted after the content):

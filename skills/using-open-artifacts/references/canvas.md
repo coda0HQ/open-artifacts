@@ -60,23 +60,31 @@ working around it in markup.
    and zoom are `transform: translate() scale()` on that single element. Never
    animate `top`/`left`/`width`/`height` — they repaint the whole plane where a
    transform composites on the GPU.
-2. **The zoom cluster is `position: fixed`, never `sticky`.** The viewer's
-   `LAYOUT_SCRIPT` walks every body descendant and rewrites the `top` of any
-   `position: sticky` element to `var(--oa-header-h)`, which would shove a sticky
-   cluster down under the service header. `fixed`/`absolute` are untouched.
-3. **Size the viewport to `calc(100dvh - var(--oa-header-h, 2.5rem))`.** The
-   in-flow sticky header sits above; the viewport owns its own
-   `overflow: hidden`, so the body never scrolls and fights the pan.
+2. **The zoom cluster is `position: fixed`, never `sticky`.** Outside canvas
+   mode the frame's shell script pins every `position: sticky` element set to
+   `top: 0`/`auto` to the sheet's own top inset (`var(--oa-shell-gap)`), which
+   would drag a sticky cluster around with the sheet. Canvas mode skips that
+   walk, and `fixed`/`absolute` are never touched.
+3. **Size the viewport to `calc(100dvh - var(--oa-header-h, 0px))`.** The
+   artifact renders inside a frame the viewer already positions below its
+   service header, so `--oa-header-h` is `0px` here and nothing is subtracted:
+   the viewport owns its own `overflow: hidden`, so the body never scrolls and
+   fights the pan. The `0px` fallback is what keeps a standalone preview
+   (`build --standalone`, no viewer CSS) exact as well. Subtracting a
+   non-zero header leaves a header-tall strip with no dot lattice at the
+   bottom of the canvas.
 
 ## The vendored runtime — CSS
 
 ```css
-/* Viewport. Sized to the visible area below the service header.
+/* Viewport. Sized to the frame the viewer already placed below its service
+   header — `--oa-header-h` is 0px inside the artifact frame — so the canvas
+   covers the whole frame and its dot lattice reaches every edge.
    padding/border MUST stay 0: background-origin is padding-box, so any inset
    would shift the dot lattice out of step with the plane's transform. */
 .oa-canvas {
   position: relative;
-  height: calc(100dvh - var(--oa-header-h, 2.5rem));
+  height: calc(100dvh - var(--oa-header-h, 0px));
   padding: 0;
   border: 0;
   overflow: hidden;
@@ -155,21 +163,38 @@ working around it in markup.
 .oa-frame-label:active { transform: scale(min(calc(1 / var(--k, 1)), 3)) translateY(1px); }
 .oa-frame-label:focus-visible { box-shadow: var(--focus-ring); border-radius: var(--radius-sm); }
 .oa-frame-body {
+  /* Positioning context for the boundary ring overlay below. The body's box
+     coincides with .oa-frame's, so an absolutely positioned author child
+     keeps the same containing-block origin. */
+  position: relative;
   height: calc(var(--h) * 1px);
   overflow: hidden;
   background: var(--bg);
   border-radius: var(--radius-lg);
-  /* Inset ring: the 1px hairline draws INSIDE the body's border-box so it
-     never bleeds into a 0-gap neighbor (the outward --elev-ring token is
-     still used by .oa-note and labels, which float in the plane and need
-     the outward edge). The focused-frame accent ring below stays outset. */
-  box-shadow: inset 0 0 0 1px var(--border);
   /* padding strictly exceeds border-radius (16) so a flush child's outset
      selection/focus border clears the rounded clip corner — overflow:hidden
      + border-radius otherwise cut a full-width child's border at the curve.
      Full-bleed frames override with `padding: 0` and must use INSET
      selection rings (see the frame contract) since they have no clearance. */
   padding: var(--space-5);
+}
+/* Boundary ring: the 1px hairline draws INSIDE the body's border-box so it
+   never bleeds into a 0-gap neighbor (the outward --elev-ring token is still
+   used by .oa-note and labels, which float in the plane and need the outward
+   edge). It lives on a ::after overlay, not on the body's own box-shadow,
+   because a full-bleed frame (padding: 0, an edge-to-edge device screen) lets
+   a child cover an inset shadow — the ring then survived on the left and
+   right only. The overlay paints the boundary above frame content at every
+   zoom. The focused-frame accent ring below stays outset. */
+.oa-frame-body::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  /* The identity border, with the chrome bridge's token as the fallback an
+     artifact that never pasted the token contract still resolves. */
+  box-shadow: inset 0 0 0 1px var(--border, var(--oa-border));
+  pointer-events: none;
 }
 /* Inset direct children of the body horizontally so a full-width descendant
    (a selected row's accent-soft fill, a hairline divider) clears the rounded
@@ -258,7 +283,7 @@ working around it in markup.
    base rule) so the popover keeps its rectangular shape, not the 32px chip;
    cap height against the viewport and scroll if a note is unusually long. */
 .oa-note[data-collapsed="true"][data-open="true"] {
-  max-height: calc(80dvh - var(--oa-header-h, 2.5rem));
+  max-height: calc(80dvh - var(--oa-header-h, 0px));
   overflow-y: auto;
   background: var(--surface);
   box-shadow: var(--elev-ring), var(--elev-raised);
@@ -324,8 +349,9 @@ working around it in markup.
   vector-effect: non-scaling-stroke;
 }
 
-/* fixed, NOT sticky: LAYOUT_SCRIPT rewrites the `top` of every sticky element
-   in the body. z-index stays under the service header. Buttons carry vendored
+/* fixed, NOT sticky: the frame pins sticky elements set to top 0/auto to the
+   sheet's inset, and a canvas has no sheet. z-index stays under the service
+   header. Buttons carry vendored
    Remix glyphs (ri-subtract / ri-add / ri-fullscreen-exit) as data-URI masks
    on ::after — the button text stays for accessibility but renders at size 0,
    so screen readers announce it while the glyph inherits --fg/--accent. */

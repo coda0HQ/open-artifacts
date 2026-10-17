@@ -371,9 +371,9 @@ Always end serif stacks in `serif`, mono stacks in `monospace`.
   moment. At most 4 text elements — optional kicker, headline (≤ 2 lines at
   desktop AND at 390px), standfirst (≤ 20 words), CTA row. Trust strips,
   logo rows, stat rows, feature bullets all live *below* the fold. The
-  viewer chrome adds a sticky header (≈3rem; measured into
-  `--oa-header-h`), so a full-height hero is
-  `min-height: calc(100dvh - var(--oa-header-h, 2.5rem))` — never `100vh`.
+  viewer's service header lives above the frame that holds your content, so
+  your content owns the whole frame viewport: a full-height hero is
+  `min-height: calc(100dvh - var(--oa-header-h, 0px))` — never `100vh`.
 - **Section grammar** (brand register): sections on one page must not share
   one skeleton. A page of N sections needs ≥ 3 distinct layout families
   (prose column, split, full-bleed band, grid, table/list, quote moment) —
@@ -392,10 +392,11 @@ Always end serif stacks in `serif`, mono stacks in `monospace`.
   tooltip), never arbitrary `999`. A dropdown rendered `position: absolute`
   inside an `overflow: hidden`/`auto` container gets clipped — use the
   native `<dialog>` / popover API or `position: fixed`.
-- **Sticky elements**: the viewer pushes your `top: 0` sticky elements below
-  its header automatically, but setting `top: var(--oa-header-h, 2.5rem)`
-  yourself is more reliable. Anchor targets already get correct
-  `scroll-margin-top` from the skeleton.
+- **Sticky elements**: the frame pins your `top: 0` / `auto` sticky elements
+  to the sheet's own top inset for you, so leave them at `0` — inside the
+  frame `--oa-header-h` is `0px`, and subtracting it yourself is only useful
+  when the artifact is re-published under a page with its own header. Anchor
+  targets already get correct `scroll-margin-top` from the skeleton.
 - Wide content (tables, code, diagrams) gets `overflow-x: auto` on its own
   container — the body never scrolls sideways.
 
@@ -729,13 +730,13 @@ decoration.
 Generated pages render inside the Open Artifacts viewer, which affects a few
 layout decisions:
 
-- A sticky service header (≈3rem) sits above your content and exposes its
-  measured height as `--oa-header-h`. Full-viewport sections use
-  `min-height: calc(100dvh - var(--oa-header-h, 2.5rem))`; author-authored
-  sticky bars set `top: var(--oa-header-h, 2.5rem)`. The viewer rewrites the
-  `top` of every `position: sticky` element to this value, so a canvas's zoom
-  cluster (and any other floating control) must be `position: fixed`, never
-  sticky — see `references/canvas.md`.
+- Your content is the whole frame document: the sticky service header (≈3rem)
+  belongs to the host page and sits *above* the iframe, so `--oa-header-h`
+  measures `0px` inside the frame. Full-viewport sections use
+  `min-height: calc(100dvh - var(--oa-header-h, 0px))`, and author-authored
+  sticky bars leave `top: 0` (the frame pins them to the sheet's own inset).
+  A canvas's zoom cluster (and any other floating control) must be
+  `position: fixed`, never sticky — see `references/canvas.md`.
 - At `52rem` and below, secondary service controls move into the viewer's More
   panel while the title, comment actions, and theme remain inline. Do not add
   artifact-level spacing or duplicate controls to compensate for this chrome;

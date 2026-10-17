@@ -111,6 +111,14 @@ function countClassTokens(value, className) {
   ).length;
 }
 
+// A file:// preview has no viewer around it, so the skeleton reset the token
+// contract leans on is missing. Without it the browser's default body margin
+// and content-box sizing shift every full-bleed section — a canvas viewport
+// sized to 100dvh then overflows and its dot lattice stops short of the edges.
+// The viewer injects the equivalent baseline into the artifact frame.
+const STANDALONE_RESET_CSS =
+  "*,*::before,*::after{box-sizing:border-box}html{-webkit-text-size-adjust:100%}body{margin:0}";
+
 function standaloneHtml(content, language, title) {
   const titlePattern = /<title\b[^>]*>[\s\S]*?<\/title>/i;
   const body = content.replace(titlePattern, "");
@@ -120,6 +128,7 @@ function standaloneHtml(content, language, title) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(title)}</title>
+<style>${STANDALONE_RESET_CSS}</style>
 </head>
 <body>
 ${body}

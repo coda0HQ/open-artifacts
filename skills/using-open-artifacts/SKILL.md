@@ -312,7 +312,8 @@ Y."), headings that overflow at mobile width, and invented content -- no fake
 metrics, testimonials, or "Acme Corp"; an honest placeholder beats a fake stat. Verify contrast (body
 ≥ 4.5:1 in both themes) and never ship muted gray on a tinted near-white.
 Full-viewport sections use `min-height: calc(100dvh - var(--oa-header-h,
-2.5rem))` — the viewer adds a sticky header. Modern CSS is fully available
+0px))` — the viewer's header sits above the frame that holds your content, so
+`--oa-header-h` is `0px` inside it. Modern CSS is fully available
 inline — `text-wrap: pretty/balance`, CSS Grid, container queries,
 `color-mix()`, `:has()`, view transitions, `clamp()` for fluid type.
 
