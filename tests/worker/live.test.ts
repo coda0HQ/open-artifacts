@@ -2161,13 +2161,17 @@ describe("live GC storage alarm", () => {
     // Wait for the row to land.
     for (let i = 0; i < 30; i++) {
       const hasRow = await runInDurableObject(stub, (_i, state) => {
-        return (
-          state.storage.sql
-            .exec<{ c: number }>(
-              "SELECT COUNT(*) AS c FROM pending WHERE id = 'ev_alarm_fresh'",
-            )
-            .toArray()[0]?.c ?? 0
-        );
+        try {
+          return (
+            state.storage.sql
+              .exec<{ c: number }>(
+                "SELECT COUNT(*) AS c FROM pending WHERE id = 'ev_alarm_fresh'",
+              )
+              .toArray()[0]?.c ?? 0
+          );
+        } catch {
+          return 0;
+        }
       });
       if (hasRow > 0) break;
       await new Promise((r) => setTimeout(r, 20));

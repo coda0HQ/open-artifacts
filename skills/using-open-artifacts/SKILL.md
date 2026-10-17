@@ -143,28 +143,32 @@ prototype, be an interaction designer. Don't default to "a web page"
 treatment for everything.
 
 Workflow: (1) understand the brief — output kind, fidelity, audience, any
-brand/design system; (2) explore resources — if the project has a design
-system (tokens, theme, component styles), read it fully and apply it;
-precedence is the user's words, then the project's system, then your choices;
-(3) plan out loud — a one-line design read ("Reading this as: X for Y, in a
-Z direction"), the scene sentence that picks light vs dark, 4–6 named
-palette values, type roles, a one-sentence layout concept; (4) build with
-real content, never lorem ipsum; (5) run the ship gate from `design.md`
-once at the end — structural grep, the P0 checklist (contrast in both
-themes, 360px, banned tropes, states, reduced motion, copy audit), then the
-five-dimension critique (philosophy / hierarchy / execution / specificity /
-restraint) — fix anything under 3/5, re-score once, publish. Do not loop on
-renders.
+brand/design system; (2) explore resources & find what only this subject has —
+identify the authentic domain data, physical metaphors, and unique vocabulary
+(the artifact-subject-first ethos); (3) plan out loud — a one-line design read,
+the core idea tying that unique subject to the layout, the scene sentence that
+picks light vs dark, 4–6 named OKLCH values, type roles, and a layout concept;
+(4) build with real content, never lorem ipsum, applying mathematical concentric
+radii (`outerRadius = innerRadius + padding + borderWidth`), optical alignment,
+and mobile-native touch ergonomics (100dvh, `@media (hover: hover)`,
+`-webkit-tap-highlight-color: transparent`, `touch-action: manipulation`, inputs
+≥ 16px); (5) run the ship gate from `design.md` once at the end — structural
+grep, the P0 checklist (contrast in both themes, 360px viewport, concentric
+radii, mobile-native ergonomics, high-contrast resilience, banned tropes,
+states, reduced motion, copy audit), the 14-pass visual critique, the break-ui
+worst-case data check (from `quality.md`), and the five-dimension critique
+(philosophy / hierarchy / execution / specificity / restraint) — fix anything
+under 3/5, re-score once, publish. Do not loop on renders.
 
 **Read [design.md](references/design.md) before writing a page.** It
 has the full design philosophy: the brand-vs-product register split (earned
-familiarity vs distinctiveness), the anti-AI-slop bans, the shared token
+familiarity vs distinctiveness), the three waves of anti-AI-slop bans, the shared token
 contract (`references/tokens.css`, injected by the Recipe
 builder; override identity tokens in the theme fragment), an
 installed-font specimen library (the CSP blocks *downloading* fonts, not the
 OS library — Iowan, Charter, Avenir, Optima and friends are available), a
-5-direction library (Editorial / Modern minimal / Human / Tech utility /
-Brutalist) with ready-to-paste OKLch palettes, guidance for visual material
+20-direction library with ready-to-paste OKLch palettes, concentric border-radius
+and optical alignment math, surface depth and shadow recipes, guidance for visual material
 under the CSP (SVG charts/diagrams/typographic set-pieces instead of
 text-only slabs), a component contract written against tokens, the viewer
 frame specifics (sticky header height, theme stamping), and the ship gate
@@ -172,9 +176,10 @@ run before every publish.
 
 **For an HTML Artifact with a visual direction, read
 [quality.md](references/quality.md) before writing fragments.** It supplies a
-format-aware Design Brief, a Level 3 critique, structural choices for
-brand-register artifacts, CSP-safe visual-material decisions, the build's
-static quality profile, and the `smoke` command for 320/375/414/768px
+format-aware Design Brief, the 14-pass visual critique, the Break-UI worst-case data
+resilience catalog (people/locales, unbreakable URLs/strings, numbers/currencies,
+empty/volume states), structural choices for brand-register artifacts, CSP-safe
+visual-material decisions, the build's static quality profile, and the `smoke` command for 320/375/414/768px
 rendering. Canvas remains governed by `canvas.md`; Markdown retains the
 viewer-owned `.oa-md` treatment. When a user explicitly asks to learn from a
 screenshot or URL, read [reference-dna.md](references/reference-dna.md) before
@@ -302,15 +307,26 @@ L1 measure-cap, no banned-trope grep). The viewer wraps the raw Markdown in
 Markdown files (`.md`) are rendered client-side; HTML is best for anything
 interactive or designed.
 
-**Avoid AI-slop tropes** (`design.md` has the full match-and-refuse list):
-side-stripe accent borders, gradient text (`background-clip: text`), decorative
-glassmorphism, identical card grids, the hero-metric template, icon-tile stacks
-(rounded-corner icon tiles floating above every card heading), an uppercase
-eyebrow or `01 / 02 / 03` marker above every section, colored glow shadows on
-dark backgrounds, italic-serif display heroes, aphoristic copy cadence ("Not X.
-Y."), headings that overflow at mobile width, and invented content -- no fake
-metrics, testimonials, or "Acme Corp"; an honest placeholder beats a fake stat. Verify contrast (body
-≥ 4.5:1 in both themes) and never ship muted gray on a tinted near-white.
+**Avoid AI-slop tropes across all three waves** (`design.md` has the full
+match-and-refuse registry):
+- Wave 1 (SaaS clichés): violet/indigo hero gradients and glowing radial washes,
+  gradient text (`background-clip: text`), decorative glassmorphism, 3 identical
+  feature cards with circular icon badges, soft grey drop shadows.
+- Wave 2 (Pseudo-system tells): side-stripe accent borders, an uppercase eyebrow
+  above every single heading, pill badges above heroes ("New", "Beta"), one word of
+  the headline forced into italic serif or accent color, bento grids as default.
+- Wave 3 (The "fix" that became the look): terracotta/rust/clay accent on
+  yellow-cream/linen/parchment ground; broadsheet cosplay (hairline rules everywhere,
+  zero radius, fake archival posturing); monospace micro-labels as "technical"
+  costume on non-technical briefs; index numbering scaffolding (`01 / 02 / 03`,
+  `(001)`, `Step 02`).
+- Copy & structure tells: marketing buzzwords ("unlock", "supercharge", "seamless",
+  "elevate", "effortless", "cutting-edge", "all-in-one", "empower"), correction
+  clichés ("not just X, it's Y"), tricolon headlines ("Design. Build. Ship."),
+  staccato aphorisms ("Not X. Y."), stock section order, everything centered,
+  headings that overflow at mobile width, and invented metrics/testimonials ("Acme Corp").
+  An honest placeholder beats a fake stat. Verify contrast (body ≥ 4.5:1 in both themes)
+  and never ship muted gray on a tinted near-white.
 Full-viewport sections use `min-height: calc(100dvh - var(--oa-header-h,
 0px))` — the viewer's header sits above the frame that holds your content, so
 `--oa-header-h` is `0px` inside it. Modern CSS is fully available

@@ -3,7 +3,7 @@
 > Sources: [open-design](https://github.com/nexu-io/open-design),
 > Claude's `artifact-design` skill,
 > [impeccable](https://github.com/pbakaus/impeccable) (Apache-2.0, Paul
-> Bakaus), Emil Kowalski. See root README credits.
+> Bakaus), and design-engineering research across typography, anti-slop, and animation physics.
 
 You are an expert designer working with the user as your manager. You produce
 design artifacts in HTML (and Markdown). **HTML is your tool, not your
@@ -149,10 +149,16 @@ Orthogonal to level, decide the register — it changes what "good" means:
 1. **Understand the brief.** Be clear on the output kind, fidelity, audience,
    and any brand/design system in play before building. Clarify cheaply up
    front rather than rebuilding later.
-2. **Explore resources.** If the project has a design system (tokens file,
-   theme, component styles, CLAUDE.md), read it **fully and once** and apply
-   it. Precedence: the user's words, then the project's existing system, then
-   your choices. Build with real content throughout — never lorem ipsum.
+2. **Explore resources & find what only this subject has.** If the project has a
+   design system (tokens file, theme, component styles, CLAUDE.md), read it
+   **fully and once** and apply it. Precedence: the user's words, then the
+   project's existing system, then your choices.
+   **Artifact-subject-first ethos**: Ask what *only this specific subject,
+   data shape, domain, or system* has. A coffee roaster has roast curves and
+   origin altitudes; an infrastructure dashboard has p99 latencies and pod
+   topologies; an editorial analysis has archival footnotes and comparative
+   excerpts. Build the layout posture around that authentic core material,
+   never around generic placeholder cards.
    When the user provides brand or design-system documentation, map it
    against nine segments before designing: theme (light/dark posture),
    color (palette + usage rules), type (faces + scale), layout (grid +
@@ -161,11 +167,15 @@ Orthogonal to level, decide the register — it changes what "good" means:
    error/loading). Gaps in the map are decisions you must name explicitly,
    not blanks you fill silently.
 3. **Plan — and say the plan out loud.** For anything beyond a one-shot
-   tweak, state three things before building, so the user can redirect
+   tweak, state four things before building, so the user can redirect
    cheaply:
    - **The design read**, one line: "Reading this as: a *kind* for
      *audience*, in a *voice* direction." If the read is ambiguous, ask one
      question — never a question dump.
+   - **The core idea**, one decisive sentence tying what only this subject has
+     to the chosen layout and visual direction. If swapping the title with a
+     generic competitor makes the page equally plausible, the artifact has no
+     idea yet.
    - **The scene sentence** that picks the theme: who uses this, where,
      under what ambient light, in what mood. Dark vs light is never a
      default in either direction; if the sentence doesn't force the answer,
@@ -179,11 +189,11 @@ Orthogonal to level, decide the register — it changes what "good" means:
    tokens (`var(--accent)`, `var(--space-4)`, `var(--radius-md)`) rather than
    hardcoded values.
 5. **Run the ship gate — once, at the end.** The structural check, the P0
-   checklist, and the five-dimension critique below. Fix what fails, re-score
-   once, publish. Do not loop on renders. For a directed HTML Artifact, also
-   apply [quality.md](quality.md): its Design Brief precedes authoring, and its
-   Level 3 critique and viewport smoke check complement this gate without
-   changing the Recipe schema.
+   checklist, the 14-pass visual critique, and the five-dimension critique
+   below. Fix what fails, re-score once, publish. Do not loop on renders.
+   For a directed HTML Artifact, also apply [quality.md](quality.md): its
+   Design Brief precedes authoring, and its Level 3 critique and viewport smoke
+   check complement this gate without changing the Recipe schema.
 
 ## The token contract
 
@@ -191,10 +201,13 @@ Orthogonal to level, decide the register — it changes what "good" means:
 identity (`--bg`, `--fg`, `--accent`, matching `--accent-on`, fonts), accent
 states, accessible semantic color pairs (success/warn/danger — separate from
 the accent), derived tiers (`--surface-2`, `--accent-soft`), spacing (4px
-grid), direction-aware shape and elevation, focus, motion (durations +
-`--ease-standard`,
-`--ease-out-expo`, `--ease-spring`), tracking/leading, and a modular type
-scale with a fluid `--text-display` for heroes.
+grid), direction-aware shape (`--radius-sm`, `--radius-md`, `--radius-lg`,
+`--radius-pill`), multi-layer surfaces & shadows (`--shadow-border`,
+`--shadow-border-hover`, `--image-outline`), elevation, focus, motion
+durations + strong native easing curves (`--ease-standard`, `--ease-out-expo`,
+`--ease-spring`, `--ease-out`, `--ease-in-out`, `--ease-drawer`),
+tracking/leading, and a modular type scale with a fluid
+`--text-display` for heroes.
 
 **Why use it:** components written against tokens render consistently across
 directions and themes. A button is always `background: var(--accent); color:
@@ -239,6 +252,101 @@ consistency locks: **one accent for the
 whole page** (semantic colors are not accents), **one radius scale** (don't
 mix pill buttons with sharp cards unless the mix is a stated system), **one
 easing vocabulary**.
+
+## Surfaces & shape craft (concentric radius, optical alignment, and depth)
+
+Visual polish lives in the mathematical relations between nested surfaces,
+optical centers, and lighting models.
+
+### Concentric border radius math
+
+When a rounded container nests a rounded child, applying identical radii to
+both creates an amateurish visual defect: the inner element appears pinched
+in the corners, and the padding between them bulges unevenly. Correct
+geometry is **concentric**: the curves share the same center point.
+
+```
+outerRadius = innerRadius + padding + borderWidth
+innerRadius = max(0, outerRadius - padding - borderWidth)
+```
+
+```css
+/* Correct: concentric radii */
+.card {
+  border-radius: 16px; /* 8px inner + 8px padding */
+  padding: 8px;
+}
+.card-inner {
+  border-radius: 8px;
+}
+
+/* Defect: identical radius on both looks warped */
+.card { border-radius: 12px; padding: 8px; }
+.card-inner { border-radius: 12px; }
+```
+
+When `padding >= outerRadius`, the inner element's radius collapses to `0`
+(sharp corners). Never guess nested radii; compute them.
+
+### Optical alignment
+
+Geometric centers and visual centers often diverge. Apply optical corrections:
+
+- **Buttons with an icon + text label**: The icon has higher visual density
+  than running text. Start the icon side with `2px` less padding than the
+  text side:
+  ```css
+  /* Trailing arrow: less padding on inline-end */
+  .button-with-trailing-icon {
+    padding-inline-start: 16px;
+    padding-inline-end: 14px;
+  }
+  ```
+- **Play button & directional triangles**: A triangle's centroid sits to the
+  left of its bounding-box center. Shift it toward its pointing tip:
+  ```css
+  .play-button svg {
+    transform: translateX(2px); /* Physical on purpose: media controls never mirror */
+  }
+  ```
+- **Asymmetric icons (stars, carets, arrows)**: When an icon carries uneven
+  visual weight, adjust its wrapper with a 1px nudge (`transform: translateX(1px)`)
+  or tune its SVG `viewBox` directly so it aligns with adjacent text midlines.
+
+### Surface depth & shadow recipes
+
+- **Light mode**: Depth requires multi-layer diffusion. A single dark shadow
+  looks muddy. Use the 3-layer recipe in `--shadow-border`:
+  1. A 1px ring for edge sharpness (`0 0 0 1px oklch(0 0 0 / 0.06)`).
+  2. A 1px subtle lift layer (`0 1px 2px -1px oklch(0 0 0 / 0.06)`).
+  3. A soft ambient depth layer (`0 2px 4px 0 oklch(0 0 0 / 0.04)`).
+- **Dark mode**: Dark surfaces do *not* cast dark shadows. Ambient shadows
+  vanish on dark grounds. Dark mode creates depth through **surface lightness
+  steps** (`--bg` ~15%, `--surface` ~20%, `--surface-2` ~25%) plus a subtle
+  **1px white highlight ring**:
+  ```css
+  /* Dark mode shadow border */
+  --shadow-border: 0 0 0 1px oklch(1 0 0 / 0.08);
+  --shadow-border-hover: 0 0 0 1px oklch(1 0 0 / 0.13);
+  ```
+- **Forced colors / Windows High Contrast mode**: In forced-colors mode, the
+  operating system strips all `box-shadow` properties, turning borderless
+  cards invisible. Always pair box-shadow with a transparent border:
+  ```css
+  .card {
+    border: 1px solid transparent; /* Forced colors mode paints this border in system ink */
+    box-shadow: var(--shadow-border);
+  }
+  ```
+- **Image outlines**: Never use heavy slate/zinc borders on photographs or
+  raster illustrations. Use an inset outline:
+  ```css
+  .content-image {
+    outline: 1px solid var(--image-outline);
+    outline-offset: -1px;
+  }
+  ```
+  `outline` never alters the layout box size or triggers subpixel reflows.
 
 ## Color discipline
 
@@ -289,6 +397,23 @@ assembled one.
 - **Heavy alpha is a smell.** Layers of `rgba()` create unpredictable
   contrast; define explicit surface colors instead. Exceptions: focus rings,
   `--accent-soft` tints, scrims.
+- **OKLCH perceptual ramp architecture**: When constructing or tuning
+  palettes in OKLCH:
+  - **Lightness changes steadily in OKLCH `L`.** HSL lightness is non-perceptual;
+    evenly spaced HSL numbers bunch at the light end. OKLCH `L` tracks human vision.
+  - **Hue remains constant end-to-end.** A wandering hue reads as two colors
+    blended and clashes with neutrals.
+  - **Vividness peaks in the middle and drops at both ends.** Mid-ramp steps
+    carry color; the lightest and darkest steps must approach neutral. Holding full
+    chroma into extremes yields radioactive tinted whites and muddy ink spills.
+  - **Steps are finer at the light end.** Light backgrounds require subtle
+    distinctions (`L` step ~0.04–0.05 between steps 50–200; ~0.07–0.10 in mid-ramp).
+  - **Brand color placement**: A brand color belongs on its true role step
+    (e.g. solid fill step 9 / 600). If it fails 4.5:1 contrast against white text,
+    do *not* quietly darken the brand token. Keep the brand color at its genuine
+    step (e.g. 500) and use a darker step (e.g. 600) for interactive solid fills.
+    Radix role-based tokens (steps 1–12 by role) survive dark mode without inverting
+    step numbers; Tailwind lightness tokens (50–950 by lightness) invert roles.
 
 ## Typography discipline
 
@@ -352,6 +477,39 @@ Always end serif stacks in `serif`, mono stacks in `monospace`.
 - `text-wrap: balance` on h1–h3; `text-wrap: pretty` on long prose.
   `font-variant-numeric: tabular-nums` wherever digits align.
   `font-kerning: normal`.
+- **Underlines and selection craft**:
+  ```css
+  a {
+    text-underline-position: from-font;
+    text-decoration-thickness: from-font;
+    text-underline-offset: 3px;
+  }
+  ::selection {
+    background: var(--accent-soft);
+    color: var(--fg);
+  }
+  ```
+- **Smart typographic punctuation**: Straight quotes and double hyphens are
+  typewriter relics. Use precise typographic characters:
+  | Typewriter | Typographic character | Usage |
+  | --- | --- | --- |
+  | `"..."` / `'...'` | `“…”` / `‘…’` | Curly quotes in prose (keep straight quotes in code) |
+  | `2020-2026` | `2020–2026` | En dash `–` for numeric, date, and coordinate ranges |
+  | `--` | `—` | Em dash `—` for sentence asides (max 1 per paragraph in UI copy) |
+  | `...` | `…` | Ellipsis character `…` |
+  | `10 km` / `24 px` | `10&nbsp;km` / `24&nbsp;px` | Non-breaking space prevents orphan values |
+  | `Hyphenation` | `&shy;` / `hyphens: auto` | Discretionary hyphen for tight columns with `lang` set |
+- **iOS input auto-zoom prevention**: iOS Safari forcibly
+  zooms into the page and breaks layout when focusing any form field with
+  `font-size < 16px`. Never use `maximum-scale=1` or `user-scalable=no` (which
+  destroys accessibility). Ensure inputs scale to 16px on mobile:
+  ```css
+  @media (pointer: coarse) {
+    input, textarea, select {
+      font-size: 16px; /* 16px floor stops iOS auto-zoom */
+    }
+  }
+  ```
 
 ## Layout & composition
 
@@ -399,6 +557,64 @@ Always end serif stacks in `serif`, mono stacks in `monospace`.
   targets already get correct `scroll-margin-top` from the skeleton.
 - Wide content (tables, code, diagrams) gets `overflow-x: auto` on its own
   container — the body never scrolls sideways.
+
+### Mobile-native platform ergonomics
+
+A web page on mobile gives itself away through a dozen micro-tells that
+desktop testing will never reveal. Eliminate them with disciplined CSS:
+
+- **Eliminate stuck hover states**: Touch devices lack real hover. Browsers
+  fake it by latching `:hover` onto tapped elements until the user taps
+  elsewhere, leaving buttons permanently highlighted. Gate all hover rules:
+  ```css
+  @media (hover: hover) and (pointer: fine) {
+    .button:hover { background: var(--accent-hover); }
+  }
+  ```
+- **Remove gray/blue tap flashes**: Mobile WebKit and Blink paint an intrusive
+  highlight rectangle over tapped elements. Clear it globally:
+  ```css
+  html { -webkit-tap-highlight-color: transparent; }
+  ```
+- **Use dynamic viewport units**: `100vh` on mobile measures the viewport
+  with browser chrome collapsed, overflowing on load and hiding bottom CTAs.
+  Use `100dvh` for full app shells/drawers, and `min-height: 100svh` for
+  first-screen heroes so content never overflows on initial load.
+- **Eliminate the 300ms click delay**: Prevent the double-tap zoom wait on
+  interactive elements:
+  ```css
+  button, a, [role="button"], .tappable { touch-action: manipulation; }
+  ```
+- **Immediate press feedback**: Native controls respond when fingers *land*,
+  not when they lift. Style `:active` with immediate feedback:
+  ```css
+  .button:active {
+    transform: scale(0.97);
+    transition: transform 100ms var(--ease-out);
+  }
+  ```
+- **Stop pull-to-refresh & scroll chaining**: Prevent bouncing the entire body
+  when scrolling nested containers or spatial planes:
+  ```css
+  html, body { overscroll-behavior: none; }
+  .scrollable-inner { overflow-y: auto; overscroll-behavior: contain; }
+  ```
+- **Respect notches and home indicators**: Paint edge-to-edge, then pad content:
+  ```html
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  ```
+  ```css
+  .bottom-bar { padding-bottom: calc(var(--space-4) + env(safe-area-inset-bottom, 0px)); }
+  ```
+- **Prevent accidental text selection on controls**: Long-pressing a button or
+  tab should never trigger text selection or callout menus:
+  ```css
+  button, [role="button"], .tab, .chip {
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+  }
+  ```
 
 ## Content honesty
 
@@ -519,68 +735,73 @@ page feel designed rather than assembled:
   vertical-align:-.125em}`. Never link the CDN. One icon style per page,
   icons at most one place per pattern — not an icon before every heading.
 
-## Absolute bans — match and refuse
+## Absolute bans — the anti-slop registry
 
 If you are about to write one of these, stop and rewrite the element with
-different structure. They are the load-bearing tells; none is ever the best
-answer.
+different structure. A tell is a device that makes a page read as generated:
+they were once good ideas on good sites, but became tells by being produced by
+default everywhere without reason. Removing them is mandatory, but **removal
+alone is not enough**: stripping tropes without putting a real subject-derived
+idea in their place produces the "avoidance aesthetic" (a timid, hollow page
+with good manners), which is just another AI tell. Fill the space with what only
+this subject has.
 
-**Structure**
-- **Side-stripe borders.** A `border-left`/`border-right` over 1px used as a
-  colored accent on cards, callouts, or list items. Rewrite with a full
-  hairline border, a background tint, a leading number/icon, or nothing.
-- **Identical card grids.** Same-sized icon-heading-text cards repeated down
-  the page. Vary the layout or drop the cards; nested cards are always wrong.
-- **The hero-metric template.** Big number + tiny label + supporting stats +
-  gradient accent — the SaaS cliché. Find the composition the data wants.
-- **An eyebrow on every section.** One named kicker as a deliberate system
-  is voice; on every section it is AI grammar (cap: one per 3 sections).
-- **Numbered section markers as scaffolding** (`01 / 02 / 03` over every
-  section). Numbers earn their place only when the section IS an ordered
-  sequence and the order carries information.
-- **Icon-tile stacks.** Rounded-corner icon tiles floating above every card
-  heading (a gradient circle with a white glyph, repeated across a feature
-  grid). This is the universal AI feature-card pattern; replace with inline
-  SVG at text size, or drop the icon entirely.
+### Wave 1 tells (2023–2024: the SaaS defaults)
+- **Violet / indigo hero gradients and glows.** Soft purple-to-blue washes,
+  glowing radial blurs behind heroes. *Do instead*: Flat ground or restrained
+  single-hue tone steps.
+- **Gradient text.** `background-clip: text` over a multi-color gradient.
+  *Do instead*: Solid ink with weight, size, or font contrast.
+- **Glassmorphism by default.** Decorative blur / `backdrop-filter` on cards.
+  *Do instead*: Opaque surfaces one tone step from the ground.
+- **Glowing or gradient "Get started" button.** Pulsing neon or gradient fills.
+  *Do instead*: Solid accent button named with a verb-noun action.
+- **Soft grey drop shadow under every card.** Muddy ambient shadows.
+  *Do instead*: Multi-layer `--shadow-border` (1px ring + lift + ambient) or surface tone step.
+- **Three identical feature cards.** Icon circle + bold title + 2 lines of text,
+  repeated in a 3-column row. *Do instead*: Composed asymmetric sections or real data tables.
 
-**Surface**
-- **Gradient text.** `background-clip: text` over a gradient. Use one solid
-  color; emphasis via weight or size.
-- **Glassmorphism by default.** Decorative blur / `backdrop-filter` cards.
-  Rare and purposeful (a bar floating over scrolling content) or nothing.
-- **Aggressive gradient backgrounds** — especially the purple-to-blue hero
-  wash. A flat surface, or one restrained same-hue gradient, reads more
-  expensive.
-- **Pure `#000` page backgrounds, and `#000`-on-`#fff` body text.** Dark
-  surfaces come from the ramp's off-blacks; ink is `--fg`'s off-black, not
-  pure black. (Pure-white surfaces are fine — Stripe and GitHub ship them.)
-- **Dark-glow halos.** Colored `box-shadow` bloom on dark backgrounds (a
-  neon glow behind cards or buttons). Dark-mode depth comes from surface
-  lightness steps, not from emissive shadows. If a glow is visible, it is
-  almost certainly wrong.
-- **Italic-serif display heroes.** A large italic serif headline over a dark
-  or gradient background. This combination is a saturated AI tell,
-  especially when the serif is Didot/Bodoni at hero scale with no supporting
-  typographic system beneath it.
+### Wave 2 tells (2025: the pseudo-system look)
+- **An eyebrow / kicker on every section.** Tiny tracked uppercase label above
+  every single heading. *Do instead*: Fold it into the heading or delete it.
+  Cap: at most one kicker per 3 sections.
+- **Pill badge above hero headline.** ("New", "Beta", "Introducing").
+  *Do instead*: Say it in the supporting sentence.
+- **One random word of the headline in italic serif or accent color.**
+  *Do instead*: One face, one color, or change weight of the same family.
+- **Bento grid of rounded tiles as the default section.**
+  *Do instead*: A composed section with distinct hierarchy; tiles only for
+  dense dashboards.
+- **Side-stripe borders.** `border-left` / `border-right` > 1px colored accents.
+  *Do instead*: Full hairline (<=1px) border, subtle background tint, or whitespace.
 
-**Copy & ornament**
-- **Invented metrics, names, and logos** (see Content honesty). Honest
-  placeholder or nothing.
-- **Decoration strips and badges**: version tags in heroes ("v2.0", "BETA"),
-  `SCROLL ↓` cues, locale/weather strips ("LIS 14:23 · 18°C"), label pills
-  overlaid on graphics, photo-credit-style captions on things that aren't
-  photos, `A · B · C` word strips at the hero's bottom edge.
-- **Aphoristic copy cadence.** "Not a feature. A platform." "Less tool.
-  More partner." The staccato fragment-period-fragment rhythm is itself
-  an AI tell regardless of content. Write complete sentences.
-- **Text that overflows its container.** Long heading words + a large
-  `clamp()` + a narrow grid overflow on tablet/mobile. Test the real copy at
-  360/390/768px; the viewport is part of the design.
+### Wave 3 tells (2025–2026: the "fix" that became the look)
+- **Yellow-cream ground + terracotta / rust / clay accent.** The saturated
+  escape hatch from SaaS purple. *Do instead*: The genuine subject palette;
+  warmth from low-chroma stone, deep ink, or authentic data colors.
+- **Broadsheet cosplay.** Hairline rules everywhere, zero radius, fake archival
+  posturing on casual modern tools. *Do instead*: Coherent posture derived from
+  the subject.
+- **Monospace micro-labels as "technical" costume.** Mono used purely for vibes
+  on non-technical briefs. *Do instead*: The text face; tabular figures for numbers.
+- **Index numbering scaffolding (`01 / 02 / 03`, `(001)`, `Step 02`).** Numbers
+  sprinkled on headings to fake structure. *Do instead*: Order by scale,
+  position, or genuine `<ol>` when truly an ordered sequence.
 
-Softer smells (allowed only as a deliberate, named move): gratuitous emoji
-as markers; `border-radius` mixed across siblings; everything centered;
-em-dashes as visual separators in labels; more than one ambient animation;
-mono type as costume on a non-technical brief.
+### Structural, copy, and motion tells
+- **Headline as a 3–4 line full sentence at display size.** *Do instead*: Title
+  of about 5–7 words; supporting narrative in the standfirst.
+- **Stock section order.** Hero → logo strip → 3 cards → testimonial → pricing → CTA.
+  *Do instead*: The natural order of the argument.
+- **Everything centered.** Centering >70% of content. *Do instead*: Left-anchored
+  columns with clear alignment edges.
+- **Marketing buzzword copy.** "Unlock", "supercharge", "seamless", "elevate",
+  "effortless", "cutting-edge", "all-in-one", "empower".
+- **The correction cliché.** "Not just X, it's Y" / "Not a tool. A partner."
+- **Tricolon headlines.** "Design. Build. Ship."
+- **Generic button labels.** "Get started", "Learn more", "Submit", "OK".
+- **Motion tells.** Identical fade-up on every block, bounce easing on UI,
+  hover lift (`translateY(-4px)`) on every card.
 
 ## The AI-slop test
 
@@ -725,6 +946,59 @@ override `--border: var(--fg)`; asymmetric layouts (70/30); almost no
 border-radius (0–2px), no shadows, no gradients; underline links, no hover
 decoration.
 
+### The 20 researched art directions
+
+The five archetypes above are starting foundations. For distinctiveness,
+draw from the 20 researched art directions below. Every direction is realized
+using **native browser primitives under strict CSP** — inline SVG, procedural
+canvas, installed fonts, and data URIs:
+
+1. **Name as monument**: The subject's title rendered at massive display scale
+   (`clamp(3rem, 8vw, 6rem)`). Minimalist surrounding layout, tight metadata,
+   generous whitespace. Let the typography be the monument.
+2. **Sentence as layout**: A single provocative thesis sentence broken across
+   horizontal typographic bands forms the entire visual structure. The sentence
+   is not a headline; it is the scaffolding.
+3. **Pinned poster**: Desktop split: fixed visual anchor (interactive diagram,
+   SVG schematic, or canvas) pinned on one side, with progressive narrative
+   scrolling on the other.
+4. **Colour chapters**: Full-bleed background color shifts between distinct
+   semantic chapters (e.g. from quiet off-white to saturated navy to deep stone),
+   creating emotional progression through the document.
+5. **Place carries it**: Deep atmospheric textures, domain-specific geometric
+   patterns, and authentic technical vernacular rooted in the subject's origin.
+6. **Page is the object**: The page styled as the physical artifact itself
+   (a laboratory spec sheet, telemetry docket, flight manifest, or index card).
+7. **One motif**: A single distinctive geometric motif (e.g. crosshair,
+   chamfered corner, dotted datum line, diamond index) repeated rhythmically
+   across dividers, bullet glyphs, data badges, and headers.
+8. **Product performs**: The interactive simulator, calculator, query runner,
+   or state machine is the hero at top fold. Operable immediately without marketing fluff.
+9. **Quiet instrument**: High-density, calm, ultra-precise console posture:
+   tabular figures, hairline delimiters, subtle tone steps, no decorative fluff.
+10. **Hero object**: One intricate, authoritative visual set-piece (complex SVG
+    schematic, multi-axis data visualization, or procedural canvas) commands the viewport.
+11. **Specimen catalogue**: Archival taxonomy layout: precise specimen codes,
+    multi-attribute parameter tables, and side-by-side comparative matrices.
+12. **Borrowed category**: Deliberately adopts the typographic conventions of a
+    venerable external craft (naval navigation log, patent filing, railway timetable).
+13. **Contact sheet**: Rhythmic visual grid of disciplined comparison frames,
+    data cards, or preview plates treated with equal compositional weight.
+14. **Editorial report**: Print-annual feel: deep margin notes, multi-column body
+    grid, running headers, authoritative serif display.
+15. **Loud flat poster**: High-impact brutalist energy: bold primary fills, zero
+    border-radius, heavy ink borders, high contrast.
+16. **Split stage**: Strict 50/50 desktop split: persistent state or live interactive
+    visualization on one side, progressive narrative documentation on the other.
+17. **Dense tiles**: Modular dashboard board with balanced card proportions,
+    strict concentric corners, and calm information hierarchy.
+18. **Uneven photographs / figures**: Asymmetric visual plates and data diagrams
+    at rhythmically varied scales (one dominant plate, two supporting thumbnails).
+19. **Dark room**: Deep low-light environment with subtle OKLCH lightness staircase
+    (`15%` → `20%` → `25%`), focused luminous accents, zero neon halos.
+20. **Type-only statement**: Extreme typographic mastery: zero decorative cards,
+    zero icons; hierarchy achieved purely through scale, weight, and whitespace.
+
 ## Viewer frame specifics
 
 Generated pages render inside the Open Artifacts viewer, which affects a few
@@ -808,6 +1082,13 @@ not loop on renders, and do not publish with a failing P0.
       not skip the manual check for text *you* author on derived backgrounds
       (e.g. `--accent-soft`) the validator doesn't track.
 - [ ] 360px: no horizontal scroll, no heading overflow, hit targets ≥ 44px.
+- [ ] Concentric radii: any nested rounded elements satisfy
+      `outerRadius = innerRadius + padding + borderWidth` mathematically.
+- [ ] Mobile-native CSS verified: `-webkit-tap-highlight-color: transparent`
+      set, hover styles gated with `@media (hover: hover) and (pointer: fine)`,
+      viewports using `100dvh`/`100svh`, inputs ≥ 16px on mobile/coarse pointers.
+- [ ] High contrast resilience: cards pair `box-shadow: var(--shadow-border)`
+      with `border: 1px solid transparent;` so cards never vanish in forced-colors mode.
 - [ ] Body width is constrained — an L1 non-canvas page has a measure cap
       (`max-width` on `body`/`<main>` or via `.oa-prose`); `validate` fails
       the build if none exists, since the default is a full-width doc with
@@ -831,7 +1112,25 @@ not loop on renders, and do not publish with a failing P0.
       filler verbs, quotes ≤ 3 lines.
 - [ ] `artifact.title` exists and names the artifact.
 
-**3. Five-dimension critique** — score yourself 1–5, silently:
+**3. The 14-pass visual critique**:
+Critique your rendered output systematically across 14 passes:
+1. **One second**: Glance and look away. Did you see exactly one focal point?
+2. **Squint**: Do masses reduce to 2–3 clear visual blocks with distinct weight?
+3. **Cover the logo / title**: Could this belong to a generic competitor? If yes,
+   inject what only this subject has.
+4. **Edges**: Count distinct left alignment axes. There should be ≤ 2–3 on the whole page.
+5. **Space**: Are related things tight and unrelated things far? Section gaps > intra-card gaps.
+6. **Type**: Is display-to-body contrast ≥ 3x? Are there ≤ 5 sizes? Any orphan words?
+7. **Colour**: 60-30-10 discipline. Does the accent mean "here", or is it everywhere?
+8. **Visual material**: Is real data or technical geometry shown without violating CSP?
+9. **Sameness**: Do consecutive sections use distinct layout families?
+10. **Cadence**: Is there rhythm between dense information and quiet breathing room?
+11. **Mobile**: Does 360px view stack cleanly without horizontal scroll or tiny targets?
+12. **Copy**: Are button labels verb-noun phrases? Are marketing buzzwords absent?
+13. **Honesty**: Are all metrics and sources authentic to the brief?
+14. **Restraint**: One accent, one flourish, quiet everywhere else.
+
+**4. Five-dimension critique** — score yourself 1–5, silently:
 1. **Philosophy** — does the visual posture match the read you declared
    (register, direction, level), or did you drift to a favorite default?
 2. **Hierarchy** — does the eye land in one obvious place per screen

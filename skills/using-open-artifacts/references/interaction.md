@@ -92,13 +92,59 @@ so `translateY(1px)` needs no transition. For the scaled press on large
 surfaces, the ~160ms transition makes the scale-down feel physical rather
 than jumpy.
 
+### Mobile-native touch feel
+
+A web page on a mobile device immediately betrays its browser nature if touch
+mechanics are neglected:
+
+- **Eliminate the 300ms click delay**: Browsers wait after a tap to check for a
+  double-tap zoom. Modern viewports with `width=device-width` reduce this, but
+  iOS Safari still delays on many elements. Fix it on all tappables:
+  ```css
+  button, a, [role="button"], .tappable {
+    touch-action: manipulation;
+  }
+  ```
+- **Remove gray/blue tap highlight flashes**:
+  ```css
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+  ```
+- **Prevent accidental text selection on controls**: Long-pressing a button or
+  chip should trigger the action, never highlight the text or summon a context menu:
+  ```css
+  button, [role="button"], .tab, .chip, .drag-handle {
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+  }
+  ```
+- **Contain inner scroll bouncing**: Keep container bounce native while preventing
+  it from chaining to the outer page:
+  ```css
+  .scrollable-panel {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  ```
+
 ## Hit targets
 
-**Minimum 44x44px touch target**, per WCAG 2.5.8 (Target Size). This applies
-to every interactive element: buttons, links, form controls, icon actions.
+**Target size standards**:
+- **WCAG 2.5.8 (AA)**: Minimum 24×24px bounding box. Under the spacing exception,
+  an undersized target passes if a 24px circle centered on its bounding box intersects
+  no other target.
+- **WCAG 2.5.5 (AAA) & Apple HIG**: Minimum 44×44px / 44×44pt.
+- **Material Design**: Minimum 48×48dp.
+
+For Open Artifacts, the floor is **44×44px** for primary mobile touch targets.
+The visible element can stay small; the hit area is what must be big. Anything
+that looks clickable must be clickable across its entire visual extent.
 
 When the visual element is smaller (an icon button, a compact chip), extend
-the hit area with a pseudo-element:
+the hit area with a pseudo-element. Place it on the `<button>` or wrapping
+control, **never on a raw `<input>`** (which cannot render pseudo-elements):
 
 ```css
 .icon-btn {
@@ -146,6 +192,24 @@ and zoom is always reachable via keyboard (`+`/`-`/`0`/`1`).
 text disappears on input, stranding the user without context. Every input
 gets a `<label>` element above or beside it, associated via `for`/`id`.
 
+**Prevent iOS input auto-zoom**: iOS Safari forcibly zooms into any
+input with `font-size < 16px` on focus and leaves the page layout drifted.
+Ensure mobile inputs meet the 16px minimum:
+```css
+@media (pointer: coarse) {
+  input, select, textarea {
+    font-size: 16px;
+  }
+}
+```
+
+**Tune mobile keyboards to the input role**:
+- `type="email"`, `type="tel"`, `type="url"` for matching data.
+- `inputmode="numeric"` for verification codes, PINs, card numbers.
+- `inputmode="decimal"` for currency or coordinates.
+- `autocapitalize="none"` and `autocorrect="off"` on usernames, tokens, and keys.
+- `enterkeyhint="search"` / `"send"` / `"done"` so the return key specifies its action.
+
 **Validate on blur, not on every keystroke.** Per-keystroke validation fires
 errors while the user is still typing, which is hostile. Wait for the field
 to lose focus, then validate and show errors.
@@ -155,7 +219,7 @@ linked via `aria-describedby` so screen readers announce them:
 
 ```html
 <label for="email">Email</label>
-<input id="email" type="email" aria-describedby="email-err" />
+<input id="email" type="email" aria-describedby="email-err" aria-invalid="true" />
 <p id="email-err" class="field-error" role="alert">
   This email is already registered. Try signing in instead.
 </p>
@@ -256,6 +320,46 @@ DOM (reading) order and act as pan surface that tap-to-focuses (Figma chrome,
 not in-frame controls), Escape always returns to the overview, and arrow keys
 drive tour navigation or pan (depending on whether `data-tour` frames exist).
 
+## Screen reader accessibility & live regions
+
+- **Accessible names for icon buttons**: A button containing only an `<svg>`
+  is invisible to screen readers without an accessible name. Supply an
+  `aria-label` or an inlined visually hidden label:
+  ```html
+  <button aria-label="Close dialog">
+    <svg class="oa-ico" aria-hidden="true">…</svg>
+  </button>
+  ```
+- **The visually hidden utility**:
+  ```css
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+  }
+  ```
+- **Live region announcements**:
+  - `aria-live="polite"`: Non-disruptive announcements (e.g. "Showing 12 of 48 items",
+    "Filter applied", "Copied to clipboard").
+  - `aria-live="assertive"`: Critical alerts that require immediate interruption
+    (e.g. "Connection lost", "Form submission failed").
+
+## Deterministic state machines & state coverage
+
+Every interactive component (data table, search filter, query wizard, card deck)
+must be modeled as an explicit state machine covering all five essential states:
+1. **`idle`**: The resting default state with clear affordances and starter guidance.
+2. **`loading`**: Accessible skeleton preview or progress bar in the shape of the final layout.
+3. **`empty`**: Educational zero-state explaining *why* it is empty and what action populates it. Never a blank void or a raw "No data" string.
+4. **`error`**: Clear error message following the what/why/how format with a direct recovery button ("Retry query").
+5. **`success`**: Transient confirmation toast or populated result view with complete data.
+
 ## Pointer ownership (canvas / spatial shells)
 
 Encode these as strict agent rules. Each line is **scenario → rule → why**.
@@ -285,9 +389,15 @@ requirements from this file (they join the `design.md` ship gate as P0):
       `--surface` backgrounds.
 - [ ] Touch targets are at least 44x44px (or extended via pseudo-element).
       Test at 360px viewport width.
+- [ ] Hover styles gated behind `@media (hover: hover) and (pointer: fine)`
+      to prevent stuck states on mobile.
+- [ ] Tap delay eliminated with `touch-action: manipulation` on buttons/links.
+- [ ] No mobile input zoom: input font-size ≥ 16px on coarse pointers.
 - [ ] Every `<input>` has a visible `<label>`, not just a placeholder.
 - [ ] Errors are below the field, use `var(--danger)`, and follow
       what/why/how.
+- [ ] Icon-only buttons have an `aria-label` or `.sr-only` accessible name.
+- [ ] Interactive components account for `idle`, `loading`, `empty`, and `error` states.
 - [ ] Escape closes the topmost overlay.
 - [ ] Hover-revealed actions have a non-hover alternative path.
 - [ ] Destructive buttons use verb-noun labels, never "OK" or "Confirm".

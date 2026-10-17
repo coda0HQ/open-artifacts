@@ -68,6 +68,68 @@ output from 1 to 5 on these six axes:
 Revise the lowest axis whenever it is below 3. Keep this critique inside the
 generation task; do not publish a score claim in the Artifact body.
 
+## The 14-pass visual critique
+
+Judge the rendered page visually (not by reading code intentions). Open the
+rendered view at desktop width, then at 360px mobile width. Run each pass
+independently:
+
+1. **One second**: Glance and look away. What was seen? Exactly one focal
+   point must register. If the answer is "a website", hierarchy has failed.
+2. **Squint**: Defocus your eyes until text blurs into tone bars. The layout
+   must resolve to 2–3 clear masses with distinct visual weight.
+3. **Cover the logo / name**: Could this page belong to a competitor or another
+   industry? If yes, it lacks a subject-derived idea. Inject what only this subject has.
+4. **Edges**: Count distinct left alignment axes down the page. A composed page
+   has 2–3 axes. Six axes means elements were placed one at a time.
+5. **Space**: Are related elements grouped tightly and sections spaced generously?
+   Section gap must clearly exceed intra-card gap. No accidental holes.
+6. **Type**: Is display-to-body scale contrast ≥ 3x? Are there ≤ 5 distinct sizes?
+   Are there any orphan words on the last line of headings?
+7. **Colour**: 60-30-10 distribution. Is the accent color rare and meaningful
+   (≤ 10%), or splashed across dozens of elements?
+8. **Visual material**: Is real data, an authentic diagram, or a typographic
+   set-piece present under strict CSP? Zero broken remote assets or lazy grey boxes.
+9. **Sameness**: Do adjacent sections vary layout families (split, grid,
+   prose, table), or does the page repeat the same 3-card skeleton?
+10. **Cadence**: Is there rhythm between dense informational passages and
+    breathing room?
+11. **Mobile platform feel**: At 360px, are touch targets ≥ 44px? Is horizontal
+    scroll eliminated? Do hover states stay stuck? Are inputs ≥ 16px?
+12. **Copy honesty**: Are button labels explicit verb-noun phrases? Are AI buzzwords
+    ("unlock", "supercharge", "seamless", "elevate") eliminated?
+13. **Content authenticity**: Are all metrics, entities, and examples authentic to
+    the brief? No fictional "Acme Corp" or fake "99.9%" stats.
+14. **Restraint**: One accent hue, one orchestrated motion flourish, quiet
+    everything else.
+
+## Worst-case data resilience (break-UI stress test)
+
+A fragile UI looks acceptable with ideal 3-word titles and collapses with real
+data. Stress-test components against worst-case values before shipping:
+
+### 1. Names, people, and locales
+- **Long compound names**: `Aleksandra Wiśniewska-Kowalczyk`, `Christopher Alexander Montgomery III`. Must wrap gracefully; containers must not truncate initials or clip descenders.
+- **Minimal strings**: `Jo`, `J`. One or two letters must not collapse card bounds or leave tiny unclickable hit areas.
+- **Diacritics & stacked accents**: `Đặng Thị Ngọc Hân`, `Ólafur Darri Ólafsson`. Tight line-heights + `overflow: hidden` must not slice off top or bottom diacritics.
+- **Non-Latin & mixed scripts**: `王秀英` (CJK without spaces, can break anywhere), `نور الهدى عبد الرحمن` (RTL alignment, directional icon placement with `dir="auto"`).
+- **Emoji & surrogate pairs**: `🦊 Fox`, `👩🏽‍💻 Priya` (multi-codepoint ZWJ sequences). String slicing must not produce orphaned half-surrogates or replacement characters.
+
+### 2. Unbreakable identifiers & URLs
+- **Long emails & addresses**: `bartholomew.fitzgerald@northwind-industries-holdings.example.com`.
+- **URLs & hashes**: `https://example.com/workspaces/acme/projects/q3-launch/docs/9f8e7d6c5b4a`, `9f8e7d6c-5b4a-4c3d-8e2f-1a0b9c8d7e6f`.
+- Rule: Apply `overflow-wrap: anywhere` or `min-width: 0; text-overflow: ellipsis; overflow: hidden;` on table cells and flex children so unbreakable strings never force horizontal container expansion.
+
+### 3. Numbers, counts, and currencies
+- **Zero & negative numbers**: `0 items`, `-$1,420.50`. Ensure negative signs and zero states do not break alignments.
+- **Massive counts**: `10,482`, `1,000,000+`. Container widths must accommodate 6+ digits without wrapping to a new line.
+- **Tabular alignment**: Always apply `font-variant-numeric: tabular-nums` to numbers in tables, metrics, and timestamps so digits align vertically across rows.
+
+### 4. Collection volume & states
+- **Empty state**: Educational zero-state with a call to action. Never a blank box or "No data".
+- **Single item**: Must not look abandoned or oddly stretched.
+- **Dense volume**: 100+ items must scroll cleanly inside contained boxes (`overscroll-behavior: contain`) without page jitter.
+
 ## Structural choices for brand artifacts
 
 Choose one information shape before building a Level 3 artifact. Do not force

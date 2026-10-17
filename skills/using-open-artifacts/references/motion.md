@@ -1,8 +1,7 @@
 # Motion patterns (Level 3)
 
 > Sources: [open-design](https://github.com/nexu-io/open-design) motion
-> system, Emil Kowalski's easing/frequency/duration rules. See root README
-> credits.
+> system and native animation performance rules. See root README credits.
 
 Level 3 artifacts use **native browser APIs only** — no Framer Motion, no
 GSAP, no CDN scripts. The strict CSP (`script-src 'unsafe-inline';
@@ -14,94 +13,109 @@ Read this only when the Recipe uses `artifact.level: 3`. Respect `prefers-reduce
 at every level — wrap motion in a `@media (prefers-reduced-motion: no-preference)`
 guard so reduced-motion users get the static version.
 
-## Every animation needs a one-sentence reason
+## The 6-step motion build sequence
 
-Before adding motion, name what it communicates: hierarchy (directing the
-eye), narrative (revealing in a sequence that matters), feedback
-(acknowledging an action), or state (showing something changed). "It looks
-cool" is not a reason; motion without a reason is the AI-generated feeling.
+Make decisions in the order that determines whether motion feels right. Two
+failure modes exist, and the first is worse:
+1. **Animating something that shouldn't animate.** A gate that produces zero
+   lines of code is a success, not a dodge.
+2. **Animating the right thing with the wrong ingredients** — `ease-in` on an
+   entrance, `scale(0)`, keyframes on a rapid toggle, or a sluggish 400ms dropdown.
 
-### Frequency table
+Run the sequence in order:
 
-The reason also gates the *budget*. Higher-frequency actions get less motion:
+### 1. Should this animate at all?
+
+Gate by frequency:
 
 | Frequency | Examples | Motion budget |
 | --- | --- | --- |
-| 100+/day | keyboard shortcut, palette toggle, tab switch | **None.** Jump to end state instantly. These are operated, not watched (see Anti-patterns). |
-| Dozens/day | dropdown, tooltip, hover reveal | Minimal, <=150ms. Feedback only. |
-| Several/day | modal open, drawer, route change | Standard durations from the ladder below. |
-| Rare / first-time | onboarding, empty-state reveal, first launch | Delight permitted. Longer durations, richer materials. |
+| 100+/day | keyboard shortcut, palette toggle, tab switch, filter | **None. Ever.** Jump to end state instantly (`ms = 0`). These are operated, not watched. |
+| Dozens/day | dropdown, tooltip, menu, card hover | Near-imperceptible: <=150ms. Fast feedback only. |
+| Several/day | modal open, drawer, route-like view transition | Standard UI duration: 180–300ms. |
+| Rare / first-time | onboarding, empty-state reveal, victory moment | Delight permitted: 500–800ms. Richer choreography. |
 
-When in doubt, one tier less motion than you think. The canvas runtime's
-keyboard shortcuts (`0`/`F`/`Esc`/`1`/`+`/`-`) are all 100+/day tier and
-jump instantly; the guided tour (occasional, deliberate) is the named
-exception that earns a camera animation.
+**Keyboard-initiated actions are an absolute disqualifier, not a judgment call.**
+Raycast has no open/close animation. Tab keys and command palettes must snap
+instantly.
 
-## Chrome / spatial camera budget
+### 2. What is the purpose?
 
-Applies to **viewer chrome and canvas chrome regardless of `artifact.level`**.
-Product-register surfaces are operated mid-task; choreography is banned here
-even on Level 3 pages.
+Name the purpose in one of these six words before writing code:
+- **Feedback** — confirming the interface heard the user.
+- **Spatial consistency** — showing where something arrived from or left to.
+- **State indication** — making a status change visually legible.
+- **Preventing a jarring change** — bridging content that would otherwise teleport.
+- **Explanation** — demonstrating how a mechanism works (walkthroughs/demos).
+- **Delight** — strictly restricted to the rare / first-time tier.
 
-| Scenario | Rule | Why |
+If you cannot name the purpose in one of these words, do not build the animation.
+"It looks cool" on a tool surface is a reason to delete it.
+
+### 3. Pick the tool — cheapest that works under strict CSP
+
+Under Open Artifacts' opaque-origin sandbox and strict CSP, external packages
+cannot be loaded. Use the cheapest native tool that satisfies the need:
+
+| Need | Tool | Why |
 | --- | --- | --- |
-| Keyboard shortcut or tab-driven label focus moves the camera | Jump instantly (`ms = 0` / reduced-motion path) | 100+/day tier; animation makes the tool feel slow |
-| Pointer fit into a frame or guided tour step | 400ms camera tween (already the canvas default); reduced-motion still instant | Occasional, deliberate travel; one orchestrated moment |
-| Pointerdown while a tween or glide is running | Cancel the raf and resume from the current transform | Interruptibility is load-bearing; grabbing mid-flight must not jump |
-| Theme toggle, zoom-cluster press, Esc to overview | No orchestrated sequence; at most `var(--motion-fast)` color/press feedback | Chrome is an instrument cluster, not a hero |
-| Pinch past MIN/MAX | Elastic `rubber()` overshoot; `settle()` snaps `k` back | Hard clamp feels locked; pan already uses the same rubber |
+| Hover, press, color, class-toggled states | **CSS transition** | Interruptible, retargets mid-flight, zero JS overhead. |
+| Entry animation on mount without JS state | **CSS `@starting-style`** | Modern native CSS entrance from initial values. |
+| Predetermined motion during page load | **CSS animation** (`@keyframes`) | Runs off the main thread; stays 60fps while browser parses. |
+| Dynamic, coordinate-driven, or cancelled JS motion | **WAAPI** (`element.animate()`) | Full programmatic control with native compositor speed. |
 
-Compact chrome buttons (zoom, tour, labels, chips) use
-`transform: translateY(1px)` on `:active` — press feedback on pointer-down,
-not a timed animation (see `interaction.md` Press feedback).
+### 4. Pick the properties
 
-## Easing and duration
+- **`transform` and `opacity` only.** They bypass layout and paint entirely and
+  run directly on the GPU compositor. `width`, `height`, `margin`, `padding`,
+  `top`, and `left` force CPU layout reflows and drop frames.
+- **Never `scale(0)`.** Start appearances from `scale(0.9–0.97)` + `opacity: 0`.
+  Nothing in the physical world pops into existence from an infinitely small point.
+- **Set `transform-origin` to the trigger.** A dropdown expands from its button;
+  a popover blooms from its anchor. Center-origin is reserved for non-anchored modals.
+- **Use percentages in `translate()` for self-size travel.** `translateY(100%)`
+  slides an element by its own rendered height without JS measurements.
+- **Never drive child transforms from CSS custom properties on a parent.**
+  Updating `--x` on a parent forces style recalculation on every descendant.
+  Apply `transform` directly to the animating element.
 
-`--ease-out-expo` (settle, premium) and `--ease-spring` (overshoot, lively)
-ship in the token contract — don't redefine them. Add locally if needed:
+### 5. Easing and duration — or a spring
 
-```css
---ease-in-out-quad: cubic-bezier(0.45, 0, 0.55, 1);  /* balanced, ambient */
---ease-in-out-strong: cubic-bezier(0.77, 0, 0.175, 1); /* dramatic in-out */
---ease-out-drawer: cubic-bezier(0.32, 0.72, 0, 1);     /* drawer / sheet */
-```
+**Easing decision tree**:
 
-### Easing decision tree
-
-Pick by intent, not by feel:
-
-| Intent | Token / curve | Notes |
+| Situation | Easing curve | Notes |
 | --- | --- | --- |
-| Enter (appear, slide in) | `--ease-out-expo` | Near-equivalent to Emil's `cubic-bezier(0.23,1,0.32,1)`. |
-| Exit (dismiss, slide out) | `--ease-out-expo` | Same curve, ~75% of entrance duration. |
-| Move / resize in view | `--ease-in-out-quad` | Balanced, ambient. |
-| Hover, color, opacity | `--ease-standard` | The token's default ease. |
-| Emphasis (one per page) | `--ease-spring` | Overshoot. Use sparingly. |
-| Drawer / bottom sheet | `--ease-out-drawer` | Soft deceleration. |
-| Dramatic in-out | `--ease-in-out-strong` | Pin, hold, release. |
-| Uniform / progress | `linear` | Only for timed progress or hold-to-confirm. |
-| Unsure | `--ease-out-expo` | When in doubt, ease out. |
+| Entering UI (appear, slide in) | `--ease-out` / `--ease-out-expo` | Strong deceleration (`cubic-bezier(0.23, 1, 0.32, 1)`). Fast arrival, gentle settle. |
+| Exiting UI (dismiss, slide out) | `--ease-out` / `--ease-out-expo` | Still ease-out! Exits run ~75% of enter duration. |
+| Moving / morphing on screen | `--ease-in-out` (`cubic-bezier(0.77, 0, 0.175, 1)`) | Dramatic in-out. Accelerates from rest, decelerates to stop. |
+| Hover, color, opacity | `--ease-standard` (`cubic-bezier(0.2, 0, 0, 1)`) | Subtle, predictable state shift. |
+| Drawer / bottom sheet | `--ease-drawer` (`cubic-bezier(0.32, 0.72, 0, 1)`) | Soft iOS-like deceleration curve. |
+| Progress / continuous meter | `linear` | Strictly for timed progress bars or steady tickers. |
 
-Never linear for organic motion, never bounce/elastic on UI.
+**Never `ease-in` on UI entrances.** It starts slowly, delaying the exact
+moment the user is watching. `ease-out` at 200ms feels snappier than `ease-in`
+at 200ms.
 
-### Duration ladder
+**Duration ladder**:
+- Button press feedback: **100–160ms**
+- Tooltips, small popovers: **125–200ms**
+- Dropdowns, selects: **150–250ms**
+- Modals, drawers: **200–350ms**
+- Layout shifts & View Transitions: **250–350ms**
+- Load sequence (L3 hero only): **500–800ms**
 
-| Duration | Use | Element examples |
-| --- | --- | --- |
-| 80–100ms | instant feedback | toggle snap, checkbox fill (below ~80ms a transition is imperceptible, so button `:active` skips it entirely) |
-| 100–160ms | fast feedback | press scale, color shift, icon swap |
-| 125–200ms | tooltip, small state | tooltip, badge, chip |
-| 150–250ms | dropdown, menu | select menu, popover, tab panel |
-| 200–350ms | modal, drawer | dialog, slide-over, nav drawer |
-| 300–500ms | layout shift | accordion, view transition, reorder |
-| 500–800ms | entrance sequence | load stagger, hero reveal (L3 only) |
+**UI animations stay strictly under 300ms.** A 180ms dropdown feels responsive;
+a 400ms dropdown feels broken.
 
-**UI motion stays under 300ms unless you can name the reason it needs
-longer.** Entrances (500-800ms) are the named exception for L3 hero moments.
+### 6. Interruption, exits, and choreography
 
-Exits run ~75% of the matching entrance duration — leaving is quicker than
-arriving. open-design's enter-200ms/exit-140ms pair is exactly this ratio and
-works well for mid-tier elements.
+- **Transitions over keyframes for anything rapidly triggered.** Transitions
+  retarget from the current value mid-flight. Keyframes restart from 0%.
+- **Exit symmetric to entry.** If a notification slides in from the bottom, it
+  dismisses downward through the bottom.
+- **Direction-aware choreography.** Entering elements arrive following the eye's
+  reading path (top-to-bottom or left-to-right). Stagger lists: max 3–5 items,
+  delay 30–60ms per item. Never block interaction during stagger.
 
 ## Interruptibility
 
@@ -170,6 +184,24 @@ layout-driving properties (`top`/`left`/`width`/`height`/margins), keep
 expensive paint areas small and isolated, and verify smoothness mentally on
 a mid-range phone.
 
+**Smooth height animations without layout thrashing**:
+Never animate `height` or compute pixel heights in JS. Animate `grid-template-rows`
+instead:
+```css
+/* Smooth accordion reveal using native CSS Grid */
+.accordion-content {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 250ms var(--ease-out);
+}
+.accordion-content[data-open] {
+  grid-template-rows: 1fr;
+}
+.accordion-inner {
+  overflow: hidden;
+}
+```
+
 **Keep `blur()` under 20px.** Larger radii are expensive to composite and
 read as a rendering glitch rather than a material. 4-12px is the sweet spot
 for depth-of-field effects.
@@ -178,6 +210,18 @@ for depth-of-field effects.
 height is the travel distance (bottom sheet, notification toast), percentage
 translate references the element's own box, so no JS measurement needed and
 it stays correct as content resizes.
+
+### Compositor performance & smooth 60fps execution
+
+- **Preserve subpixel text anti-aliasing**: When scaling down or translating,
+  compositing layers can occasionally soften text. Add `transform: translateZ(0)`
+  or `backface-visibility: hidden` to keep rasterization crisp on GPU layers.
+- **Batch measurements before mutations**: Never interleave `getBoundingClientRect()`
+  or `offsetHeight` reads with DOM mutations in animation loops. Read once,
+  compute offsets, then mutate in a single pass to eliminate forced layout reflows.
+- **Judicious `will-change` usage**: Apply `will-change: transform, opacity`
+  only during active animation cycles. Leaving `will-change` permanently on
+  dozens of static elements consumes excessive GPU texture memory.
 
 ## Page-load sequence
 

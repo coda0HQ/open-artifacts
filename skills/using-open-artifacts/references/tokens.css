@@ -81,6 +81,17 @@
     --radius-lg: 16px;
     --radius-pill: 9999px;
 
+    /* ── Surfaces & shadows — multi-layer depth and sharp ring profiles ── */
+    --shadow-border:
+      0px 0px 0px 1px oklch(0 0 0 / 0.06),
+      0px 1px 2px -1px oklch(0 0 0 / 0.06),
+      0px 2px 4px 0px oklch(0 0 0 / 0.04);
+    --shadow-border-hover:
+      0px 0px 0px 1px oklch(0 0 0 / 0.08),
+      0px 1px 2px -1px oklch(0 0 0 / 0.08),
+      0px 2px 4px 0px oklch(0 0 0 / 0.06);
+    --image-outline: oklch(0 0 0 / 0.1);
+
     /* ── Elevation — three direction-overridable levels, no fourth ─── */
     --elev-flat: none;
     --elev-ring: 0 0 0 1px var(--border);
@@ -96,6 +107,24 @@
     --ease-standard: cubic-bezier(0.2, 0, 0, 1);
     --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1); /* entrances, settle */
     --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1); /* emphasis, sparingly */
+    --ease-out: cubic-bezier(
+      0.23,
+      1,
+      0.32,
+      1
+    ); /* strong ease-out for UI enter & exits */
+    --ease-in-out: cubic-bezier(
+      0.77,
+      0,
+      0.175,
+      1
+    ); /* strong ease-in-out for on-screen movement */
+    --ease-drawer: cubic-bezier(
+      0.32,
+      0.72,
+      0,
+      1
+    ); /* iOS-like sheet/drawer curve */
 
     /* ── Layout structure ───────────────────────────────────────────── */
     --container-max: 72ch;
@@ -138,6 +167,9 @@
       --warn-on: #15131f;
       --danger: #ff8f85;
       --danger-on: #15131f;
+      --shadow-border: 0 0 0 1px oklch(1 0 0 / 0.08);
+      --shadow-border-hover: 0 0 0 1px oklch(1 0 0 / 0.13);
+      --image-outline: oklch(1 0 0 / 0.1);
     }
   }
 
@@ -156,6 +188,9 @@
     --warn-on: #15131f;
     --danger: #ff8f85;
     --danger-on: #15131f;
+    --shadow-border: 0 0 0 1px oklch(1 0 0 / 0.08);
+    --shadow-border-hover: 0 0 0 1px oklch(1 0 0 / 0.13);
+    --image-outline: oklch(1 0 0 / 0.1);
   }
 
   /* Light theme: explicit so data-theme="light" wins over OS-dark. Your
@@ -186,6 +221,9 @@ body {
   color: var(--fg);
   font-family: var(--font-body);
   line-height: var(--leading-body);
+  -webkit-tap-highlight-color: transparent;
+  text-underline-position: from-font;
+  text-decoration-thickness: from-font;
 }
 
 /* Bridge the viewer chrome to the artifact's identity tokens. The service
